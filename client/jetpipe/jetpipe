@@ -26,7 +26,6 @@
 #Serial redirection code adapted from work by:
 #(C)2002-2003 Chris Liechti <cliechti@gmx.net>
 #redirect data from a TCP/IP connection to a serial port and vice versa
-#requires Python 2.2 'cause socket.sendall is used
 #
 #
 # 2025, Anpassungen für Phython3
@@ -49,11 +48,14 @@ import getopt
 class Redirector:
     def __init__(self, devicename, socket):
         self.socket = socket
+
+        # This should catch regular serial and USB serial
         if devicename[:8] == '/dev/tty':
             self.device = serial.Serial(devicename)
             self.device.baudrate = 9600
             self.device.bytesize = 8
             self.device.parity = 'N'
+            # Required so that the reader thread can exit
             self.device.stopbits = 1
             self.device.timeout = 1
             self.device.rtscts = False
@@ -64,9 +66,12 @@ class Redirector:
             self.devicetype = 'P'
 
     def shortcut(self):
+        """connect the serial port to the tcp port by copying everything
+           from one side to the other"""
         self.writer()
 
     def writer(self):
+        """loop forever and copy socket->serial"""
         print('in writer loop')
         self.alive = True
 
@@ -81,6 +86,7 @@ class Redirector:
 
             try:
                 if self.devicetype == 'P':
+                     # parallel device
                     self.device.flush()
             except:
                 pass
@@ -98,6 +104,7 @@ def run_server(devicename, port):
             print("Waiting for connection....")
             connection, addr = srv.accept()
             print('Connected by', addr)
+            #enter console->serial loop
             redir = Redirector(devicename, connection)
             if redir.devicetype == 'S':
                 if 'baudrate' in locals():
@@ -127,27 +134,29 @@ def run_server(devicename, port):
 
 if __name__ == '__main__':
 
+    #parse command line options
     try:
         opts, args = getopt.getopt(sys.argv[1:], "dhb:p:rs:xy:", ["debug", "help", "baud=", "rtscts", "xonxoff"])
     except getopt.GetoptError:
+        # print help information and exit:
         print(__doc__, file=sys.stderr)
         sys.exit(2)
 
     debug = False
 
     for o, a in opts:
-        if o in ("-h", "--help"):
+        if o in ("-h", "--help"):        # help text
             sys.exit()
-        elif o in ("-b", "--baud"):
+        elif o in ("-b", "--baud"):    # specified baudrate
             try:
                 baudrate = int(a)
             except ValueError:
                 raise ValueError("Baudrate must be an integer number")
-        elif o in ("-y", "--bytesize"):
+        elif o in ("-y", "--bytesize"):    # specified bytesize
             bytesize = int(a)
-        elif o in ("-p", "--parity"):
+        elif o in ("-p", "--parity"):    # specified parity
             parity = a
-        elif o in ("-s", "--stopbits"):
+        elif o in ("-s", "--stopbits"):    # specified stopbits
             stopbits = int(a)
         elif o in ("-r", "--rtscts"):
             rtscts = True
@@ -160,16 +169,20 @@ if __name__ == '__main__':
     port = args[1]
 
     if not debug:
+        # Fork in background
         pid = os.fork()
         if pid:
             sys.exit(0)
 
+        # Replace stdin
         sys.stdin.close()
         sys.stdin = open("/dev/null", "r")
 
+        # Replace stdout
         sys.stdout.close()
         sys.stdout = open("/dev/null", "w")
 
+        # Replace stderr
         sys.stderr.close()
         sys.stderr = open("/dev/null", "w")
 
