@@ -1,4 +1,4 @@
-case "$MODE" in
+ase "$MODE" in
     commandline)
         add_option "security-mirror" "`eval_gettext "add a security mirror"`" "advanced" "true"
         ;;
@@ -11,10 +11,10 @@ case "$MODE" in
         if [ "$SECURITY_MIRROR" = "none" ]; then
             SECURITY_MIRROR=""
         else
-            SECURITY_MIRROR=${SECURITY_MIRROR:-"http://security.debian.org/"}
+            SECURITY_MIRROR=${SECURITY_MIRROR:-"http://security.debian.org/debian-security"}
             if [ -z "$(echo $SECURITY_MIRROR | awk '{print $2}')" ]; then
                 echo "`eval_gettext "NOTE: adding default dist and components to security mirror:"`"
-                SECURITY_MIRROR="$SECURITY_MIRROR $DIST/updates $COMPONENTS"
+                SECURITY_MIRROR="$SECURITY_MIRROR $DIST-security $COMPONENTS"
                 echo "$SECURITY_MIRROR"
             fi
         fi
