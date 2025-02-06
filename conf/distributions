@@ -1,0 +1,7 @@
+Origin: ltsp6
+Label: ltsp6 Github
+Suite: stable
+Codename: bookworm
+Architectures: amd64
+Components: main
+Description: Debian ltsp6 x64 github repository

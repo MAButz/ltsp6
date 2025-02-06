@@ -1,0 +1,6 @@
+Archive: stable
+Component: main
+Origin: ltsp6
+Label: ltsp6 Github
+Architecture: amd64
+Description: Debian ltsp6 x64 github repository

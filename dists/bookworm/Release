@@ -1,0 +1,20 @@
+Origin: ltsp6
+Label: ltsp6 Github
+Suite: stable
+Codename: bookworm
+Date: Thu, 06 Feb 2025 13:08:49 UTC
+Architectures: amd64
+Components: main
+Description: Debian ltsp6 x64 github repository
+MD5Sum:
+ 405a03a56a1ccf57de852c0f3b9be130 2792 main/binary-amd64/Packages
+ b0c0d14bc5d7a968f4ef09b22062cfab 1217 main/binary-amd64/Packages.gz
+ 472e3c1dda04609222f52beb482e50a2 134 main/binary-amd64/Release
+SHA1:
+ bf604df82ef105f300f9052b7947d5691e5e5975 2792 main/binary-amd64/Packages
+ 58ee8a264e8877a1b7bfd5b85a67706888c38dec 1217 main/binary-amd64/Packages.gz
+ 7153cc0318783f1a68c3bf02628b82832bbc05d0 134 main/binary-amd64/Release
+SHA256:
+ a0750666cd4257335986f68e5982dbe5b52cdaf5eb6594c1e4e92d2c25754941 2792 main/binary-amd64/Packages
+ 68a2faea212728892971aa6af75a84fbe3d30b3e9063e5cfdf470f7e9517b8a1 1217 main/binary-amd64/Packages.gz
+ 393936667a61a6c4f5eae438f69f247ab96340de1568de836ff9c43652ab3646 134 main/binary-amd64/Release
