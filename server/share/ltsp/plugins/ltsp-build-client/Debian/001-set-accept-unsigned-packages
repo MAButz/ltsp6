@@ -5,7 +5,7 @@ case "$MODE" in
     configure)
         if [ -n "$option_accept_unsigned_packages_value" ]; then
             # FIXME: handle if APT_GET_OPTS has other values set.
-            APT_GET_OPTS="$APT_GET_OPTS --allow-unauthenticated --allow-insecure-repositoriesq"
+            APT_GET_OPTS="$APT_GET_OPTS --allow-unauthenticated --allow-insecure-repositories"
             # requires debootstrap 1.0.30
             DEBOOTSTRAPOPTS="$DEBOOTSTRAPOPTS --no-check-gpg"
         fi
