@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 #
 # Minimal Printserver, forwards a printer device to a tcp port (usually 9100)
 #
