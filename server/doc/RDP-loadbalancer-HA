@@ -1,0 +1,140 @@
+RDP load balancing + high availability for the ldm xfreerdp backend
+=====================================================================
+
+Background: for a Linux-based xrdp server pool (no Windows RD Connection
+Broker available), the standard approach is HAProxy in TCP mode in front
+of the xrdp servers. This document covers three things people usually
+need together: load balancing across xrdp servers, high availability of
+the load balancer itself, and a staging environment for validating
+updates on a live pilot group before a wider rollout (a NIS2/KRITIS-style
+requirement for critical infrastructure).
+
+The example config files referenced below are in this same directory:
+haproxy-rdp.cfg, keepalived-lb1.conf, keepalived-lb2.conf.
+
+
+Why HAProxy TCP mode, and why "balance source"
+-----------------------------------------------
+
+HAProxy in "mode tcp" forwards bytes without parsing the RDP protocol at
+all - it doesn't understand or need to understand the RDP handshake,
+TLS negotiation, or the username exchanged inside it. That also means it
+CANNOT route based on the RDP username: that's exchanged encrypted,
+invisible to a plain TCP proxy. Anything routing on "which user is this"
+would need an RDP-aware proxy, which doesn't exist for xrdp - not
+something worth building from scratch.
+
+What HAProxy CAN see is the client's source IP, which is what
+"balance source" (IP-hash) uses. This matters specifically for RDP:
+sessions are stateful, so a client that disconnects and reconnects (an
+auto-reconnect, a network blip) needs to land back on the SAME backend
+server to find its existing session - "balance leastconn" or
+"roundrobin" would happily send the reconnect to a different server,
+orphaning the old session. LTSP thin clients with static/DHCP-reserved
+IPs are exactly the case source-IP hashing works well for. (Caveat: if
+clients instead sat behind a shared NAT gateway, they'd all hash to the
+same backend - not a concern for LTSP thin clients on their own LAN
+addresses, but worth knowing if the network layout ever changes.)
+
+Verified live (see the ltsp6/ldm-mabutz development history for the full
+walkthrough): session stickiness per client, automatic failover when a
+backend goes down, and a real xrdp server reachable end-to-end through
+the proxy with a full RDP/TLS handshake.
+
+
+Staging: a defined client group tests updates before everyone else
+--------------------------------------------------------------------
+
+Since HAProxy can't distinguish RDP users, staging routing has to happen
+before the RDP layer even starts - i.e. based on which physical client
+connects where. Two ways to do that; the recommended one uses ldm's own
+existing per-client configuration instead of adding a second place to
+maintain a client list:
+
+  A) HAProxy ACL on client source IP:
+       acl is_staging_client src 10.0.0.50 10.0.0.51 10.0.0.52
+       use_backend rdp_staging if is_staging_client
+       default_backend rdp_production
+     One shared backend pool config, an ACL list to maintain in HAProxy.
+
+  B) Per-client lts.conf (recommended): the pilot group's thin clients
+     get RDP_SERVER=<VIP_STAGING> in their lts.conf (by MAC or hostname,
+     same mechanism you already use for other per-client settings),
+     everyone else gets RDP_SERVER=<VIP_PROD>. Two entirely separate
+     HAProxy frontends/backends (see haproxy-rdp.cfg: rdp_prod_in /
+     rdp_staging_in), no shared ACL list to keep in sync elsewhere.
+     Cleaner for compliance documentation too: staging vs. production is
+     a clear, separately-configured environment, not a routing rule
+     buried in the load balancer.
+
+haproxy-rdp.cfg implements B: two frontends (VIP_PROD, VIP_STAGING), each
+with its own backend pool. Roll an update out to the staging backend
+pool first, validate with the pilot group, then apply it to the
+production pool.
+
+
+High availability of the load balancer itself
+-------------------------------------------------
+
+HAProxy is otherwise a single point of failure: if its host dies, every
+xrdp server behind it becomes unreachable regardless of how healthy they
+are. Two complementary mechanisms, worth combining rather than choosing
+one:
+
+  - keepalived + VRRP: two VMs (lb1, lb2), each running the identical
+    haproxy-rdp.cfg plus keepalived. keepalived moves a floating virtual
+    IP (actually two here - VIP_PROD and VIP_STAGING, moved together)
+    between the two nodes. Failover time: well under a second, because
+    the second HAProxy instance is already running and just starts
+    responding on the VIP.
+
+  - Proxmox HA: put both lb1 and lb2 VMs under Proxmox's own HA manager,
+    on an anti-affinity rule so they never land on the same physical
+    node. This protects against a Proxmox node itself dying - but the
+    failover time is much longer (Proxmox has to detect the node is gone,
+    fence it, then boot the VM elsewhere: commonly 30s-2min), during
+    which any RDP sessions on that node are hard-disconnected.
+
+Combining both: keepalived's VRRP failover handles "haproxy died but the
+VM/host is fine" (sub-second), Proxmox HA's node-level failover handles
+"the whole physical host died" (slower, but keepalived's fast path
+doesn't apply there anyway since the VM itself is gone). Proxmox HA
+alone, without keepalived, is a reasonable simplification if the longer
+failover gap during an actual host failure is acceptable.
+
+keepalived config notes (see keepalived-lb1.conf/keepalived-lb2.conf for
+the full, commented versions) - three real keepalived 2.x gotchas that
+are easy to get wrong and fail silently or behave unexpectedly:
+
+  - A vrrp_script's "weight" is ADDED to priority on success, not
+    subtracted on failure - for a "reduce priority when unhealthy" check
+    (which is what you want here), it must be a NEGATIVE number, and
+    large enough to bring the master's priority below the backup's
+    priority (e.g. master 150, backup 100, weight -60 -> 90 < 100).
+  - The config directive is "enable_script_security", not
+    "script_security" (an easy typo that keepalived accepts as an
+    "unknown keyword" without failing the whole config load).
+  - Add "user root" to the vrrp_script block - keepalived's default
+    script user (keepalived_script) doesn't exist on a plain Debian
+    install, so the script's real exit status is masked as a "SECURITY
+    VIOLATION" unless a valid user is set explicitly.
+
+
+Deployment checklist
+-------------------------
+
+1. Two small VMs (lb1, lb2) on different Proxmox nodes (anti-affinity),
+   each also covered by Proxmox HA.
+2. Install haproxy and keepalived on both.
+3. Deploy haproxy-rdp.cfg (identical on both nodes) - fill in the real
+   VIP_PROD/VIP_STAGING addresses and backend server IPs.
+4. Deploy keepalived-lb1.conf on lb1, keepalived-lb2.conf on lb2 - fill
+   in the real interface name, unicast_src_ip/unicast_peer addresses,
+   and match the virtual_ipaddress block to the same VIPs used in step 3.
+5. In lts.conf: RDP_SERVER=<VIP_PROD> by default; the pilot/staging
+   client group gets RDP_SERVER=<VIP_STAGING> instead (by MAC/hostname).
+6. Validate: pull a backend out of the pool (stop xrdp on it) and
+   confirm HAProxy's stats page (port 8404) marks it down and traffic
+   keeps flowing via the others; then stop haproxy on whichever node
+   currently holds the VIPs and confirm the other node picks them up
+   within a second or two (`ip addr show` on the VM's NIC).
