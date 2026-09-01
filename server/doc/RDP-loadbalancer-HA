@@ -72,6 +72,26 @@ with its own backend pool. Roll an update out to the staging backend
 pool first, validate with the pilot group, then apply it to the
 production pool.
 
+Verified live, using haproxy-rdp.cfg's exact frontend/backend structure
+(two VIPs, two independent backend pools):
+
+  - Routing isolation: repeated connections to VIP_PROD only ever reached
+    the production pool, repeated connections to VIP_STAGING only ever
+    reached the staging pool - never crossed over, in either direction.
+  - The actual point of having a separate staging pool: killing the
+    staging backend(s) left the production pool's health checks and
+    connections completely unaffected (still all UP, still routing
+    normally) - and, checked the other way round, killing all production
+    backends left the staging pool completely unaffected too. A bad
+    staging rollout - or, just as usefully, a production outage - cannot
+    cross the boundary between the two environments; each is its own
+    failure domain as far as HAProxy is concerned.
+
+To repeat this validation yourselves after any config change: watch the
+stats page (port 8404) while stopping xrdp on a staging server - only
+the "rdp_staging" backend should show servers going DOWN, "rdp_production"
+must stay all-UP throughout, and vice versa.
+
 
 High availability of the load balancer itself
 -------------------------------------------------
