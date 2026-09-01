@@ -120,11 +120,69 @@ are easy to get wrong and fail silently or behave unexpectedly:
     VIOLATION" unless a valid user is set explicitly.
 
 
+Proxmox HA setup for lb1/lb2
+---------------------------------
+
+NOTE: this section wasn't verified against a live Proxmox cluster (unlike
+everything else in this document, which was tested end-to-end) - the
+mechanism below (HA groups with per-node priority) has been stable across
+PVE versions for years, but double-check exact syntax against `man
+ha-manager` / the PVE documentation for your specific version before
+relying on it, and test an actual failover in a maintenance window before
+trusting it in production.
+
+Goal: lb1 and lb2 normally run on two different Proxmox nodes, and
+Proxmox's own HA manager restarts either one elsewhere if its node dies
+(on top of, not instead of, the keepalived VRRP failover above - see the
+"combining both" note above for why you want both).
+
+1. Create the two VMs (e.g. VMIDs 200 and 201) and install them as
+   described elsewhere in this document, one on each of two physical
+   nodes - say "pve-a" and "pve-b".
+
+2. Create one HA group per node, each restricted to just that node,
+   and add each VM to the group for the node it normally lives on:
+
+     ha-manager groupadd lb-pve-a --nodes pve-a
+     ha-manager groupadd lb-pve-b --nodes pve-b
+
+     ha-manager add vm:200 --group lb-pve-a --state started
+     ha-manager add vm:201 --group lb-pve-b --state started
+
+   Leaving groups unrestricted (the default) means Proxmox HA will still
+   migrate a VM to *some* available node if its preferred one is down,
+   rather than refusing to start it - which is what you want for actual
+   host-failure recovery. The practical effect: normally lb1/lb2 stay on
+   separate nodes (matching keepalived's assumption that a "node down"
+   event only ever takes out one of them at a time); if pve-a is down for
+   an extended period, lb1 may end up sharing pve-b with lb2 until pve-a
+   comes back - a temporarily reduced but still working setup, not a
+   silent failure.
+
+3. Newer Proxmox VE versions (8.x+) additionally have a proper HA
+   resource-affinity mechanism that can enforce true anti-affinity (never
+   co-locate, even during a node failure) - look for "HA -> Resources ->
+   Rules" in the datacenter GUI, or `/etc/pve/ha/rules.cfg` on the CLI
+   side, on your specific PVE version. This is a genuinely stronger
+   guarantee than step 2 above, but check your version's exact syntax
+   first (this feature is newer and less universally documented than the
+   classic HA-groups mechanism in step 2, which is why step 2 is the
+   default recommendation here).
+
+4. Test it: while both VMs are healthy and on separate nodes, put the
+   node currently running lb1 (the active VRRP master) into maintenance
+   mode (or just power it off in a lab/test setting) and confirm both
+   that Proxmox restarts lb1's VM on the other available node, and that
+   keepalived on lb2 has already taken over the VIPs in the meantime (the
+   VRRP failover should happen in well under the time Proxmox needs to
+   even detect the node is gone).
+
+
 Deployment checklist
 -------------------------
 
-1. Two small VMs (lb1, lb2) on different Proxmox nodes (anti-affinity),
-   each also covered by Proxmox HA.
+1. Two small VMs (lb1, lb2) on different Proxmox nodes, each also
+   covered by Proxmox HA (see "Proxmox HA setup for lb1/lb2" above).
 2. Install haproxy and keepalived on both.
 3. Deploy haproxy-rdp.cfg (identical on both nodes) - fill in the real
    VIP_PROD/VIP_STAGING addresses and backend server IPs.
