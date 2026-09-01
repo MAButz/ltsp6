@@ -1,0 +1,38 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: ltsp6
+Upstream-Contact: Marc-André Beckmann-Butz <ma@butz.online>
+Source: https://github.com/MAButz/ltsp6
+
+Files: *
+Copyright: 2003-2024, LTSP developers (see individual files for the full
+           list of historical authors, including Eric Harrison, Warren
+           Togami, Vagrant Cascadian, R. Scott Belford, and others)
+           2024-2026, Marc-André Beckmann-Butz <ma@butz.online>
+License: GPL-2+
+
+Files: client/getltscfg-cluster/*
+Copyright: 2008, Revolution Linux Inc.
+License: GPL-2+
+
+Files: client/nbd-proxy/*
+Copyright: Wouter Verhelst and NBD project contributors
+License: GPL-2+
+
+Files: debian/*
+Copyright: 2026, Marc-André Beckmann-Butz <ma@butz.online>
+License: GPL-2+
+
+License: GPL-2+
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation; either version 2 of the License, or
+ (at your option) any later version.
+ .
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ GNU General Public License for more details.
+ .
+ On Debian systems, the complete text of the GNU General Public
+ License version 2 can be found in
+ "/usr/share/common-licenses/GPL-2".

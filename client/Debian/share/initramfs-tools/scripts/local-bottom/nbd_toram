@@ -1,0 +1,87 @@
+#!/bin/sh
+
+# Copies an NBD-served root image into a RAM-backed tmpfs and disconnects
+# NBD, so the client keeps running with no dependency on the network or
+# the boot server once it has finished booting. Enable with the "toram"
+# kernel command line parameter (same name/meaning as Debian Live's
+# live-boot toram option) set in the PXE/boot loader config - this has
+# to happen before lts.conf is even fetchable, so it cannot be an
+# lts.conf setting.
+#
+# Falls back to the normal NBD-backed root on any failure (not enough
+# RAM, tmpfs mount failure, etc), so a client never fails to boot just
+# because toram couldn't be honored.
+
+PREREQ=""
+
+prereqs()
+{
+    echo "$PREREQ"
+}
+
+case "$1" in
+    prereqs)
+        prereqs
+        exit 0
+        ;;
+esac
+
+. /scripts/functions
+
+toram=""
+for x in $(cat /proc/cmdline); do
+    case "$x" in
+        toram) toram=y ;;
+    esac
+done
+[ -n "$toram" ] || exit 0
+
+# Only meaningful for the NBD-root case (see nbd_ltsp in local-top).
+[ "$ROOT" = /dev/nbd0 ] || exit 0
+[ -b /dev/nbd0 ] || exit 0
+
+log_begin_msg "toram: copying NBD root image to RAM"
+
+imgsize=$(blockdev --getsize64 /dev/nbd0 2>/dev/null)
+if [ -z "$imgsize" ] || [ "$imgsize" -le 0 ]; then
+    log_failure_msg "toram: could not determine NBD image size, keeping network root"
+    log_end_msg
+    exit 0
+fi
+# Image size plus headroom for tmpfs overhead/slack.
+tmpfssize=$(( (imgsize / 1024 / 1024) + 64 ))
+
+mkdir -p /run/toram
+if ! mount -t tmpfs -o size=${tmpfssize}M tmpfs /run/toram; then
+    log_failure_msg "toram: tmpfs mount failed (not enough RAM?), keeping network root"
+    log_end_msg
+    exit 0
+fi
+
+if ! dd if=/dev/nbd0 of=/run/toram/root.img bs=4M 2>/dev/null; then
+    log_failure_msg "toram: failed to copy NBD image to RAM, keeping network root"
+    umount /run/toram 2>/dev/null
+    log_end_msg
+    exit 0
+fi
+
+mkdir -p /run/toram-oldroot
+if ! mount -o move "$rootmnt" /run/toram-oldroot; then
+    log_failure_msg "toram: failed to move root mount, keeping network root"
+    log_end_msg
+    exit 0
+fi
+
+if mount -o loop,ro /run/toram/root.img "$rootmnt"; then
+    umount /run/toram-oldroot
+    rmdir /run/toram-oldroot
+    nbd-client -d /dev/nbd0 >/dev/null 2>&1
+    log_success_msg "toram: now running entirely from RAM, NBD disconnected"
+else
+    mount -o move /run/toram-oldroot "$rootmnt"
+    rmdir /run/toram-oldroot
+    umount /run/toram 2>/dev/null
+    log_failure_msg "toram: failed to mount RAM copy, keeping network root"
+fi
+
+log_end_msg

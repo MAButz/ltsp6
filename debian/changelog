@@ -1,0 +1,44 @@
+ltsp (6.0.0-1) trixie; urgency=medium
+
+  * Initial Debian packaging, split into two binary packages:
+    - ltsp-server: ltsp-build-client, ltsp-config, ltsp-chroot,
+      ltsp-info, ltsp-update-image/-kernels/-sshkeys, nbdrootd,
+      nbdswapd, the /usr/share/ltsp plugin tree, and example
+      configs/docs for the HAProxy + keepalived RDP load-balancer
+      recipe.
+    - ltsp-client-core: init-ltsp, getltscfg (compiled from its
+      flex/bison sources), getltscfg-cluster, jetpipe, nbd-proxy
+      (built from its own bundled autotools sub-project), the
+      localapps/remoteapps helpers and their ldm rc.d hooks, udev
+      rules, and the Debian initramfs-tools hooks/scripts needed to
+      network-boot a client image.
+  * Added Kea DHCPv4 support to ltsp-config (server/configs/kea-dhcp4.conf,
+    "ltsp-config kea").
+  * Fixed a shell syntax typo ("ase" instead of "case") in the
+    ltsp-build-client Debian/013-security-mirror plugin that broke
+    security-mirror configuration on every build.
+  * Added a "toram" boot option (new local-bottom initramfs script,
+    client/Debian/share/initramfs-tools/scripts/local-bottom/nbd_toram):
+    copies the NBD root image into a RAM-backed tmpfs after boot and
+    disconnects NBD entirely, so a client has no further network/server
+    dependency once running. See server/doc/NBD-toram for the full
+    write-up, including how to build/serve independent thin- and
+    fat-client images side by side via ltsp-build-client --chroot.
+  * Fixed two bugs in client/Debian/share/initramfs-tools/hooks/ltsp
+    found while packaging and testing on a real Debian 13 kernel:
+    - it requested the "overlayfs" and "aufs" kernel modules, neither
+      of which exist on any current kernel (renamed to "overlay" resp.
+      never mainlined); under this script's "set -e" that aborted the
+      whole hook and broke update-initramfs on every install.
+    - ltsp-client-core was missing the nbd-client dependency and the
+      nbd-client-proxy wrapper script that this same hook requires at
+      initramfs-generation time.
+  * Verified end-to-end on Debian 13 (trixie): ltsp-build-client builds
+    a client chroot, ltsp-client-core and ldm 3.0.0 install into it
+    cleanly, update-initramfs succeeds, ltsp-update-image produces a
+    working 638 MiB squashfs image, and the toram mechanism was tested
+    against that real image over a live NBD connection (copy to RAM,
+    then full nbd-client disconnect and nbd-server shutdown, content
+    still intact and executable afterward).
+
+ -- Marc-André Beckmann-Butz <ma@butz.online>  Mon, 31 Aug 2026 12:00:00 +0200

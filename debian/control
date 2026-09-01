@@ -1,0 +1,55 @@
+Source: ltsp
+Section: admin
+Priority: optional
+Maintainer: Marc-André Beckmann-Butz <ma@butz.online>
+Build-Depends: debhelper-compat (= 13),
+               flex,
+               bison,
+               libpopt-dev,
+               autoconf,
+               automake,
+               libtool,
+               gettext
+Standards-Version: 4.6.2
+Homepage: https://github.com/MAButz/ltsp6
+Rules-Requires-Root: no
+
+Package: ltsp-server
+Architecture: all
+Depends: ${misc:Depends},
+         debootstrap,
+         squashfs-tools,
+         gettext-base,
+         lsb-release,
+         debconf-utils,
+         openssh-client
+Recommends: nbd-server,
+            tftpd-hpa,
+            dnsmasq | isc-dhcp-server,
+            nfs-kernel-server,
+            xinetd
+Description: LTSP6 thin client server tools
+ ltsp-build-client, ltsp-config, ltsp-chroot, ltsp-info and related
+ server-side tools for building and managing LTSP (Linux Terminal
+ Server Project) thin-client chroot images, plus the NBD root/swap
+ servers used to serve them over the network.
+ .
+ This package also ships example configs and documentation for
+ running an HAProxy + keepalived high-availability RDP load balancer
+ in front of a pool of xrdp servers (see
+ /usr/share/doc/ltsp-server/examples/).
+
+Package: ltsp-client-core
+Architecture: any
+Depends: ${shlibs:Depends},
+         ${misc:Depends},
+         initramfs-tools,
+         udev,
+         nbd-client
+Description: LTSP6 thin client core scripts and helpers
+ Core client-side scripts, udev rules, initramfs-tools hooks and
+ helper binaries (getltscfg, getltscfg-cluster, jetpipe, nbd-proxy,
+ the localapps/remoteapps helpers) that make up the LTSP thin-client
+ runtime environment. Intended to be installed inside an LTSP client
+ chroot image built by ltsp-build-client, not on a regular desktop or
+ server system.

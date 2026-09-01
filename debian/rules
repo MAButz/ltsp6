@@ -1,0 +1,96 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+override_dh_auto_configure:
+	cd client/nbd-proxy && ./autogen.sh
+	cd client/nbd-proxy && ./configure --prefix=/usr --sbindir=/usr/sbin
+
+override_dh_auto_build:
+	$(MAKE) -C client/getltscfg
+	$(MAKE) -C client/nbd-proxy
+
+override_dh_auto_clean:
+	$(MAKE) -C client/getltscfg clean
+	[ ! -f client/nbd-proxy/Makefile ] || $(MAKE) -C client/nbd-proxy distclean
+	rm -f client/nbd-proxy/configure client/nbd-proxy/config.h.in.orig
+	rm -rf client/nbd-proxy/autom4te.cache
+
+override_dh_auto_test:
+	# no automated test suite
+
+override_dh_auto_install:
+	# ---- ltsp-server ----
+	install -d debian/ltsp-server/usr/sbin
+	install -m0755 server/ltsp-build-client server/ltsp-chroot server/ltsp-config \
+		server/ltsp-swapfile-delete server/ltsp-update-image server/ltsp-update-kernels \
+		server/ltsp-update-sshkeys server/nbdrootd server/nbdswapd \
+		debian/ltsp-server/usr/sbin/
+	install -d debian/ltsp-server/usr/bin
+	install -m0755 server/ltsp-info debian/ltsp-server/usr/bin/
+	install -d debian/ltsp-server/usr/share/ltsp
+	cp -a server/share/ltsp/. debian/ltsp-server/usr/share/ltsp/
+	cp -a server/Debian/share/ltsp/. debian/ltsp-server/usr/share/ltsp/
+	install -d debian/ltsp-server/usr/share/ltsp/scripts
+	install -m0755 server/Debian/scripts/* debian/ltsp-server/usr/share/ltsp/scripts/
+	install -m0755 common/ltsp-common-functions \
+		debian/ltsp-server/usr/share/ltsp/ltsp-server-common-functions
+	install -d debian/ltsp-server/etc/ltsp
+	install -m0644 server/configs/lts.conf server/configs/ltsp-server.conf \
+		debian/ltsp-server/etc/ltsp/
+	install -d debian/ltsp-server/usr/share/doc/ltsp-server/examples
+	install -m0644 server/configs/dhcpd.conf server/configs/kea-dhcp4.conf \
+		server/configs/ltsp-update-image.excludes server/configs/ltsp.exports \
+		server/configs/nbd-server.allow server/configs/nbdswapd.conf \
+		server/doc/examples/haproxy-rdp.cfg server/doc/examples/keepalived-lb1.conf \
+		server/doc/examples/keepalived-lb2.conf server/doc/examples/ltsp-server-dnsmasq.conf \
+		debian/ltsp-server/usr/share/doc/ltsp-server/examples/
+	install -d debian/ltsp-server/usr/share/doc/ltsp-server/examples/xinetd.d
+	install -m0644 server/doc/examples/xinetd.d/* \
+		debian/ltsp-server/usr/share/doc/ltsp-server/examples/xinetd.d/
+	install -m0644 server/doc/FAQ server/doc/QuickInstall server/doc/RDP-loadbalancer-HA \
+		server/doc/NBD-toram server/doc/Upgrading_4.2 \
+		debian/ltsp-server/usr/share/doc/ltsp-server/
+
+	# ---- ltsp-client-core ----
+	install -d debian/ltsp-client-core/usr/sbin
+	install -m0755 client/init-ltsp client/getltscfg-cluster/getltscfg-cluster \
+		client/jetpipe/jetpipe client/getltscfg/getltscfg client/nbd-proxy/src/nbd-proxy \
+		client/nbd-proxy/src/nbd-client-proxy \
+		debian/ltsp-client-core/usr/sbin/
+	install -d debian/ltsp-client-core/usr/bin
+	install -m0755 client/localapps/ltsp-genmenu client/localapps/ltsp-localapps \
+		client/localapps/ltsp-open debian/ltsp-client-core/usr/bin/
+	install -m0755 client/localapps/ltsp-localappsd client/localapps/ltsp-remoteapps \
+		client/localapps/ltsp-remoteappsd debian/ltsp-client-core/usr/sbin/
+	install -d debian/ltsp-client-core/usr/share/ldm/rc.d
+	install -m0755 client/localapps/ldm-rc.d/* debian/ltsp-client-core/usr/share/ldm/rc.d/
+	install -d debian/ltsp-client-core/usr/share/ltsp
+	cp -a client/share/ltsp/. debian/ltsp-client-core/usr/share/ltsp/
+	cp -a client/Debian/share/ltsp/. debian/ltsp-client-core/usr/share/ltsp/
+	install -m0755 client/localapps/iptables.sh debian/ltsp-client-core/usr/share/ltsp/
+	install -d debian/ltsp-client-core/usr/share/initramfs-tools/hooks
+	install -m0755 client/Debian/share/initramfs-tools/hooks/* \
+		debian/ltsp-client-core/usr/share/initramfs-tools/hooks/
+	install -d debian/ltsp-client-core/usr/share/initramfs-tools/scripts/init-bottom \
+		debian/ltsp-client-core/usr/share/initramfs-tools/scripts/init-premount \
+		debian/ltsp-client-core/usr/share/initramfs-tools/scripts/local-top \
+		debian/ltsp-client-core/usr/share/initramfs-tools/scripts/local-bottom \
+		debian/ltsp-client-core/usr/share/initramfs-tools/scripts/nfs-bottom
+	install -m0755 client/Debian/share/initramfs-tools/scripts/init-bottom/* \
+		debian/ltsp-client-core/usr/share/initramfs-tools/scripts/init-bottom/
+	install -m0755 client/Debian/share/initramfs-tools/scripts/init-premount/* \
+		debian/ltsp-client-core/usr/share/initramfs-tools/scripts/init-premount/
+	install -m0755 client/Debian/share/initramfs-tools/scripts/local-top/* \
+		debian/ltsp-client-core/usr/share/initramfs-tools/scripts/local-top/
+	install -m0755 client/Debian/share/initramfs-tools/scripts/local-bottom/* \
+		debian/ltsp-client-core/usr/share/initramfs-tools/scripts/local-bottom/
+	install -m0755 client/Debian/share/initramfs-tools/scripts/nfs-bottom/* \
+		debian/ltsp-client-core/usr/share/initramfs-tools/scripts/nfs-bottom/
+	install -d debian/ltsp-client-core/etc/ltsp
+	install -m0644 client/Debian/etc/ltsp/update-kernels.conf debian/ltsp-client-core/etc/ltsp/
+	install -d debian/ltsp-client-core/lib/udev/rules.d
+	install -m0644 client/share/ltsp/udev/ltsp-sound.rules \
+		debian/ltsp-client-core/lib/udev/rules.d/
+	install -m0755 client/udev/ltsp-sound debian/ltsp-client-core/lib/udev/

@@ -1,0 +1,9 @@
+server/doc/ltsp-build-client.8
+server/doc/ltsp-chroot.8
+server/doc/ltsp-config.8
+server/doc/ltsp-info.1
+server/doc/ltsp-update-image.8
+server/doc/ltsp-update-kernels.8
+server/doc/ltsp-update-sshkeys.8
+server/doc/nbdrootd.8
+server/doc/nbdswapd.8

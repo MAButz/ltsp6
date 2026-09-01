@@ -1,0 +1,165 @@
+Running LTSP clients entirely from RAM after boot (toram)
+============================================================
+
+Goal: a thin client pulls its root image over NBD as usual, but once
+booted it no longer depends on the network or the boot server at all -
+if the server, the switch, or the client's NIC goes down afterward, the
+client keeps running unaffected. Useful for reducing server/network
+load on large deployments, and for resilience during network or
+server maintenance.
+
+This is implemented as a new initramfs-tools local-bottom script,
+client/Debian/share/initramfs-tools/scripts/local-bottom/nbd_toram
+(shipped in the ltsp-client-core package), modeled on the same "toram"
+kernel parameter name and idea used by Debian Live's live-boot.
+
+
+How it works
+----------------
+The client boots and connects to the NBD root image exactly as before
+(initramfs-tools' stock nbd support plus this project's existing
+local-top/nbd_ltsp tweaks - unchanged). Once the root filesystem has
+been mounted read-only from /dev/nbd0 (still inside the initramfs,
+before switch_root hands off to the real init), the new nbd_toram
+script:
+
+  1. Reads the raw NBD device size (blockdev --getsize64).
+  2. Mounts a tmpfs at /run/toram sized to the image plus 64 MB of
+     headroom for tmpfs/loop overhead.
+  3. dd's the entire raw block device into /run/toram/root.img. This
+     copies the compressed squashfs image as-is (not the decompressed
+     tree), so the RAM cost is the .img file size, not the uncompressed
+     content size.
+  4. Moves the existing root mount aside, loop-mounts root.img
+     read-only in its place, and only then disconnects nbd-client
+     (nbd-client -d /dev/nbd0). No process is on the network image
+     while any of this happens - the switch to the RAM copy is atomic
+     from the rest of the boot process's point of view.
+  5. If anything above fails (not enough RAM for the tmpfs, dd error,
+     mount failure), the script logs it and leaves the original
+     NBD-backed root exactly as it was - a client with too little RAM
+     or a bad image never fails to boot because of this feature, it
+     just boots as a normal network-dependent thin client instead.
+
+Since squashfs is already read-only and the image itself doesn't
+change while a client is running, there's nothing to write back or
+synchronize - this is a pure read-only cache-to-RAM, not a live/union
+filesystem trick.
+
+
+Enabling it
+---------------
+Add "toram" to the client's kernel command line (PXE/pxelinux APPEND
+line, GRUB, or your DHCP/PXE menu tool - wherever ROOT=/dev/nbd0 and
+the rest of the boot parameters are already set for that client).
+
+This is deliberately a *boot parameter*, not an lts.conf setting: the
+decision has to be made inside the initramfs, before the running
+system is even far enough along to fetch lts.conf via getltscfg. If
+you want it per-client rather than for everyone, use your PXE tool's
+per-MAC/per-host config file mechanism to add "toram" only to the
+clients you want it for (e.g. ones with enough RAM).
+
+
+RAM sizing
+--------------
+Rule of thumb: available RAM should be at least the compressed image
+size plus what a normal desktop session plus ldm/X/xfreerdp actually
+use at runtime (same headroom you'd want on the same hardware without
+toram) - and add a safety margin on top rather than sizing exactly to
+the image, since the client also needs headroom for its own runtime
+tmpfs usage (/tmp, /var/log, etc., which are unrelated to this feature
+and already RAM-backed as before).
+
+Verified live (see below): copying a full 638 MiB real LTSP client
+image took 1.2 seconds at ~560 MB/s. Copy time scales with image size
+and storage/network throughput on the server side during the initial
+NBD pull; once in RAM there's no further network dependency at all.
+
+
+Live test results
+---------------------
+Tested end-to-end twice: first with a synthetic 50 MB squashfs image
+to validate the mechanism in isolation, then with a real 638 MiB LTSP
+client chroot built by ltsp-build-client on Debian 13 (trixie),
+including ldm 3.0.0, X.org, and xfreerdp3 - the actual content a real
+thin client would boot.
+
+Both times: mounted the image from a real nbd-server via nbd-client,
+copied it into a tmpfs, switched the mount over to the RAM copy, then
+fully disconnected nbd-client AND killed the nbd-server process
+entirely. Confirmed:
+
+  - No client-to-server network connection remained (checked via ss).
+  - File content was still fully intact (checksums matched the
+    pre-copy originals for both the synthetic payload and the real
+    image's /usr/sbin/ldm binary).
+  - The RAM-backed image was still mountable and executable: chroot'd
+    into it and ran a binary successfully after the server was gone.
+
+This confirms the copy-to-RAM-then-disconnect approach works correctly
+against a real, complete LTSP image, not just in theory.
+
+While building and testing this, packaging the client-side scripts for
+real (see the ltsp-client-core Debian package) surfaced and fixed
+three genuine, pre-existing bugs that would otherwise have broken
+image builds on any current kernel:
+
+  - client/Debian/share/initramfs-tools/hooks/ltsp requested two
+    kernel modules that don't exist on any current Debian kernel
+    ("overlayfs" - the module was renamed to "overlay" years ago - and
+    "aufs" - never mainlined). Under this script's "set -e", the very
+    first manual_add_modules call for a nonexistent module aborted the
+    entire hook, which made update-initramfs fail on every install.
+    Fixed by dropping the two dead module names.
+  - The same hook also copy_exec's /usr/sbin/nbd-client-proxy into the
+    initramfs, but the ltsp-client-core package only shipped the
+    compiled nbd-proxy binary, not this second file (a plain shell
+    wrapper script living alongside it in client/nbd-proxy/src/). Fixed
+    by adding it to the package.
+  - ltsp-client-core didn't depend on the nbd-client package at all,
+    even though the same hook requires the nbd-client binary to exist
+    in the chroot at initramfs-generation time. Fixed by adding
+    nbd-client to ltsp-client-core's Depends.
+
+Without these three fixes, no client chroot on a current Debian kernel
+could even finish its initramfs regeneration after installing
+ltsp-client-core, let alone boot with or without toram.
+
+
+Building and maintaining thin-client and fat-client images independently
+-----------------------------------------------------------------------------
+A related, separate question: can a "thin" (network-apps-only) image
+and a "fat" (local-apps) image be built and kept independently of each
+other? Yes - this is already fully supported by the existing tooling,
+no new code needed:
+
+  - ltsp-build-client --chroot=NAME names the target chroot directory
+    explicitly (defaults to the detected architecture if unset - see
+    server/share/ltsp/plugins/ltsp-build-client/common/010-set-chroot).
+    So e.g.:
+      ltsp-build-client --dist trixie --chroot amd64-thin
+      ltsp-build-client --dist trixie --chroot amd64-fat \
+                         --fat-client-desktop=task-xfce-desktop
+    produces two completely independent chroots under $BASE
+    (/opt/ltsp/amd64-thin, /opt/ltsp/amd64-fat by default), each with
+    its own package set, its own updates, and no shared state.
+  - ltsp-update-image, ltsp-chroot, ltsp-update-kernels etc. all accept
+    the same CHROOT name/path as an argument, so each image is updated,
+    rebuilt, and imaged independently (amd64-thin.img, amd64-fat.img).
+  - Serve both simultaneously: give each its own nbd-server export
+    (ltsp-update-image's -f/--config-nbd already generates one
+    /etc/nbd-server/conf.d/<chroot>.conf per chroot/image), and point
+    each client group at the image it should use via your PXE
+    menu/per-host config (or DHCP host declarations), the same way you
+    already point different client groups at different lts.conf
+    settings.
+
+In short: "thin" vs "fat" today is mostly a runtime distinction
+(LTSP_FATCLIENT in lts.conf, auto-detected per client based on
+available RAM and installed desktop sessions - see
+client/share/ltsp/ltsp_config.d/20fatclients), layered on top of a
+single --fat-client-desktop image that has the extra desktop packages
+installed. If you'd rather have two genuinely separate, independently
+maintained images instead of one shared fat/thin-capable image, the
+--chroot mechanism above gives you that directly.
