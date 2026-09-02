@@ -143,13 +143,9 @@ are easy to get wrong and fail silently or behave unexpectedly:
 Proxmox HA setup for lb1/lb2
 ---------------------------------
 
-NOTE: this section wasn't verified against a live Proxmox cluster (unlike
-everything else in this document, which was tested end-to-end) - the
-mechanism below (HA groups with per-node priority) has been stable across
-PVE versions for years, but double-check exact syntax against `man
-ha-manager` / the PVE documentation for your specific version before
-relying on it, and test an actual failover in a maintenance window before
-trusting it in production.
+Verified live on a real (nested, 2-node) Proxmox VE 9.2 cluster - see
+"Live test results" below for what was actually observed, including two
+gotchas not covered by older documentation.
 
 Goal: lb1 and lb2 normally run on two different Proxmox nodes, and
 Proxmox's own HA manager restarts either one elsewhere if its node dies
@@ -160,42 +156,95 @@ Proxmox's own HA manager restarts either one elsewhere if its node dies
    described elsewhere in this document, one on each of two physical
    nodes - say "pve-a" and "pve-b".
 
-2. Create one HA group per node, each restricted to just that node,
-   and add each VM to the group for the node it normally lives on:
+2. As of Proxmox VE 9.0, classic HA groups (`ha-manager groupadd`) are
+   deprecated in favor of HA rules; `groupadd` now fails outright with
+   "ha groups have been migrated to rules". Use a non-strict node
+   affinity rule per VM instead:
 
-     ha-manager groupadd lb-pve-a --nodes pve-a
-     ha-manager groupadd lb-pve-b --nodes pve-b
+     ha-manager add vm:200 --state started
+     ha-manager add vm:201 --state started
+     ha-manager rules add node-affinity ha-rule-lb1 --resources vm:200 --nodes pve-a
+     ha-manager rules add node-affinity ha-rule-lb2 --resources vm:201 --nodes pve-b
 
-     ha-manager add vm:200 --group lb-pve-a --state started
-     ha-manager add vm:201 --group lb-pve-b --state started
+   Deliberately leave out `--strict 1`: a strict node-affinity rule
+   refuses to run the resource anywhere but the named node, which is the
+   opposite of what you want for actual host-failure recovery. Non-strict
+   (the default) means "prefer this node, but relocate elsewhere if it's
+   unavailable" - Proxmox's `ha-manager groups` documentation still shows
+   the old `groupadd` syntax; if your `ha-manager add` rejects it with
+   the error above, your PVE version needs the `rules add` form instead.
 
-   Leaving groups unrestricted (the default) means Proxmox HA will still
-   migrate a VM to *some* available node if its preferred one is down,
-   rather than refusing to start it - which is what you want for actual
-   host-failure recovery. The practical effect: normally lb1/lb2 stay on
-   separate nodes (matching keepalived's assumption that a "node down"
-   event only ever takes out one of them at a time); if pve-a is down for
-   an extended period, lb1 may end up sharing pve-b with lb2 until pve-a
-   comes back - a temporarily reduced but still working setup, not a
-   silent failure.
+3. For true anti-affinity (never co-locate lb1 and lb2, even during a
+   node failure), add a negative resource-affinity rule instead of/in
+   addition to the node-affinity rules above:
 
-3. Newer Proxmox VE versions (8.x+) additionally have a proper HA
-   resource-affinity mechanism that can enforce true anti-affinity (never
-   co-locate, even during a node failure) - look for "HA -> Resources ->
-   Rules" in the datacenter GUI, or `/etc/pve/ha/rules.cfg` on the CLI
-   side, on your specific PVE version. This is a genuinely stronger
-   guarantee than step 2 above, but check your version's exact syntax
-   first (this feature is newer and less universally documented than the
-   classic HA-groups mechanism in step 2, which is why step 2 is the
-   default recommendation here).
+     ha-manager rules add resource-affinity keep-separate --affinity negative --resources vm:200,vm:201
 
-4. Test it: while both VMs are healthy and on separate nodes, put the
+4. Critical: **lb1 and lb2's virtual disks must be on shared or
+   replicated storage reachable from both nodes** - not each node's local
+   storage. This was the one thing that didn't work in live testing (see
+   below): ha-manager detected the dead node and correctly retried
+   starting the VM elsewhere every ~10s, but failed every time with
+   "volume '...' does not exist", because the disk image physically only
+   existed on the dead node's local disk. Use shared storage (NFS/iSCSI/
+   Ceph) or ZFS storage replication (`pvesr`) between the specific node
+   pair for this to actually work, not just detect the failure.
+
+5. Test it: while both VMs are healthy and on separate nodes, put the
    node currently running lb1 (the active VRRP master) into maintenance
    mode (or just power it off in a lab/test setting) and confirm both
    that Proxmox restarts lb1's VM on the other available node, and that
-   keepalived on lb2 has already taken over the VIPs in the meantime (the
+   keepalived on lb2 has already taken over the VIP in the meantime (the
    VRRP failover should happen in well under the time Proxmox needs to
    even detect the node is gone).
+
+
+Live test results
+---------------------
+Tested on a real 2-node Proxmox VE 9.2.11 cluster (nested inside Hyper-V,
+but the cluster/HA software stack itself behaves identically to bare
+metal) with lb1/lb2 as qemu VMs running haproxy + keepalived. Hard-killed
+the node running lb1 (Stop-VM equivalent to pulling power) and observed:
+
+  - Corosync/pmxcfs correctly detected the dead node and the surviving
+    node kept/regained quorum (see the `two_node` gotcha below).
+  - ha-manager's CRM correctly identified the dead node's lrm as
+    "old timestamp - dead?", fenced it (watchdog-based fencing, armed by
+    default), and began relocating vm:200 to the surviving node - all
+    automatic, no manual intervention needed to *detect and attempt*
+    the failover.
+  - The relocation itself then failed repeatedly (every ~10s, per
+    ha-manager's restart policy) with "volume '...' does not exist" -
+    exactly the local-storage gotcha in step 4 above. The failure mode
+    itself is instructive: ha-manager doesn't silently give up or corrupt
+    anything, it just keeps retrying forever until either the resource
+    is fixed (shared storage) or manually stopped.
+  - keepalived on lb2 (the surviving node's VM) correctly took over the
+    VIP while lb1 was down, and failed back automatically once lb1 came
+    back up and haproxy was healthy there again - independent of whatever
+    ha-manager was doing with the VM placement.
+  - Bringing the dead node back online surfaced a second real gotcha:
+    corosync refused to start with "Received config version (N) is
+    different than my config version (N-1)! Exiting" - the node's local
+    corosync.conf was stale from before it went down, and pmxcfs (backing
+    /etc/pve) is read-only on a node without quorum, so the stale config
+    can't just be edited in place. Recovery: `pmxcfs -l` starts pmxcfs in
+    local (non-clustered) mode, which allows writing the correct
+    corosync.conf even without quorum; then kill that local pmxcfs
+    instance and start the normal `pve-cluster`/`corosync` services.
+  - Related: `two_node: 1` in corosync.conf (needed so a lone surviving
+    node keeps quorum at all - see the next section) implicitly enables
+    `wait_for_all` unless you explicitly set `wait_for_all: 0`. That
+    matters because `wait_for_all` blocks quorum from being regranted
+    after any corosync ring reset until *every* configured node has
+    rejoined at least once - which will never happen if one of them is
+    genuinely, permanently gone. Symptom: `pvecm status` reports "No
+    quorum" and "Quorum: 1 Activity blocked" on the lone survivor even
+    though it should have quorum by itself. Fix (once quorum is
+    otherwise available to make /etc/pve writable again):
+    `pvecm expected 1` forces quorum immediately as a manual override;
+    for the long-term fix, explicitly set `wait_for_all: 0` in
+    corosync.conf.
 
 
 Deployment checklist
