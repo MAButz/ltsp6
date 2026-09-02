@@ -13,8 +13,8 @@ The example config files referenced below are in this same directory:
 haproxy-rdp.cfg, keepalived-lb1.conf, keepalived-lb2.conf.
 
 
-Why HAProxy TCP mode, and why "balance source"
------------------------------------------------
+Why HAProxy TCP mode, and why a stick-table (not plain "balance source")
+--------------------------------------------------------------------------
 
 HAProxy in "mode tcp" forwards bytes without parsing the RDP protocol at
 all - it doesn't understand or need to understand the RDP handshake,
@@ -24,22 +24,48 @@ invisible to a plain TCP proxy. Anything routing on "which user is this"
 would need an RDP-aware proxy, which doesn't exist for xrdp - not
 something worth building from scratch.
 
-What HAProxy CAN see is the client's source IP, which is what
-"balance source" (IP-hash) uses. This matters specifically for RDP:
-sessions are stateful, so a client that disconnects and reconnects (an
-auto-reconnect, a network blip) needs to land back on the SAME backend
-server to find its existing session - "balance leastconn" or
-"roundrobin" would happily send the reconnect to a different server,
-orphaning the old session. LTSP thin clients with static/DHCP-reserved
-IPs are exactly the case source-IP hashing works well for. (Caveat: if
-clients instead sat behind a shared NAT gateway, they'd all hash to the
-same backend - not a concern for LTSP thin clients on their own LAN
-addresses, but worth knowing if the network layout ever changes.)
+What HAProxy CAN see is the client's source IP, which is what per-client
+stickiness is built on. This matters specifically for RDP: sessions are
+stateful, so a client that disconnects and reconnects (an auto-reconnect,
+a network blip) needs to land back on the SAME backend server to find
+its existing session - "balance leastconn" or "roundrobin" alone would
+happily send the reconnect to a different server, orphaning the old
+session. LTSP thin clients with static/DHCP-reserved IPs are exactly the
+case source-IP stickiness works well for. (Caveat: if clients instead sat
+behind a shared NAT gateway, they'd all map to the same backend - not a
+concern for LTSP thin clients on their own LAN addresses, but worth
+knowing if the network layout ever changes.)
+
+Use a stick-table for this, not plain "balance source" (IP-hash) -
+haproxy-rdp.cfg does this:
+
+    balance leastconn
+    stick-table type ip size 200k expire 12h
+    stick on src
+
+The difference matters in exactly the failure case this whole document
+is about. Plain IP-hash recomputes a client's target from the CURRENT
+list of live servers on every single connection - so when a client's
+server dies and it fails over to another one, the hash silently sends it
+BACK to the original server the moment that server recovers, tearing
+down a perfectly healthy, currently-running RDP session for no reason
+other than "the original server came back". A stick-table entry, once
+created, is only ever replaced when it expires (here: 12h of client
+inactivity) or the server it currently points to itself becomes
+unavailable - a recovered server does not reclaim clients that already
+failed over elsewhere. That's the actual requirement: a client's session
+should keep living whichever server it's already on until the user logs
+out, or that server dies too - never just because its original server is
+healthy again.
 
 Verified live (see the ltsp6/ldm-mabutz development history for the full
-walkthrough): session stickiness per client, automatic failover when a
-backend goes down, and a real xrdp server reachable end-to-end through
-the proxy with a full RDP/TLS handshake.
+walkthrough): per-client stickiness, automatic failover when a backend
+goes down, a real xrdp server reachable end-to-end through the proxy
+with a full RDP/TLS handshake, and - specifically re-tested after an
+initial plain-IP-hash version showed the failback problem above - that a
+stick-table-based backend correctly keeps a failed-over client on its
+new server even after its original server comes back, only moving it
+again if that new server itself later fails.
 
 
 Staging: a defined client group tests updates before everyone else
