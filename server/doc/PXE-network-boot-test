@@ -154,6 +154,34 @@ what the boot log showed right before each freeze - none resolved it:
     lower-level tracing (kernel debug builds, Hyper-V-side VMBus
     tracing) than was practical in this session.
 
+Two more targeted fixes were tried after comparing against a real,
+working production ltsp.ipxe (booting real Zbox/Intel NUC/ASUS NUC
+hardware and Proxmox test clients, both BIOS and UEFI) kindly shared
+during this investigation - neither resolved it either:
+
+  - The working script explicitly passes "ipv6.disable=1", and this
+    test's own boot log showed IPv6 subsystem messages (mip6, IOAM)
+    right in the same window as the freeze - a plausible, concrete
+    lead. Adding it did suppress those specific log lines (confirming
+    it took effect) but did not move the freeze point.
+  - Also tried a genuinely single-vCPU VM (not just a "maxcpus=1"
+    kernel parameter, an actual Set-VM -ProcessorCount 1), based on a
+    reported Hyper-V/Linux multi-CPU hang pattern found via web search
+    (a different root cause in that report - CONFIG_HYPERV_VTL_MODE -
+    but the symptom class seemed worth ruling out). No change either.
+
+The one consistent thread across every attempt: the freeze always
+lands at very close to the same *absolute kernel uptime*
+(~0.19-0.22s), regardless of which specific subsystem message happens
+to be the last one printed before it (which varies depending on which
+of the above workarounds are active at the time) - that points more at
+a timer/scheduler-tick-level stall specific to this Hyper-V host's
+clock virtualization than at any single driver or subsystem, which is
+a harder class of bug to pin down without actual kernel-side tracing
+(ftrace, a serial console with earlyprintk, or a kernel built with
+lockup/hang detectors enabled) than is practical to keep guessing at
+here.
+
 Given all of this, further Hyper-V-specific debugging was set aside
 here rather than pursued indefinitely - the PXE/TFTP/NBD chain and the
 ldm packaging fix are the solid, real results of this test; the
