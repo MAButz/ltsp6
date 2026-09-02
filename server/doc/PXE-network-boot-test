@@ -1,0 +1,162 @@
+Full PXE network boot test (DHCP -> TFTP -> NBD -> ldm)
+============================================================
+
+What this covers: an end-to-end test of the actual client boot chain a
+real thin client goes through - DHCP handing out a boot file, TFTP
+serving the bootloader/kernel/initrd, the initrd connecting to an NBD
+server for the root filesystem, and switch_root handing off into the
+real ltsp6 client system - as opposed to the earlier ldm/xrdp testing
+in this repo's other doc files, which ran ldm directly on an
+already-booted host and proved the greeter/xfreerdp/xrdp chain works,
+but not the network-boot chain itself.
+
+Test setup: an isolated Hyper-V "Internal" switch (no other traffic on
+it), a small Debian 13 VM running dnsmasq (DHCP+TFTP in one) and
+nbd-server, serving the real client image built earlier (server/doc's
+Debian packaging + toram testing) - the actual 638 MiB squashfs image,
+containing ldm 3.0.0, X.org and xfreerdp3.
+
+
+Real bug found and fixed: ldm never actually started at boot
+-----------------------------------------------------------------
+This is the one concrete, fixed bug this test surfaced, and it applies
+regardless of platform (Hyper-V, Proxmox, real hardware): ldm's Debian
+package installed and worked fine when invoked directly (as done in
+earlier live testing), but had never actually been wired up to start
+automatically at boot. It shipped no systemd service unit and never
+touched /etc/X11/default-display-manager, so systemd's graphical.target
+had nothing to launch a display manager with - boot fell through to a
+plain text login prompt instead of the ldm greeter.
+
+Fixed in ldm 3.0.1 (see the ldm-mabutz repository): added
+debian/ldm.service, whose "Alias=display-manager.service" line makes
+debhelper's dh_installsystemd create the
+/etc/systemd/system/display-manager.service symlink that real display
+managers rely on, plus postinst/prerm logic to set/clear
+/etc/X11/default-display-manager (which ltsp6's own
+init-ltsp.d/50-default-display-manager hook already expected to exist).
+Verified: after upgrading to 3.0.1 and rebuilding the client image, the
+symlink is correctly created on install.
+
+
+What worked completely: the network boot chain itself
+-----------------------------------------------------------
+Both of the two standard PXE boot paths were tested and both correctly
+completed the full DHCP -> TFTP -> NBD handshake on the first clean
+attempt (after fixing an unrelated host-routing issue - see below):
+
+  - BIOS/legacy path (pxelinux): dnsmasq's dhcp-boot serving
+    pxelinux.0 directly, a pxelinux.cfg/default with the kernel/initrd
+    and a "nbdroot=<server>:<port>/<export>" append line matching
+    initramfs-tools' stock nbd script format (see
+    /usr/share/initramfs-tools/scripts/local-top/nbd for the exact
+    nbdroot= syntax: "server,port" or "server,port/exportname").
+
+  - UEFI path (iPXE, the approach used by the ltsp5-uefi project -
+    https://github.com/alkisg/ltsp5-uefi): dnsmasq tags the request
+    with dhcp-userclass=set:ipxe,iPXE, serving Debian's prebuilt
+    /usr/lib/ipxe/ipxe.efi on the client's first (non-iPXE) DHCP
+    request, then a plain iPXE script (kernel/initrd/boot commands,
+    same nbdroot= syntax) on iPXE's own second DHCP request once it
+    identifies itself. Since this test only needed amd64 (not a 32-bit
+    OS on a UEFI client), the simple direct kernel/initrd/boot path
+    was enough - no grub chainload workaround needed (that workaround,
+    used by ltsp5-uefi, is specifically for booting a 32-bit OS on a
+    UEFI client, which iPXE itself can't do).
+
+In both cases, dnsmasq's logs showed the complete expected sequence
+(DHCPDISCOVER/OFFER/REQUEST/ACK, each boot file served over TFTP in
+order, then a second DHCP round from inside the kernel's own ip=dhcp
+network setup) and netstat on the server confirmed a real, established
+TCP connection to nbd-server's port - the client was actively reading
+its root filesystem over the network, not just failing silently.
+
+
+Real bug found and fixed: a rogue DHCP-issued default route
+-------------------------------------------------------------------
+While setting this up, dnsmasq's DHCP handed out a default gateway
+option pointing at itself, and the Windows host itself picked up that
+lease on its own virtual adapter for the isolated test switch - which
+briefly overrode the host's real default route (0.0.0.0/0) with one
+pointing into the isolated test network, cutting off ALL internet
+access from both the host and WSL2 until noticed and fixed. Two
+independent fixes, both worth doing on a real deployment's boot/PXE
+server, not just this test: explicitly suppress the router and DNS
+DHCP options with empty `dhcp-option=3` / `dhcp-option=6` directives
+(clients only need to reach the boot server, not get routed to the
+internet through it), and keep DHCP/PXE infrastructure on a switch/VLAN
+that nothing else - especially not the management host - has an
+interface on.
+
+
+Known limitation: an unresolved Hyper-V-specific early-boot hang
+-----------------------------------------------------------------------
+Not fixed, and flagged here honestly rather than papered over: booting
+the actual client kernel through this chain, on this Hyper-V host,
+reproducibly hangs early in boot - confirmed via frozen network byte
+counters (zero new traffic across multiple checks) and a completely
+static console (identical screenshots taken minutes apart, down to the
+exact same kernel log timestamp).
+
+This was tested on both Hyper-V VM generations, with two independent,
+different hang points:
+
+  - Generation 1 (legacy BIOS, pxelinux path): hangs consistently
+    around kernel uptime ~55s, right after the "hv_balloon: Max.
+    dynamic memory size" log line (Hyper-V's dynamic memory
+    ballooning driver - present and logging even with the VM
+    configured for static memory, so its presence alone isn't
+    inherently the cause). Blacklisting the hv_balloon module via a
+    "module_blacklist=hv_balloon" kernel parameter made things worse
+    (no console output at all), so that's not the fix either, and was
+    reverted.
+
+  - Generation 2 (UEFI, iPXE path): hangs much earlier, around kernel
+    uptime ~0.25s, partway through core security-subsystem
+    initialization (IMA/EVM/AppArmor logging), well before any
+    Hyper-V-specific or network/storage driver would even be reached.
+
+The same kernel and the same client image boot and run completely
+normally under nested Proxmox VE/QEMU (see the Proxmox HA testing
+elsewhere in this repo - four separate VMs on that stack all boot this
+kernel fine) and when ldm is run directly on a already-booted host (see
+the ldm/xrdp end-to-end testing). That rules out the kernel or the
+client image itself as the cause and points at something specific to
+how this particular Hyper-V host boots a guest through this exact
+chain.
+
+Three targeted fixes were tried on the Generation 2 case, based on
+what the boot log showed right before each freeze - none resolved it:
+
+  - The log's last line before freezing was consistently right around
+    IMA/EVM loading X.509 certificates from the UEFI "db" certificate
+    store ("integrity: Loading X.509 certificate: UEFI:db"). Added
+    "efi=noruntime" to stop the kernel from making EFI runtime calls
+    at all. This did visibly change the log (the UEFI:db certificate
+    lines disappeared entirely, confirming the parameter took effect)
+    and let boot reach a little further in one run - but did not fix
+    the hang, which still occurred a little later at the same kind of
+    point.
+  - One run's log showed "scsi_host0" right before freezing, on a VM
+    that has no disks attached at all (network boot only) - a known
+    class of hv_storvsc issue when a SCSI controller has zero disks.
+    Removed the VM's SCSI controller entirely (Remove-VMScsiController
+    - Generation 2 VMs otherwise keep an empty one by default even
+    with -NoVHD). This didn't help either, and the next run actually
+    froze slightly *earlier* than before.
+  - The freeze point itself isn't fully deterministic - it's moved
+    between roughly kernel uptime 0.18s and 0.25s across different
+    boots of the identical configuration, all still well within the
+    same early security/IMA/EVM initialization phase. That variability
+    is itself informative: it points more toward a timing-sensitive
+    race in VMBus channel setup than a single deterministic blocking
+    call, which is a harder class of bug to pin down without
+    lower-level tracing (kernel debug builds, Hyper-V-side VMBus
+    tracing) than was practical in this session.
+
+Given all of this, further Hyper-V-specific debugging was set aside
+here rather than pursued indefinitely - the PXE/TFTP/NBD chain and the
+ldm packaging fix are the solid, real results of this test; the
+early-boot hang is a genuine, reproducible, but currently unresolved
+Hyper-V compatibility issue best picked up again with more specialized
+tooling.
