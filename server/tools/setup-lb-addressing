@@ -1,0 +1,95 @@
+#!/bin/sh
+# Pin a load balancer's address and point keepalived's VRRP unicast peers at
+# the current addresses of both nodes.
+#
+# Why this exists: keepalived here announces VRRP over unicast rather than
+# multicast, because the virtual switch in this lab does not relay VRRP
+# multicast between guests. Unicast works - but it hardcodes both nodes'
+# addresses, so a DHCP lease change silently breaks it. When that happened,
+# neither node could see the other's advertisements, both promoted themselves
+# to MASTER, and both answered ARP for the VIP. Connections then established
+# through one node and had their follow-up packets delivered to the other,
+# which had no state for them and replied with RST - RDP sessions came up and
+# died a few seconds later with "Connection reset by peer".
+#
+# The same drift had already broken the Proxmox cluster's corosync ring, so:
+# anything that names a peer by address needs a static address.
+#
+# Run this ON the load balancer, as root. It reboots the host at the end,
+# because the address change cannot be applied cleanly from a session that
+# uses it.
+#
+# Usage: setup-lb-addressing <own-ip/cidr> <peer-ip> <iface> <gateway> <dns>
+# Example: setup-lb-addressing 172.17.250.51/20 172.17.250.52 ens18 \
+#              172.17.240.1 172.17.250.10
+
+set -e
+
+[ $# -eq 5 ] || { echo "Usage: $0 <own-ip/cidr> <peer-ip> <iface> <gateway> <dns>" >&2; exit 2; }
+
+IPCIDR=$1
+PEER=$2
+IFACE=$3
+GATEWAY=$4
+DNS=$5
+IP=${IPCIDR%%/*}
+
+[ "$(id -u)" = 0 ] || { echo "must run as root" >&2; exit 1; }
+
+echo "==> stopping the DHCP client"
+# Debian 13 ships dhcpcd, started directly by ifupdown rather than as a
+# systemd unit - so it keeps running (and re-adding its lease) unless both
+# are handled.
+systemctl disable --now dhcpcd 2>/dev/null || true
+dhcpcd -k "$IFACE" 2>/dev/null || true
+pkill -f dhcpcd 2>/dev/null || true
+
+echo "==> static address $IPCIDR"
+cp /etc/network/interfaces /etc/network/interfaces.bak 2>/dev/null || true
+cat > /etc/network/interfaces <<EOF
+source /etc/network/interfaces.d/*
+
+auto lo
+iface lo inet loopback
+
+# Static: keepalived names this address in unicast_src_ip and the peer names
+# it in unicast_peer. A lease change here means the two nodes stop seeing each
+# other and both claim the VIP.
+auto $IFACE
+iface $IFACE inet static
+    address $IPCIDR
+    gateway $GATEWAY
+EOF
+
+# Immutable, because dhcpcd rewrites resolv.conf with an empty stub during
+# boot even when disabled.
+chattr -i /etc/resolv.conf 2>/dev/null || true
+cat > /etc/resolv.conf <<EOF
+domain ltsplab.local
+search ltsplab.local
+nameserver $DNS
+nameserver $GATEWAY
+EOF
+chattr +i /etc/resolv.conf 2>/dev/null || true
+
+echo "==> keepalived unicast peers"
+cp /etc/keepalived/keepalived.conf /etc/keepalived/keepalived.conf.bak
+sed -i "s|^\([[:space:]]*\)unicast_src_ip .*|\1unicast_src_ip $IP|" \
+    /etc/keepalived/keepalived.conf
+# unicast_peer is a block; replace the single address line inside it.
+awk -v peer="$PEER" '
+    /unicast_peer[[:space:]]*{/ { print; inblock = 1; next }
+    inblock && /}/ { print "        " peer; print; inblock = 0; next }
+    inblock { next }
+    { print }
+' /etc/keepalived/keepalived.conf > /etc/keepalived/keepalived.conf.new
+mv /etc/keepalived/keepalived.conf.new /etc/keepalived/keepalived.conf
+grep -A3 'unicast_src_ip\|unicast_peer' /etc/keepalived/keepalived.conf
+
+sync
+
+echo "==> rebooting to apply the address cleanly"
+# Applying this live would cut the session it is running over, and a
+# half-applied address is how the host ends up unreachable.
+( sleep 2; systemctl reboot ) >/dev/null 2>&1 &
+echo "    (reboot scheduled)"
