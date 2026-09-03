@@ -8,20 +8,23 @@
 #
 # Run this ON the application server, as root.
 #
-# Usage: setup-ltsp-app <own-ip/cidr> <iface> <gateway> <dc-ip> <realm> <adminuser> <adminpass>
+# Usage: setup-ltsp-app <own-ip/cidr> <iface> <gateway> <dc-ip> <realm> <adminuser> <adminpass> [home-server-ip]
+#
+# With home-server-ip given, /home is mounted from that host over NFS so every
+# application server shows the same home directories.
 #
 # Example:
 #   setup-ltsp-app 172.17.250.31/20 ens18 172.17.240.1 172.17.250.10 \
-#       LTSPLAB.LOCAL administrator '<admin-password>'
+#       LTSPLAB.LOCAL administrator '<admin-password>' 172.17.250.40
 
 set -e
 
 usage() {
-    echo "Usage: $0 <ip/cidr> <iface> <gateway> <dc-ip> <realm> <adminuser> <adminpass>" >&2
+    echo "Usage: $0 <ip/cidr> <iface> <gateway> <dc-ip> <realm> <adminuser> <adminpass> [home-server-ip]" >&2
     exit 2
 }
 
-[ $# -eq 7 ] || usage
+[ $# -eq 7 ] || [ $# -eq 8 ] || usage
 
 IPCIDR=$1
 IFACE=$2
@@ -30,6 +33,7 @@ DCIP=$4
 REALM=$5
 ADMINUSER=$6
 ADMINPASS=$7
+HOMEIP=${8:-}
 DOMAIN_LOWER=$(echo "$REALM" | tr 'A-Z' 'a-z')
 
 [ "$(id -u)" = 0 ] || { echo "must run as root" >&2; exit 1; }
@@ -122,6 +126,13 @@ systemctl restart chrony 2>/dev/null || true
 
 # --------------------------------------------------------------- offload
 echo "==> disabling checksum offload (nested virtualisation)"
+# ethtool has to be present or the unit below is installed, enabled and
+# permanently "failed" - which is exactly how this was found: both application
+# servers had the unit and neither had the binary, so checksum offload was
+# never actually turned off.
+command -v ethtool >/dev/null 2>&1 || \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y ethtool >/dev/null 2>&1 || \
+    echo "    WARNING: ethtool missing and could not be installed" >&2
 cat > /etc/systemd/system/ltsp-nic-offload.service <<EOF
 [Unit]
 Description=Disable NIC checksum offload (nested virtualisation)
@@ -139,6 +150,111 @@ EOF
 systemctl daemon-reload
 systemctl enable ltsp-nic-offload >/dev/null 2>&1
 
+# --------------------------------------------------------------- home directories
+if [ -n "$HOMEIP" ]; then
+    echo "==> mounting /home from $HOMEIP over NFS"
+    # x-systemd.automount rather than a plain entry at boot: the file server is
+    # a separate guest and may well come up after this one, and a hard mount
+    # attempted too early would block the boot instead of just the first
+    # access. _netdev keeps it out of the pre-network mount phase entirely.
+    #
+    # The mount stays "hard" on purpose. A soft mount turns a server outage
+    # into short writes and silently corrupted files in people's home
+    # directories; hard turns it into processes that wait. Worth knowing what
+    # that costs, though: while the server is unreachable every login blocks
+    # in the kernel, including ssh, so the machine looks dead from outside.
+    if ! grep -q "[[:space:]]/home[[:space:]]" /etc/fstab; then
+        printf '%s:/srv/home\t/home\tnfs4\trw,_netdev,x-systemd.automount,x-systemd.mount-timeout=10,retry=0\t0 0\n' \
+            "$HOMEIP" >> /etc/fstab
+    fi
+    command -v mount.nfs4 >/dev/null 2>&1 || \
+        DEBIAN_FRONTEND=noninteractive apt-get install -y nfs-common >/dev/null 2>&1 || true
+    systemctl daemon-reload
+    systemctl restart remote-fs.target 2>/dev/null || true
+fi
+
+# --------------------------------------------------------------- screen locking
+echo "==> screen locking with xscreensaver"
+# light-locker is what xfce4 pulls in by default, and it is the wrong tool in
+# an RDP session: it locks by way of the logind seat, and an xrdp session has
+# no seat of its own, so it either does nothing or blanks a session it cannot
+# then unlock. xscreensaver locks the X session itself, which is what exists
+# here. Removing light-locker also silences the
+#   light-locker: ERROR: Screensaver is already running in this session
+# line that every session start otherwise leaves in .xsession-errors.
+DEBIAN_FRONTEND=noninteractive apt-get purge -y light-locker >/dev/null 2>&1 || true
+command -v xscreensaver >/dev/null 2>&1 || \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y xscreensaver >/dev/null 2>&1 || true
+
+# The power manager plugin is removed as well. On a session server it has
+# nothing to manage - no battery, no backlight, no suspend - and each session
+# runs its own copy, so on a host carrying many sessions the polling adds up
+# to real CPU load for no benefit. Screen blanking is xscreensaver's job now.
+DEBIAN_FRONTEND=noninteractive apt-get purge -y \
+    xfce4-power-manager xfce4-power-manager-plugins xfce4-power-manager-data \
+    >/dev/null 2>&1 || true
+
+# Start xscreensaver with every session, and let it lock after 10 minutes.
+mkdir -p /etc/xdg/autostart
+cat > /etc/xdg/autostart/xscreensaver.desktop <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=Screensaver
+Exec=xscreensaver -no-splash
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+EOF
+cat > /etc/X11/Xresources/xscreensaver-ltsp <<'EOF'
+! Lock the X session after ten idle minutes. blank is deliberate: anything
+! that draws costs CPU on a host running many sessions at once.
+xscreensaver.mode: blank
+xscreensaver.timeout: 0:10:00
+xscreensaver.lock: True
+xscreensaver.lockTimeout: 0:00:30
+xscreensaver.dpmsEnabled: False
+EOF
+
+# --------------------------------------------------------------- stale sessions
+echo "==> installing the orphaned-session reaper"
+# An xfce4-session that outlives the session it belonged to makes every
+# subsequent login fail, and fail invisibly: the second xfce4-session finds
+# the org.xfce.SessionManager name already owned on the user's bus (which
+# survives in /run/user/<uid> between sessions), exits 0 straight away, xrdp
+# sees its window manager finish and ends the session. The client is handed
+# ERRINFO_LOGOFF_BY_USER - "the user logged off" - so nothing anywhere reports
+# an error. The user just lands back at the greeter, for good.
+#
+# Orphans are made by restarting xrdp-sesman while sessions are running, which
+# is easy to do while configuring a server. Hence the rule used here: at the
+# moment sesman starts, it is tracking nothing, so any process still carrying
+# XRDP_SESSION in its environment belongs to a session that is already lost.
+# That is a safe rule only at startup - never run this on a live server.
+cat > /usr/local/sbin/xrdp-reap-orphan-sessions <<'EOF'
+#!/bin/sh
+# Kill leftover xrdp session processes. Only correct as an ExecStartPre of
+# xrdp-sesman: before it starts, no session it tracks can be running.
+killed=0
+for pid in $(ls /proc 2>/dev/null | grep -E '^[0-9]+$'); do
+    { env_data=$(tr '\0' '\n' < "/proc/$pid/environ"); } 2>/dev/null || continue
+    case $env_data in
+        *XRDP_SESSION=*) kill -9 "$pid" 2>/dev/null && killed=$((killed + 1)) ;;
+    esac
+done
+# The X servers are started by sesman itself and carry no XRDP_SESSION.
+for pid in $(pgrep -f 'Xorg .*xrdp/xorg.conf' 2>/dev/null); do
+    kill -9 "$pid" 2>/dev/null && killed=$((killed + 1))
+done
+[ "$killed" -gt 0 ] && echo "reaped $killed orphaned xrdp session processes"
+exit 0
+EOF
+chmod 755 /usr/local/sbin/xrdp-reap-orphan-sessions
+mkdir -p /etc/systemd/system/xrdp-sesman.service.d
+cat > /etc/systemd/system/xrdp-sesman.service.d/10-reap-orphans.conf <<'EOF'
+[Service]
+ExecStartPre=/usr/local/sbin/xrdp-reap-orphan-sessions
+EOF
+systemctl daemon-reload
+
 # --------------------------------------------------------------- desktop session
 echo "==> xrdp session"
 # xrdp runs /etc/xrdp/startwm.sh, which sources /etc/X11/Xsession, which in
@@ -153,9 +269,23 @@ systemctl enable xrdp xrdp-sesman >/dev/null 2>&1
 echo "==> restarting networking onto the static address"
 # From here on the old address is gone, so anything still talking to it will
 # lose the connection - run this script detached if you are logged in over it.
-ip addr flush dev "$IFACE" 2>/dev/null || true
-systemctl restart networking 2>/dev/null || ifup "$IFACE" 2>/dev/null || true
+#
+# The address is never simply flushed and left to ifupdown to restore. An
+# earlier version did that, "systemctl restart networking" did not bring the
+# address back, and the host was then unreachable with no way in: /home is a
+# hard NFS mount, so every login blocked in the kernel waiting for a file
+# server it could no longer route to, and the console showed nothing. It took
+# a hard power cycle to recover. So: bring the interface down and up by name,
+# and if the static address is still missing afterwards, set it directly.
+ifdown "$IFACE" 2>/dev/null || true
+ifup "$IFACE" 2>/dev/null || systemctl restart networking 2>/dev/null || true
 sleep 3
+if ! ip -4 -o addr show "$IFACE" | grep -q "${IPCIDR%%/*}"; then
+    echo "    ifupdown did not apply the static address - setting it directly"
+    ip addr add "$IPCIDR" dev "$IFACE" 2>/dev/null || true
+    ip link set "$IFACE" up 2>/dev/null || true
+    ip route replace default via "$GATEWAY" dev "$IFACE" 2>/dev/null || true
+fi
 ip -4 -o addr show "$IFACE"
 /sbin/ethtool -K "$IFACE" tx off rx off 2>/dev/null || true
 
@@ -221,6 +351,20 @@ ldap_id_mapping = True
 # home directory - an XFCE session without one does not come up.
 use_fully_qualified_names = False
 fallback_homedir = /home/%u
+
+# Without these two, a correct password still fails with
+#   pam_acct_mgmt failed: Permission denied
+# and the sssd log explains why:
+#   Configuration hint: PAM service 'xrdp-sesman' is not mapped to any
+#   Group Policy rule ... service xrdp-sesman maps to Denied
+# sssd's GPO access control runs enforcing by default and maps every PAM
+# service it does not recognise to "Denied", regardless of what AD actually
+# says. The mapping is the substantive fix - xrdp *is* a remote interactive
+# logon - and permissive mode covers the case that this domain defines no GPO
+# for that right at all: the policy is still evaluated and logged, just not
+# enforced. Drop the second line once the domain has a real policy.
+ad_gpo_map_remote_interactive = +xrdp-sesman
+ad_gpo_access_control = permissive
 EOF
 # sssd refuses to start if this is group- or world-readable.
 chmod 600 /etc/sssd/sssd.conf
