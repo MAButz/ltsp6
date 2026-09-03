@@ -11,46 +11,172 @@ already-booted host and proved the greeter/xfreerdp/xrdp chain works,
 but not the network-boot chain itself.
 
 Test setup: an isolated Hyper-V "Internal" switch (no other traffic on
-it), a small Debian 13 VM running dnsmasq (DHCP+TFTP in one) and
-nbd-server, serving the real client image built earlier (server/doc's
-Debian packaging + toram testing) - the actual 638 MiB squashfs image,
-containing ldm 3.0.0, X.org and xfreerdp3.
+it) plus, later, a parallel comparison client on pure Proxmox VE/QEMU
+(direct kernel boot via the VM's "args:" config line, bypassing PXE
+entirely) to isolate hypervisor-specific issues from real bugs. Both
+used the same kernel/initrd/squashfs client image, a small Debian 13
+VM running dnsmasq (DHCP+TFTP in one) and nbd-server.
+
+This test surfaced a chain of real, independent bugs, each hiding
+behind the previous one - fixing one just exposed the next failure
+further down the boot sequence. All of them are now understood and
+fixed. The end state, confirmed by live testing: Xorg actually starts
+and runs (`/usr/lib/xorg/Xorg :7 vt7 ...`) as a real process on the
+client.
 
 
-Real bug found and fixed: ldm never actually started at boot
------------------------------------------------------------------
-This is the one concrete, fixed bug this test surfaced, and it applies
-regardless of platform (Hyper-V, Proxmox, real hardware): ldm's Debian
-package installed and worked fine when invoked directly (as done in
-earlier live testing), but had never actually been wired up to start
-automatically at boot. It shipped no systemd service unit and never
-touched /etc/X11/default-display-manager, so systemd's graphical.target
-had nothing to launch a display manager with - boot fell through to a
-plain text login prompt instead of the ldm greeter.
+Bug 1: nbdroot= comma vs colon syntax (fixed earlier, see git history)
+-----------------------------------------------------------------------
+initramfs-tools' stock nbd script (/usr/share/initramfs-tools/scripts/
+local-top/nbd) parses nbdroot= differently depending on the separator:
+a 2-field "server,port" (SIMPLE case, no export name support) vs the
+default "server:port/exportname" case. Using a comma
+(nbdroot=host,port/export) matches the wrong branch and silently fails
+NBD setup with an empty export name, which looks like an early boot
+hang on the console (the retry loop in /scripts/local-block doesn't
+print anything new). Fix: use the colon form,
+nbdroot=<server>:<port>/<export>, matching initramfs-tools' own default
+case and every real-world ltsp5-uefi/ltsp.ipxe example.
 
-Fixed in ldm 3.0.1 (see the ldm-mabutz repository): added
-debian/ldm.service, whose "Alias=display-manager.service" line makes
-debhelper's dh_installsystemd create the
-/etc/systemd/system/display-manager.service symlink that real display
-managers rely on, plus postinst/prerm logic to set/clear
-/etc/X11/default-display-manager (which ltsp6's own
-init-ltsp.d/50-default-display-manager hook already expected to exist).
-Verified: after upgrading to 3.0.1 and rebuilding the client image, the
-symlink is correctly created on install.
+
+Bug 2: init=/usr/sbin/init-ltsp vs init=/sbin/init-ltsp
+-----------------------------------------------------------------------
+client/Debian/share/initramfs-tools/scripts/init-bottom/ltsp (the hook
+that mounts a writable tmpfs overlay over the read-only squashfs root
+before handing off to userspace) and .../init-premount/udhcp (LTSP's
+own DHCP client, see bug 3) both gate their entire body on:
+
+    grep -qs "init=/sbin/init-ltsp" /proc/cmdline || exit 0
+
+A kernel cmdline of init=/usr/sbin/init-ltsp (note /usr/sbin) does NOT
+match this substring check, so both hooks silently no-op. Without the
+overlay, root stays read-only: systemd-logind fails with
+"Failed to set up special execution directory in /var/lib: Read-only
+file system" (exit 238/STATE_DIRECTORY), and ldm fails immediately with
+"Couldn't open logfile /var/log/ldm.log" - both are the same underlying
+cause, not two separate bugs, and neither is related to ldm's own
+systemd registration (see the "ldm never started at boot" fix below -
+that fix is still correct and necessary, just not sufficient by
+itself). Fix: use init=/sbin/init-ltsp on the kernel cmdline, exactly
+as documented at the top of the udhcp script.
+
+
+Bug 3: udhcp script passes a bogus "-r dhcp" to its own DHCP client
+-----------------------------------------------------------------------
+Once bug 2 is fixed, LTSP's own init-premount/udhcp hook starts
+running (previously silently skipped) and immediately loops forever
+printing "DHCP request for <iface>..." without ever obtaining a lease -
+reproduced identically on both Hyper-V (dnsmasq) and a pure Proxmox/
+QEMU comparison VM, ruling out a hypervisor- or DHCP-server-specific
+cause. Root cause, found via the script's own `xtrace=udhcp` kernel
+cmdline debug switch: initramfs-tools' own cmdline parsing pre-sets a
+shell variable $ip to the raw value of the kernel's ip= parameter
+(here, the literal string "dhcp", from `ip=dhcp`). The udhcp script's
+process_kernel_parameters() correctly recognizes this "ip=dhcp"
+shorthand and sets autoconf="dhcp", but never clears the pre-existing
+$ip variable - so do_dhcp() later builds `-r $ip`, i.e. an actual
+`udhcpc -r dhcp` invocation, asking to request the literal (invalid) IP
+address "dhcp". Fix (client/Debian/share/initramfs-tools/scripts/
+init-premount/udhcp): explicitly `unset ip tftp router subnet hostname`
+in the shorthand-keyword case of process_kernel_parameters().
+
+
+Bug 4: ldm segfaults (NULL pointer) when the greeter process dies
+-----------------------------------------------------------------------
+With bugs 2 and 3 fixed, ldm.service starts, systemd-logind works, and
+ldm itself runs - and then reliably segfaults a moment later. Root
+cause, found via a debug build under gdb (reproduced identically by
+running /usr/sbin/ldm directly): ldmgreetercomm.c's listen_greeter():
+
+    GError *ge = NULL;
+    if (g_io_channel_read_line(greeterr, ..., &ge) != G_IO_STATUS_NORMAL) {
+        log_entry("ldm", 3, "%s", ge->message);   /* ge can be NULL here */
+
+g_io_channel_read_line() only populates *error on G_IO_STATUS_ERROR;
+on G_IO_STATUS_EOF (the greeter process died and closed its end of the
+pipe) it leaves ge as NULL, and the unconditional ge->message
+dereference (a GError's `message` field sits at byte offset 8) crashes
+with a NULL+8 fault. Fix (ldm-mabutz, src/ldmgreetercomm.c): only
+dereference ge when it's non-NULL, and log a distinct "channel closed
+unexpectedly" message on EOF instead. This is a correctness fix
+regardless of what caused the greeter to die - see bugs 5-8 for what
+was actually killing it in this test.
+
+
+Bugs 5-8: nothing ever started Xorg
+-----------------------------------------------------------------------
+The greeter (ldmgtkgreet) was dying immediately with "Gtk-WARNING:
+cannot open display: :0" because no X server was ever running. Several
+compounding gaps, found and fixed together:
+
+  - ldm.service's ExecStart ran /usr/sbin/ldm directly. That's wrong:
+    ldm itself is only the X *client* (display manager); starting the
+    X *server* is screen.d/ldm's job, which does
+    `exec xinit /usr/share/ltsp/xinitrc /usr/sbin/ldm -- ${DISPLAY}
+    vt${TTY} ...`, and screen.d/ldm is only ever reached via
+    /usr/share/ltsp/screen_session <N>. Fixed (ldm-mabutz,
+    debian/ldm.service): ExecStart=/usr/share/ltsp/screen_session 07
+    (07 is the default SCREEN_07=ldm mapping), with TTYPath/
+    UtmpIdentifier/Conflicts updated from tty1 to tty7 (the classic
+    graphical-VT convention screen.d/ldm's `vt${TTY}` argument assumes).
+
+  - screen_session and screen.d/ldm call shell functions
+    (boolean_is_true, run_parts_list, die, ...) that are supposed to
+    come from /usr/share/ltsp/ltsp-client-common-functions, sourced via
+    ltsp-client-functions. That file was never being installed for the
+    ltsp-client-core package at all: debian/rules has the install line
+    for the ltsp-server package (`install common/ltsp-common-functions
+    .../ltsp-server-common-functions`) but the equivalent line for
+    ltsp-client-core was simply missing. Without it, every call to
+    those functions fails with "not found", and screen_session's own
+    script-resolution logic breaks down entirely (observed as
+    "/usr/share/ltsp/screen.d/: Permission denied" - the empty,
+    unresolved script variable ends up pointing at the directory
+    itself). Fixed: added the missing install line to debian/rules.
+
+  - Two runtime dependencies screen_session/screen.d/ldm actually shell
+    out to were missing from ltsp-client-core's package dependencies:
+    fgconsole (package kbd) and lspci (package pciutils, used by the
+    XS20-*-hack screen-session.d scripts). Fixed: added kbd and
+    pciutils to debian/control's Depends.
+
+  - xinit itself (the package providing /usr/bin/xinit) was missing
+    too - screen.d/ldm's `exec xinit ...` line silently failed with
+    "No such file or directory", swallowed by the script's own
+    `>/dev/null 2>&1` redirect, which is why this had to be tracked
+    down by re-running the exact same xinit invocation manually with
+    visible output rather than relying on the journal. Fixed: added
+    xinit to debian/control's Depends.
+
+  - screen_session's own fgconsole-polling loop
+    (`while ... [ $(fgconsole) -ne "$SCREEN_NUM" ]; do sleep 2; done`)
+    waits for VT7 to already be the foreground console before ever
+    running screen.d/ldm - a leftover assumption from the old inittab/
+    sysvinit multi-getty model, where some other screen would actively
+    switch to it. Under a single ldm.service unit with nothing else
+    ever switching VTs, that wait never ends: Xorg itself performs the
+    VT7 switch (via the `vt7` argument screen.d/ldm passes it), but
+    Xorg never gets to run in the first place. Fixed
+    (ltsp_config.d/15default-screen): default
+    SCREEN_07_WAIT_FGCONSOLE=False alongside SCREEN_07=ldm, so ldm's
+    screen starts immediately and lets Xorg claim VT7 itself.
+
+Verified end to end after all of the above: `ps aux` on the booted
+client shows both `xinit /usr/share/ltsp/xinitrc /usr/sbin/ldm -- :7
+vt7 ...` and its child `/usr/lib/xorg/Xorg :7 vt7 ... -depth 16 -br`
+actually running.
 
 
 What worked completely: the network boot chain itself
------------------------------------------------------------
-Both of the two standard PXE boot paths were tested and both correctly
-completed the full DHCP -> TFTP -> NBD handshake on the first clean
-attempt (after fixing an unrelated host-routing issue - see below):
+-------------------------------------------------------
+Both of the two standard PXE boot paths correctly complete the full
+DHCP -> TFTP -> NBD handshake (after fixing an unrelated host-routing
+issue - see below):
 
   - BIOS/legacy path (pxelinux): dnsmasq's dhcp-boot serving
     pxelinux.0 directly, a pxelinux.cfg/default with the kernel/initrd
-    and a "nbdroot=<server>:<port>/<export>" append line matching
-    initramfs-tools' stock nbd script format (see
-    /usr/share/initramfs-tools/scripts/local-top/nbd for the exact
-    nbdroot= syntax: "server,port" or "server,port/exportname").
+    and a `nbdroot=<server>:<port>/<export>` append line (see bug 1
+    above for why the colon, not comma, form is required).
 
   - UEFI path (iPXE, the approach used by the ltsp5-uefi project -
     https://github.com/alkisg/ltsp5-uefi): dnsmasq tags the request
@@ -67,9 +193,9 @@ attempt (after fixing an unrelated host-routing issue - see below):
 In both cases, dnsmasq's logs showed the complete expected sequence
 (DHCPDISCOVER/OFFER/REQUEST/ACK, each boot file served over TFTP in
 order, then a second DHCP round from inside the kernel's own ip=dhcp
-network setup) and netstat on the server confirmed a real, established
-TCP connection to nbd-server's port - the client was actively reading
-its root filesystem over the network, not just failing silently.
+network setup - or LTSP's own udhcp client once bug 2/3 were fixed)
+and netstat on the server confirmed a real, established TCP connection
+to nbd-server's port.
 
 
 Real bug found and fixed: a rogue DHCP-issued default route
@@ -89,102 +215,24 @@ that nothing else - especially not the management host - has an
 interface on.
 
 
-Known limitation: an unresolved Hyper-V-specific early-boot hang
+Previously reported "unresolved Hyper-V-specific early-boot hang":
+superseded - it was bug 1 above
 -----------------------------------------------------------------------
-Not fixed, and flagged here honestly rather than papered over: booting
-the actual client kernel through this chain, on this Hyper-V host,
-reproducibly hangs early in boot - confirmed via frozen network byte
-counters (zero new traffic across multiple checks) and a completely
-static console (identical screenshots taken minutes apart, down to the
-exact same kernel log timestamp).
-
-This was tested on both Hyper-V VM generations, with two independent,
-different hang points:
-
-  - Generation 1 (legacy BIOS, pxelinux path): hangs consistently
-    around kernel uptime ~55s, right after the "hv_balloon: Max.
-    dynamic memory size" log line (Hyper-V's dynamic memory
-    ballooning driver - present and logging even with the VM
-    configured for static memory, so its presence alone isn't
-    inherently the cause). Blacklisting the hv_balloon module via a
-    "module_blacklist=hv_balloon" kernel parameter made things worse
-    (no console output at all), so that's not the fix either, and was
-    reverted.
-
-  - Generation 2 (UEFI, iPXE path): hangs much earlier, around kernel
-    uptime ~0.25s, partway through core security-subsystem
-    initialization (IMA/EVM/AppArmor logging), well before any
-    Hyper-V-specific or network/storage driver would even be reached.
-
-The same kernel and the same client image boot and run completely
-normally under nested Proxmox VE/QEMU (see the Proxmox HA testing
-elsewhere in this repo - four separate VMs on that stack all boot this
-kernel fine) and when ldm is run directly on a already-booted host (see
-the ldm/xrdp end-to-end testing). That rules out the kernel or the
-client image itself as the cause and points at something specific to
-how this particular Hyper-V host boots a guest through this exact
-chain.
-
-Three targeted fixes were tried on the Generation 2 case, based on
-what the boot log showed right before each freeze - none resolved it:
-
-  - The log's last line before freezing was consistently right around
-    IMA/EVM loading X.509 certificates from the UEFI "db" certificate
-    store ("integrity: Loading X.509 certificate: UEFI:db"). Added
-    "efi=noruntime" to stop the kernel from making EFI runtime calls
-    at all. This did visibly change the log (the UEFI:db certificate
-    lines disappeared entirely, confirming the parameter took effect)
-    and let boot reach a little further in one run - but did not fix
-    the hang, which still occurred a little later at the same kind of
-    point.
-  - One run's log showed "scsi_host0" right before freezing, on a VM
-    that has no disks attached at all (network boot only) - a known
-    class of hv_storvsc issue when a SCSI controller has zero disks.
-    Removed the VM's SCSI controller entirely (Remove-VMScsiController
-    - Generation 2 VMs otherwise keep an empty one by default even
-    with -NoVHD). This didn't help either, and the next run actually
-    froze slightly *earlier* than before.
-  - The freeze point itself isn't fully deterministic - it's moved
-    between roughly kernel uptime 0.18s and 0.25s across different
-    boots of the identical configuration, all still well within the
-    same early security/IMA/EVM initialization phase. That variability
-    is itself informative: it points more toward a timing-sensitive
-    race in VMBus channel setup than a single deterministic blocking
-    call, which is a harder class of bug to pin down without
-    lower-level tracing (kernel debug builds, Hyper-V-side VMBus
-    tracing) than was practical in this session.
-
-Two more targeted fixes were tried after comparing against a real,
-working production ltsp.ipxe (booting real Zbox/Intel NUC/ASUS NUC
-hardware and Proxmox test clients, both BIOS and UEFI) kindly shared
-during this investigation - neither resolved it either:
-
-  - The working script explicitly passes "ipv6.disable=1", and this
-    test's own boot log showed IPv6 subsystem messages (mip6, IOAM)
-    right in the same window as the freeze - a plausible, concrete
-    lead. Adding it did suppress those specific log lines (confirming
-    it took effect) but did not move the freeze point.
-  - Also tried a genuinely single-vCPU VM (not just a "maxcpus=1"
-    kernel parameter, an actual Set-VM -ProcessorCount 1), based on a
-    reported Hyper-V/Linux multi-CPU hang pattern found via web search
-    (a different root cause in that report - CONFIG_HYPERV_VTL_MODE -
-    but the symptom class seemed worth ruling out). No change either.
-
-The one consistent thread across every attempt: the freeze always
-lands at very close to the same *absolute kernel uptime*
-(~0.19-0.22s), regardless of which specific subsystem message happens
-to be the last one printed before it (which varies depending on which
-of the above workarounds are active at the time) - that points more at
-a timer/scheduler-tick-level stall specific to this Hyper-V host's
-clock virtualization than at any single driver or subsystem, which is
-a harder class of bug to pin down without actual kernel-side tracing
-(ftrace, a serial console with earlyprintk, or a kernel built with
-lockup/hang detectors enabled) than is practical to keep guessing at
-here.
-
-Given all of this, further Hyper-V-specific debugging was set aside
-here rather than pursued indefinitely - the PXE/TFTP/NBD chain and the
-ldm packaging fix are the solid, real results of this test; the
-early-boot hang is a genuine, reproducible, but currently unresolved
-Hyper-V compatibility issue best picked up again with more specialized
-tooling.
+An earlier version of this document described a seemingly
+Hyper-V-specific, non-deterministic early-boot freeze (~0.2s kernel
+uptime, moving between runs, five different workarounds tried and
+ruled out: efi=noruntime, removing the Generation-2 SCSI controller,
+blacklisting hv_balloon, a genuinely single-vCPU VM, ipv6.disable=1).
+That entire investigation was chasing a red herring: the actual cause
+was bug 1 (the nbdroot= comma-vs-colon parsing bug), whose failure mode
+- an infinite silent retry loop in /scripts/local-block - produces a
+static console with no new output, which is indistinguishable from a
+genuine hang unless you specifically capture and diff full boot logs
+across multiple attempts or get a real serial console with the actual
+error message on it. Once a proper serial console capture
+(console=ttyS0,115200n8 plus a real Hyper-V COM port / QEMU serial
+socket, not just the graphical console) was used, the actual
+"Insufficient information to set up nbd, quitting" failure message was
+immediately visible, and none of the five Hyper-V-specific workarounds
+above were ever actually necessary. They're recorded here only so
+nobody re-tries them expecting a different result.

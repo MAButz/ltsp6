@@ -41,6 +41,7 @@ Tools:
       --enable-dns              Also enable DNS in dnsmasq, not just DHCP/TFTP.
       --no-proxy-dhcp           Don't enable proxyDHCP mode for detected subnets.
   isc-dhcp-server               Configure isc-dhcp-server.
+  kea                            Configure kea-dhcp4-server.
   lts.conf                      Create a sample lts.conf.
   nbd-server                    Configure nbd-server.
   nfs                           Configure nfs exports.
@@ -206,6 +207,14 @@ config_isc_dhcp_server() {
     service isc-dhcp-server restart
 }
 
+config_kea() {
+    local conf
+
+    conf="/etc/kea/kea-dhcp4.conf"
+    install_example "kea-dhcp4.conf" "$conf"
+    service kea-dhcp4-server restart
+}
+
 config_lts_conf() {
     local default tftpdir
 
@@ -314,7 +323,7 @@ while true ; do
 done
 
 case "$1" in
-    dnsmasq|isc-dhcp-server|lts.conf|nbd-server|nfs)
+    dnsmasq|isc-dhcp-server|kea|lts.conf|nbd-server|nfs)
         config_function=$(echo "config_$1" | tr -c "[[:alpha:]\n]" "_")
         ;;
     *) die "$(usage)" ;;
