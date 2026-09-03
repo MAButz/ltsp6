@@ -1,7 +1,17 @@
 ### color depth
 
-# Default to 16 bpp for thin clients
-if [ -z "$X_COLOR_DEPTH" ] && boolean_is_true "${X_SMART_COLOR_DEPTH:-True}" && ! boolean_is_true "${LTSP_FATCLIENT}"; then
+# Default to 16 bpp for thin clients, but only on legacy non-KMS graphics.
+#
+# Modern KMS drivers generally advertise XRGB8888 (32 bpp) and nothing else,
+# and some reject a 16 bpp framebuffer outright rather than converting: on
+# Hyper-V's hyperv_drm, "-depth 16" makes every drmModeAddFB fail with EINVAL,
+# so the Xorg log fills up with "failed to add fb -22", the server never brings
+# a screen up, and screen_session respawns it forever - no login greeter, just
+# a flickering console. The bandwidth argument for 16 bpp never applied to the
+# framebuffer anyway, only to the X protocol traffic, so restrict the default
+# to hardware that has no DRM device at all.
+if [ -z "$X_COLOR_DEPTH" ] && boolean_is_true "${X_SMART_COLOR_DEPTH:-True}" &&
+    ! boolean_is_true "${LTSP_FATCLIENT}" && [ ! -e /dev/dri/card0 ]; then
     X_COLOR_DEPTH=16
 fi
 

@@ -1,7 +1,17 @@
 # Also check with xprop, this way localapps are not required to be enabled.
 # Don't reboot now to avoid ghost processes, store the result in a file
 # to be processed by screen-session.d/XS00-halt-reboot.
+#
+# The property may be left over from an earlier X session on the same
+# X server (e.g. a previous ldm run that crashed before reaching the
+# "xprop -remove" cleanup below), so don't trust its mere presence -
+# only act on it if this xprop invocation actually succeeds against a
+# live X connection right now.
 if [ ! -f /var/run/ltsp-logout-action ]; then
-   xprop -root -notype LTSP_LOGOUT_ACTION | sed -ne 's/^LTSP_LOGOUT_ACTION = "\(.*\)"/\1/p' > /var/run/ltsp-logout-action || true
-   xprop -root -remove LTSP_LOGOUT_ACTION
+   xprop_out=$(xprop -root -notype LTSP_LOGOUT_ACTION 2>/dev/null)
+   if [ $? -eq 0 ]; then
+       echo "$xprop_out" | sed -ne 's/^LTSP_LOGOUT_ACTION = "\(.*\)"/\1/p' \
+           > /var/run/ltsp-logout-action
+   fi
+   xprop -root -remove LTSP_LOGOUT_ACTION 2>/dev/null || true
 fi

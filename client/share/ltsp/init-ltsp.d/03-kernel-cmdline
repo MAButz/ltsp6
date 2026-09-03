@@ -43,6 +43,16 @@ case "$netroot" in
 		;;
 esac
 
+# netpath still has its separating "/" (stripping $netport only removes the
+# port digits), but nbd-client's -N wants a bare export name - strip it, or
+# NBD_ROOT_NAME ends up as e.g. "/ltsp-amd64" instead of "ltsp-amd64", which
+# doesn't match any real nbd-server export and breaks ldm's
+# rc.d/I01-nbd-checkupdate (its own separate NBD connection, used only to
+# detect a server-side image update, silently fails to attach and ends up
+# comparing against empty/garbage data - which never matches, so it thinks
+# the image always changed and reboots on every single boot).
+netpath=${netpath#/}
+
 # If not specified in the kernel cmdline, use the value from DHCP
 netsrv=${netsrv:-$ROOTSERVER}
 
