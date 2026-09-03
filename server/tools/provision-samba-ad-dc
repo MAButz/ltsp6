@@ -1,0 +1,171 @@
+#!/bin/sh
+# Turn a freshly installed Debian host into the lab's Samba AD domain
+# controller, and pin its address while doing so.
+#
+# Run this ON the DC itself, as root, once. It is written to be re-runnable:
+# if the domain is already provisioned it stops before touching it.
+#
+# Usage: provision-samba-ad-dc <ip/cidr> <gateway> <realm> <netbios> <adminpass>
+#
+# Example:
+#   provision-samba-ad-dc 172.17.250.10/20 172.17.240.1 \
+#       LTSPLAB.LOCAL LTSPLAB '<admin-password>'
+
+set -e
+
+usage() {
+    echo "Usage: $0 <ip/cidr> <gateway> <realm> <netbios> <adminpass>" >&2
+    exit 2
+}
+
+[ $# -eq 5 ] || usage
+
+IPCIDR=$1
+GATEWAY=$2
+REALM=$3          # e.g. LTSPLAB.LOCAL - upper case
+NETBIOS=$4        # e.g. LTSPLAB - upper case, <= 15 chars
+ADMINPASS=$5
+
+IP=${IPCIDR%%/*}
+DOMAIN_LOWER=$(echo "$REALM" | tr 'A-Z' 'a-z')
+HOSTNAME=$(hostname -s)
+
+[ "$(id -u)" = 0 ] || { echo "must run as root" >&2; exit 1; }
+
+# ---------------------------------------------------------------- addressing
+#
+# A DC must not move: domain members find it through DNS SRV records and store
+# its address, and it is itself the DNS server for the zone. A DHCP lease that
+# changes on reboot breaks the whole domain - the same failure mode that took
+# the Proxmox cluster down when its nodes lost their leases.
+echo "==> pinning $IPCIDR on the primary interface"
+IFACE=$(ip -4 route show default | awk '{print $5; exit}')
+[ -n "$IFACE" ] || IFACE=$(ip -o link show | awk -F': ' '$2 != "lo" {print $2; exit}')
+echo "    interface: $IFACE"
+
+if ! grep -q "iface $IFACE inet static" /etc/network/interfaces 2>/dev/null; then
+    cp /etc/network/interfaces /etc/network/interfaces.bak
+    # Replace just this interface's stanza, leaving loopback and anything the
+    # admin added in interfaces.d alone.
+    awk -v iface="$IFACE" -v ipcidr="$IPCIDR" -v gw="$GATEWAY" '
+        $0 ~ "^iface "iface" inet " { skip = 1
+            print "iface "iface" inet static"
+            print "    address "ipcidr
+            print "    gateway "gw
+            next }
+        skip && /^[[:space:]]/ { next }   # drop the old stanza body
+        { skip = 0; print }
+    ' /etc/network/interfaces > /etc/network/interfaces.new
+    mv /etc/network/interfaces.new /etc/network/interfaces
+fi
+
+# Stop whichever DHCP client is running before taking the address over.
+#
+# Debian 13 ships dhcpcd, not the isc-dhcp-client of earlier releases, so
+# reaching only for "dhclient" leaves a live client behind. It notices the
+# address disappear and rebinds its lease seconds later:
+#   dhcpcd[561]: ens18: pid 2437 deleted IP address 172.17.249.106/20
+#   dhcpcd[561]: ens18: rebinding lease of 172.17.249.106
+# The interface then carries two addresses, and Samba answers DNS queries
+# from the wrong one - queries sent to the static address come back sourced
+# from the leased one, so every client discards the reply as unsolicited and
+# DNS looks like a total timeout from the outside. Handle both clients, and
+# disable the service so it cannot return after a reboot.
+systemctl disable --now dhcpcd 2>/dev/null || true
+dhcpcd -k "$IFACE" 2>/dev/null || true
+dhclient -r "$IFACE" 2>/dev/null || true
+pkill dhclient 2>/dev/null || true
+
+# Releasing the lease takes the address and the default route with it, so put
+# both back in one go rather than leaving the host unreachable in between.
+ip addr flush dev "$IFACE"
+ip addr add "$IPCIDR" dev "$IFACE"
+ip link set "$IFACE" up
+ip route replace default via "$GATEWAY" 2>/dev/null || true
+
+# Verify we really are single-homed before provisioning, since whatever is on
+# the interface now is what ends up in DNS.
+ADDRS=$(ip -4 -o addr show dev "$IFACE" | wc -l)
+if [ "$ADDRS" -ne 1 ]; then
+    echo "error: $IFACE has $ADDRS IPv4 addresses, expected exactly 1:" >&2
+    ip -4 -o addr show dev "$IFACE" >&2
+    echo "refusing to provision - fix the addressing first" >&2
+    exit 1
+fi
+
+echo "==> fixing /etc/hosts"
+# Samba resolves its own name during provisioning and refuses to continue if
+# that lands on 127.0.1.1, which Debian's installer writes by default.
+sed -i "/^127\.0\.1\.1/d" /etc/hosts
+grep -q "$IP[[:space:]]" /etc/hosts ||
+    echo "$IP	$HOSTNAME.$DOMAIN_LOWER $HOSTNAME" >> /etc/hosts
+
+# ------------------------------------------------------------------- provision
+if [ -f /var/lib/samba/private/sam.ldb ]; then
+    echo "==> domain already provisioned, leaving it alone"
+else
+    echo "==> provisioning $REALM ($NETBIOS)"
+    # The stock Debian smb.conf is a standalone-server config and provisioning
+    # refuses to overwrite it.
+    [ -f /etc/samba/smb.conf ] && mv /etc/samba/smb.conf /etc/samba/smb.conf.orig
+
+    # smbd/nmbd/winbind must not run on a DC: samba-ad-dc is a single daemon
+    # that provides all three roles itself, and the separate units fight it
+    # over the same sockets.
+    systemctl disable --now smbd nmbd winbind 2>/dev/null || true
+    systemctl unmask samba-ad-dc 2>/dev/null || true
+
+    # --use-rfc2307 stores uid/gid attributes in AD, which is what lets the
+    # LTSP application servers and the file server agree on POSIX ownership
+    # for home directories.
+    samba-tool domain provision \
+        --use-rfc2307 \
+        --realm="$REALM" \
+        --domain="$NETBIOS" \
+        --server-role=dc \
+        --dns-backend=SAMBA_INTERNAL \
+        --adminpass="$ADMINPASS" \
+        --host-ip="$IP"
+
+    # Point unresolvable names at the upstream resolver, otherwise domain
+    # members can reach internal names but nothing outside - and the DC itself
+    # cannot even reach the package mirrors.
+    #
+    # Set the value, do not merely add the line when absent: provisioning
+    # writes "dns forwarder = none" of its own accord (it reads resolv.conf,
+    # which by this point already points at ourselves), so a
+    # "grep -q 'dns forwarder' || append" check finds that line and skips.
+    if grep -qE '^[[:space:]]*dns forwarder[[:space:]]*=' /etc/samba/smb.conf; then
+        sed -i "s|^[[:space:]]*dns forwarder[[:space:]]*=.*|\tdns forwarder = $GATEWAY|" \
+            /etc/samba/smb.conf
+    else
+        sed -i "/^\[global\]/a\\	dns forwarder = $GATEWAY" /etc/samba/smb.conf
+    fi
+
+    # Samba generates its own krb5.conf; the system one has to point at it or
+    # kinit will not find the realm.
+    ln -sf /var/lib/samba/private/krb5.conf /etc/krb5.conf
+fi
+
+echo "==> resolving through ourselves"
+# The DC has to use its own DNS, or it cannot resolve the SRV records it just
+# created for itself.
+cat > /etc/resolv.conf <<EOF
+domain $DOMAIN_LOWER
+search $DOMAIN_LOWER
+nameserver 127.0.0.1
+EOF
+# Something else would rewrite it on the next DHCP or resolvconf run.
+chattr +i /etc/resolv.conf 2>/dev/null || true
+
+echo "==> starting samba-ad-dc"
+systemctl enable --now samba-ad-dc
+sleep 5
+
+echo "==> verification"
+samba-tool domain level show || true
+echo "--- SRV record for the DC ---"
+host -t SRV "_ldap._tcp.$DOMAIN_LOWER" 127.0.0.1 || true
+echo "--- kerberos ---"
+echo "$ADMINPASS" | kinit administrator 2>&1 | head -3 || true
+klist 2>/dev/null || true

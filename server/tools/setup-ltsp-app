@@ -1,0 +1,206 @@
+#!/bin/sh
+# Configure a host as an LTSP application server: it accepts the RDP sessions
+# that HAProxy distributes to it, runs the desktop inside them, and
+# authenticates its users against the Samba AD domain.
+#
+# It builds and serves no images - that is ltsp-root's job. One of these runs
+# per hypervisor node so the load balancers have several backends.
+#
+# Run this ON the application server, as root.
+#
+# Usage: setup-ltsp-app <own-ip/cidr> <iface> <gateway> <dc-ip> <realm> <adminuser> <adminpass>
+#
+# Example:
+#   setup-ltsp-app 172.17.250.31/20 ens18 172.17.240.1 172.17.250.10 \
+#       LTSPLAB.LOCAL administrator '<admin-password>'
+
+set -e
+
+usage() {
+    echo "Usage: $0 <ip/cidr> <iface> <gateway> <dc-ip> <realm> <adminuser> <adminpass>" >&2
+    exit 2
+}
+
+[ $# -eq 7 ] || usage
+
+IPCIDR=$1
+IFACE=$2
+GATEWAY=$3
+DCIP=$4
+REALM=$5
+ADMINUSER=$6
+ADMINPASS=$7
+DOMAIN_LOWER=$(echo "$REALM" | tr 'A-Z' 'a-z')
+
+[ "$(id -u)" = 0 ] || { echo "must run as root" >&2; exit 1; }
+
+# --------------------------------------------------------------- addressing
+echo "==> stopping the DHCP client for good"
+# Debian 13 ships dhcpcd rather than dhclient, and ifupdown starts it directly
+# rather than through a systemd unit - so "systemctl is-enabled dhcpcd" says
+# not-found while six dhcpcd processes are running. Left alone it keeps its
+# leased address alongside the static one, and services bound to the wildcard
+# then answer from whichever address the routing table prefers. That is what
+# made the domain controller reply to DNS queries from the wrong source, so
+# every client discarded the answers.
+systemctl disable --now dhcpcd 2>/dev/null || true
+dhcpcd -k "$IFACE" 2>/dev/null || true
+pkill -f dhcpcd 2>/dev/null || true
+dhclient -r "$IFACE" 2>/dev/null || true
+pkill dhclient 2>/dev/null || true
+
+echo "==> writing static network configuration"
+cp /etc/network/interfaces /etc/network/interfaces.bak 2>/dev/null || true
+cat > /etc/network/interfaces <<EOF
+source /etc/network/interfaces.d/*
+
+auto lo
+iface lo inet loopback
+
+# Static: HAProxy's backend list points at this address, and the machine
+# account in AD is tied to this host's name and address.
+auto $IFACE
+iface $IFACE inet static
+    address $IPCIDR
+    gateway $GATEWAY
+EOF
+
+# resolv.conf is written directly: dns-nameservers in interfaces(5) needs
+# resolvconf/openresolv, which is not installed, so it would be ignored.
+# The domain controller has to come first - a domain member that cannot
+# resolve the _ldap._tcp SRV records can neither join nor authenticate.
+cat > /etc/resolv.conf <<EOF
+domain $DOMAIN_LOWER
+search $DOMAIN_LOWER
+nameserver $DCIP
+nameserver $GATEWAY
+EOF
+
+sync
+
+# --------------------------------------------------------------- time
+echo "==> pointing time sync at the domain controller"
+# Kerberos rejects tickets whose timestamps differ from the KDC's by more than
+# the allowed skew (5 minutes by default), so a domain member that drifts
+# simply stops being able to log anyone in.
+mkdir -p /etc/chrony/conf.d
+cat > /etc/chrony/conf.d/ad-dc.conf <<EOF
+server $DCIP iburst prefer
+EOF
+systemctl restart chrony 2>/dev/null || true
+
+# --------------------------------------------------------------- offload
+echo "==> disabling checksum offload (nested virtualisation)"
+cat > /etc/systemd/system/ltsp-nic-offload.service <<EOF
+[Unit]
+Description=Disable NIC checksum offload (nested virtualisation)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/sbin/ethtool -K $IFACE tx off rx off
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload
+systemctl enable ltsp-nic-offload >/dev/null 2>&1
+
+# --------------------------------------------------------------- desktop session
+echo "==> xrdp session"
+# xrdp runs /etc/xrdp/startwm.sh, which sources /etc/X11/Xsession, which in
+# turn starts the x-session-manager alternative. Installing xfce4 already
+# points that at startxfce4, but say it explicitly so a later package change
+# cannot silently swap the desktop out from under the users.
+if [ -x /usr/bin/startxfce4 ]; then
+    update-alternatives --set x-session-manager /usr/bin/startxfce4 >/dev/null 2>&1 || true
+fi
+systemctl enable xrdp xrdp-sesman >/dev/null 2>&1
+
+echo "==> restarting networking onto the static address"
+# From here on the old address is gone, so anything still talking to it will
+# lose the connection - run this script detached if you are logged in over it.
+ip addr flush dev "$IFACE" 2>/dev/null || true
+systemctl restart networking 2>/dev/null || ifup "$IFACE" 2>/dev/null || true
+sleep 3
+ip -4 -o addr show "$IFACE"
+/sbin/ethtool -K "$IFACE" tx off rx off 2>/dev/null || true
+
+# --------------------------------------------------------------- domain join
+echo "==> joining $REALM"
+#
+# Joined with adcli directly rather than through realmd. realmd verifies its
+# dependencies through PackageKit, which is not installed on a minimal Debian
+# host, so it refuses the join with
+#   Couldn't join realm: Necessary packages are not installed:
+#   sssd-tools sssd libnss-sss libpam-sss adcli
+# even when every one of those packages is installed - and
+# "automatic-install = no" in /etc/realmd.conf does not suppress the check.
+# adcli creates the machine account and the keytab, which is all that is
+# actually needed; sssd.conf is written below by hand.
+if klist -k /etc/krb5.keytab 2>/dev/null | grep -qi "$(hostname -s)\\\$@"; then
+    echo "    already joined (machine account in keytab)"
+else
+    # Wait until the *system resolver* can find the realm, not just the DC by
+    # address: the join uses DNS SRV discovery, and querying the DC's IP
+    # directly succeeds while /etc/resolv.conf is still settling - which makes
+    # the join fail with a misleading "No such realm found".
+    i=0
+    while [ $i -lt 24 ]; do
+        host -W 3 -t SRV "_ldap._tcp.$DOMAIN_LOWER" >/dev/null 2>&1 && break
+        i=$((i + 1))
+        sleep 5
+    done
+    printf '%s' "$ADMINPASS" | adcli join \
+        --domain="$DOMAIN_LOWER" \
+        --login-user="$ADMINUSER" \
+        --stdin-password || {
+        echo "adcli join failed" >&2
+        exit 1
+    }
+fi
+
+echo "==> sssd configuration"
+cat > /etc/sssd/sssd.conf <<EOF
+[sssd]
+domains = $DOMAIN_LOWER
+config_file_version = 2
+services = nss, pam
+
+[domain/$DOMAIN_LOWER]
+id_provider = ad
+access_provider = ad
+ad_domain = $DOMAIN_LOWER
+krb5_realm = $REALM
+cache_credentials = True
+krb5_store_password_if_offline = True
+default_shell = /bin/bash
+
+# Derive UIDs/GIDs algorithmically from the AD SID. Every member of the domain
+# then computes the same numbers, so a home directory served from the file
+# server has consistent ownership on all application servers.
+ldap_id_mapping = True
+
+# Log in as "jdoe" rather than "jdoe@$DOMAIN_LOWER", and give the session a
+# home directory - an XFCE session without one does not come up.
+use_fully_qualified_names = False
+fallback_homedir = /home/%u
+EOF
+# sssd refuses to start if this is group- or world-readable.
+chmod 600 /etc/sssd/sssd.conf
+systemctl enable sssd >/dev/null 2>&1
+systemctl restart sssd
+sleep 4
+pam-auth-update --enable mkhomedir >/dev/null 2>&1 || true
+
+echo "==> verification"
+echo "--- machine account ---"
+klist -k /etc/krb5.keytab 2>/dev/null | grep -i "$(hostname -s)" | head -2
+echo "--- can we see a domain user? ---"
+id "$ADMINUSER" 2>&1 | head -1
+echo "--- xrdp ---"
+systemctl is-active xrdp xrdp-sesman
+ss -tlnp 2>/dev/null | grep 3389 || echo "xrdp not listening yet"
+echo "==> done"

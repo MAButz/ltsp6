@@ -1,0 +1,121 @@
+#!/bin/sh
+# Configure a host as the LTSP image server ("ltsp-root"): it builds the client
+# images and hands them out over DHCP/PXE/TFTP/NBD, and does nothing else.
+#
+# The matching application servers (xrdp + a desktop, joined to the domain)
+# are separate hosts behind the load balancers - see preseed/ltsp-app.cfg.
+#
+# Run this ON the image server, as root.
+#
+# Usage: setup-ltsp-root <own-ip> <iface> <gateway> <dns...>
+# Example: setup-ltsp-root 172.17.250.20 ens18 172.17.240.1 172.17.250.10
+
+set -e
+
+usage() {
+    echo "Usage: $0 <own-ip> <iface> <gateway> [dns ...]" >&2
+    exit 2
+}
+
+[ $# -ge 3 ] || usage
+
+MYIP=$1
+IFACE=$2
+GATEWAY=$3
+shift 3
+DNS=$(echo "$@" | tr ' ' ',')
+[ -n "$DNS" ] || DNS=$GATEWAY
+
+[ "$(id -u)" = 0 ] || { echo "must run as root" >&2; exit 1; }
+
+IMAGES=/srv/ltsp/images
+TFTP=/srv/tftp
+mkdir -p "$IMAGES" "$TFTP" /etc/nbd-server/conf.d
+
+echo "==> nbd-server export"
+cat > /etc/nbd-server/config <<EOF
+[generic]
+	user = nbd
+	group = nbd
+	includedir = /etc/nbd-server/conf.d
+
+[ltsp-amd64]
+	exportname = $IMAGES/amd64.img
+	readonly = true
+EOF
+
+echo "==> dnsmasq: DHCP, PXE and TFTP"
+# port=0 keeps dnsmasq out of the DNS business entirely: the Samba AD DC owns
+# the ltsplab.local zone, and two resolvers answering for the same names is a
+# reliable way to produce inconsistent lookups.
+#
+# Handing out a nameserver is not optional even though LTSP clients do not
+# need one - the Debian installer stops at a critical-priority "Name server
+# addresses" prompt without it, which breaks unattended installs on this
+# network.
+cat > /etc/dnsmasq.d/ltsp.conf <<EOF
+interface=$IFACE
+bind-interfaces
+port=0
+
+dhcp-range=172.17.249.100,172.17.249.200,255.255.240.0,12h
+dhcp-option=option:router,$GATEWAY
+dhcp-option=option:dns-server,$DNS
+dhcp-option=option:domain-name,ltsplab.local
+
+# Two-stage PXE: firmware loads iPXE, iPXE then fetches ltsp.ipxe. Clients
+# already running iPXE identify themselves through DHCP option 175, which is
+# what stops iPXE from chainloading itself forever.
+dhcp-match=set:ipxe,175
+dhcp-boot=tag:ipxe,ltsp.ipxe
+pxe-service=tag:!ipxe,X86PC,"Boot to iPXE BIOS",undionly.kpxe
+pxe-service=tag:!ipxe,X86-64_EFI,"Boot to iPXE UEFI",ipxe.efi
+
+enable-tftp
+tftp-root=$TFTP
+log-dhcp
+EOF
+
+# tftpd-hpa and dnsmasq both want udp/69; dnsmasq's built-in server is enough
+# and keeps the PXE configuration in one file.
+systemctl disable --now tftpd-hpa 2>/dev/null || true
+
+echo "==> pointing the boot script at this host"
+if [ -f "$TFTP/ltsp.ipxe" ]; then
+    sed -i "s|nbdroot=[0-9.]*:|nbdroot=$MYIP:|" "$TFTP/ltsp.ipxe"
+    grep -o 'nbdroot=[^ ]*' "$TFTP/ltsp.ipxe"
+fi
+
+echo "==> checksum offload"
+# Nested virtualisation: this host is a VM inside a Proxmox node that is
+# itself a hypervisor guest. With TX checksum offload enabled there is no
+# hardware left to finish the checksum, so DHCP replies go out invalid and
+# every client drops them - the symptom is PXE clients that never get an
+# address while tcpdump on this side shows the reply being sent.
+cat > /etc/systemd/system/ltsp-nic-offload.service <<EOF
+[Unit]
+Description=Disable NIC checksum offload (nested virtualisation)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/sbin/ethtool -K $IFACE tx off rx off
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload
+systemctl enable --now ltsp-nic-offload
+ethtool -k "$IFACE" | grep -E '^tx-checksumming|^rx-checksumming'
+
+echo "==> enabling services"
+systemctl enable --now nbd-server dnsmasq
+sleep 2
+systemctl is-active nbd-server dnsmasq
+
+echo "==> listening sockets"
+ss -tulnp | grep -E ':(67|69|4011|10809)' || true
+
+echo "==> done"
