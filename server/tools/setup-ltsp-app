@@ -173,6 +173,30 @@ if [ -n "$HOMEIP" ]; then
     systemctl restart remote-fs.target 2>/dev/null || true
 fi
 
+# --------------------------------------------------------------- GPU allow list
+echo "==> allowing the xe DRM driver for glamor (no effect until glamor is built in)"
+# xorgxrdp gates glamor behind an allow list of DRM driver names, and Debian's
+# /etc/X11/xrdp/xorg.conf ships it as "i915 radeon". Modern Intel discrete
+# cards (Arc B-series / Battlemage) are not driven by i915 at all - only by
+# xe. Verified against Debian 13's own kernel (6.12.94+deb13-amd64): the
+# Battlemage PCI ids E20B/E20C/E20D/E202/E212 appear in xe's alias list and in
+# none of i915's. Without xe on this list, glamor refuses the card even on a
+# host where the GPU works perfectly for everything else.
+#
+# Adding it here is deliberate but not sufficient, and it changes nothing
+# today: Debian builds xorgxrdp WITHOUT glamor (libxorgxrdp.so contains no
+# glamor/EGL/GBM/DRI3 symbols at all), so GPU use additionally requires a
+# self-built xorgxrdp with --enable-glamor. Upstream still calls that
+# experimental. This line only makes sure that the allow list is not the thing
+# that silently blocks it afterwards.
+XRDP_XORG=/etc/X11/xrdp/xorg.conf
+if [ -f "$XRDP_XORG" ] && grep -q 'DRMAllowList' "$XRDP_XORG" && \
+   ! grep -q 'DRMAllowList.*\bxe\b' "$XRDP_XORG"; then
+    cp "$XRDP_XORG" "$XRDP_XORG.bak"
+    sed -i 's/\(Option[[:space:]]*"DRMAllowList"[[:space:]]*"\)/\1xe /' "$XRDP_XORG"
+    grep 'DRMAllowList' "$XRDP_XORG" | sed 's/^/    /'
+fi
+
 # --------------------------------------------------------------- screen locking
 echo "==> screen locking with xscreensaver"
 # light-locker is what xfce4 pulls in by default, and it is the wrong tool in
