@@ -1,3 +1,5 @@
+[Deutsch](README.de.md) · **English**
+
 # ltsp6
 
 LTSP 5.18 brought forward to Debian 13: thin clients that network-boot into a
