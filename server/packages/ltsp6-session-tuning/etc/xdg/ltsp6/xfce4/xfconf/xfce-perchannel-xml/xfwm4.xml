@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Compositing off by default.
+
+  On a session server there is normally no GPU in the session: xrdp's Xorg
+  runs on llvmpipe, so every shadow, every transparent panel and every fade
+  is composited by the CPU - once per session. On a host carrying many
+  sessions that is the single largest avoidable load, and it buys nothing a
+  remote desktop user can appreciate over a compressed RDP stream.
+
+  This is a default, not a lock: a user who turns compositing back on in
+  Window Manager Tweaks gets their own copy in ~/.config and keeps it.
+
+  xfwm4 itself ships no xfconf defaults file, so nothing is lost by providing
+  this channel wholesale.
+-->
+<channel name="xfwm4" version="1.0">
+  <property name="general" type="empty">
+    <property name="use_compositing" type="bool" value="false"/>
+  </property>
+</channel>

@@ -1,0 +1,10 @@
+# The local cache root used by /etc/X11/Xsession.d/40ltsp6-session-tuning.
+#
+# Sticky and world-writable like /tmp, because each session creates its own
+# subdirectory as the logged-in user. What makes that safe is the Xsession
+# hook: it refuses to use a directory it does not own, so a pre-created
+# directory belonging to someone else is ignored rather than written into.
+#
+# The age field lets systemd-tmpfiles clear out the caches of users who have
+# not logged in for a month. Nothing here is meant to survive - it is a cache.
+d /var/cache/ltsp6-sessions 1777 root root 30d

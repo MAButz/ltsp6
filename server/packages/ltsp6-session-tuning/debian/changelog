@@ -1,0 +1,12 @@
+ltsp6-session-tuning (1.0.0) trixie; urgency=medium
+
+  * Initial release.
+  * Move XDG_CACHE_HOME to local disk for every graphical session, so
+    fontconfig caches, icon caches, thumbnails and browser caches stop
+    travelling over NFS once per session.
+  * Turn off xfwm4 compositing by default. An xrdp session has no GPU, so
+    compositing runs on llvmpipe - per session.
+  * Raise fs.inotify.max_user_instances and max_user_watches, and lower
+    vm.vfs_cache_pressure for NFS-backed home directories.
+
+ -- Marc-André Beckmann-Butz <ma@butz.online>  Thu, 03 Sep 2026 20:00:00 +0200

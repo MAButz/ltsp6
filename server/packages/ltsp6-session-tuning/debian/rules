@@ -1,0 +1,6 @@
+#!/usr/bin/make -f
+# The payload is plain configuration laid out in the source tree; debian/*.install
+# places it and dh_installtmpfiles handles the cache directory.
+
+%:
+	dh $@

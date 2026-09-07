@@ -1,0 +1,24 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    configure)
+        # Apply our own file only, rather than "sysctl --system": re-applying
+        # every file on the system during a package install is a side effect
+        # nobody asked for.
+        #
+        # Never fatal. In a container /proc/sys is commonly read-only, and the
+        # package is still correctly installed there - the settings just
+        # belong to the host in that case.
+        if command -v sysctl >/dev/null 2>&1; then
+            if ! sysctl -q -p /etc/sysctl.d/60-ltsp6-session-tuning.conf 2>/dev/null; then
+                echo "ltsp6-session-tuning: could not apply sysctl settings now;" >&2
+                echo "  they will take effect on the next boot." >&2
+            fi
+        fi
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

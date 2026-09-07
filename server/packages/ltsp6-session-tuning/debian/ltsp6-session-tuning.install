@@ -1,0 +1,3 @@
+etc/X11/Xsession.d/40ltsp6-session-tuning              etc/X11/Xsession.d/
+etc/sysctl.d/60-ltsp6-session-tuning.conf              etc/sysctl.d/
+etc/xdg/ltsp6/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml etc/xdg/ltsp6/xfce4/xfconf/xfce-perchannel-xml/

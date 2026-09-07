@@ -1,0 +1,120 @@
+ltsp6-session-tuning
+====================
+
+What this package changes, and - more usefully - what it refuses to change.
+
+The three settings
+------------------
+
+1. XDG_CACHE_HOME moves to /var/cache/ltsp6-sessions/<uid>
+
+   ~/.cache is the busiest directory a desktop session owns: fontconfig
+   caches, GTK icon caches, thumbnails, browser caches. With home
+   directories on NFS every write goes over the network, once per session,
+   and none of it is worth keeping between logins. Moving it to local disk
+   is the single largest improvement in this package.
+
+   The cache root is sticky and world-writable, like /tmp. The Xsession hook
+   therefore tests "-O" - do we own the directory - before using it. If
+   another user pre-created a directory for our uid, the test fails and the
+   session quietly keeps the default ~/.cache. Degraded, never exploited.
+
+   Consequence worth knowing: a user's cache does not follow them between
+   application servers. That is correct for a cache, and it is why the load
+   balancer's session affinity matters for feel rather than function.
+
+2. xfwm4 compositing off by default
+
+   In an xrdp session Xorg runs on llvmpipe - software rendering. Every
+   shadow, fade and transparent panel is then composited by the CPU, once
+   per session, and none of it survives RDP compression in a way a user
+   would notice. A user who wants it back can turn it on in Window Manager
+   Tweaks and keeps their own setting.
+
+3. inotify headroom and vfs_cache_pressure
+
+   The inotify limits are per-uid, so they are not shared between sessions -
+   but one Xfce session spends them freely (xfsettingsd, xfdesktop, Thunar,
+   panel plugins, gvfs, tumbler, dconf, then the user's own applications).
+   Exhaustion surfaces as EMFILE from inotify_init, usually printed as "too
+   many open files", which sends people looking at file descriptor limits
+   instead. Headroom costs a few kilobytes per instance.
+
+   vm.vfs_cache_pressure = 50 halves how eagerly the kernel drops dentry and
+   inode caches. With NFS homes each dropped entry becomes a network round
+   trip on the next lookup, and desktops do a great many small lookups. If
+   your home directories are local, the default of 100 is fine and this line
+   can go.
+
+
+What was deliberately left out
+------------------------------
+
+Each of these appears in most "multi-user tuning" advice. They were measured
+on Debian 13 before being rejected, so nobody has to spend an afternoon
+re-adding them.
+
+  * UserTasksMax / DefaultTasksMax
+    systemd ships /usr/lib/systemd/system/user-.slice.d/10-defaults.conf with
+    TasksMax=33%, and Debian sets kernel.pid_max = 4194304 in
+    /usr/lib/sysctl.d. That is roughly 1.38 million tasks per user. It is not
+    the limit anyone is hitting.
+
+  * kernel.pid_max
+    Already 4194304 from Debian's own sysctl.d. Raising it again changes
+    nothing.
+
+  * vm.max_map_count
+    Already 1048576 from Debian's own sysctl.d.
+
+  * nofile limits
+    systemd's default soft limit is generous for a desktop session and the
+    hard limit is 1048576. Raising the soft limit globally mostly helps
+    programs that allocate by the limit rather than by need.
+
+  * vm.swappiness
+    A genuine trade-off in both directions, not an improvement. Lowering it
+    keeps idle sessions resident, which helps a returning user - but it also
+    makes the kernel drop page cache instead, and with NFS homes that cache
+    is expensive to refill. Left at the default on purpose; tune it against
+    your own memory pressure, not against advice.
+
+
+Thumbnails on network home directories
+--------------------------------------
+
+Moving the cache off NFS stops tumbler *writing* thumbnails over the network,
+but it still *reads* the files to make them. On a host with many sessions and
+large media in home directories that read load can be worth stopping.
+
+This package does not ship it, because /etc/xdg/tumbler/tumbler.rc is a
+conffile belonging to tumbler-common and a package must not fight another
+package for a file. Apply it locally instead - the key names below are from
+that shipped file:
+
+    # /etc/xdg/tumbler/tumbler.rc
+    [FfmpegThumbnailer]
+    Excludes=/home
+    [GstThumbnailer]
+    Excludes=/home
+    [RawThumbnailer]
+    Excludes=/home
+    [PopplerThumbnailer]
+    MaxFileSize=8388608
+
+"Excludes" takes a ;-separated path list and, per tumbler's own
+documentation, takes precedence over "Locations". The other sections are
+JPEGThumbnailer, PixbufThumbnailer, CoverThumbnailer, FontThumbnailer,
+OdfThumbnailer, EpubThumbnailer and DesktopThumbnailer.
+
+
+Checking that it took effect
+----------------------------
+
+    # in a session, after logging in again:
+    echo "$XDG_CACHE_HOME"            # -> /var/cache/ltsp6-sessions/<uid>
+    xfconf-query -c xfwm4 -p /general/use_compositing   # -> false
+    sysctl fs.inotify.max_user_instances vm.vfs_cache_pressure
+
+The Xsession hook only runs for sessions started after installation. Existing
+sessions keep the old environment until the user logs out and back in.
