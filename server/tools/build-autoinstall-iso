@@ -1,0 +1,141 @@
+#!/bin/sh
+# Build an unattended Debian installer ISO from a plain netinst image plus a
+# preseed file.
+#
+# The lab VMs (the Samba AD DC, the HAProxy load balancers, the LTSP image and
+# application servers) are all installed this way: interactively clicking
+# through debian-installer in a Proxmox console for every rebuild does not
+# scale, and an ISO carrying its own preseed can be attached to a VM and
+# started with no further interaction.
+#
+# Usage: build-autoinstall-iso <netinst.iso> <preseed.cfg> <name> [outdir]
+#
+#   name    becomes the volume id ("debian-auto-<name>") and the output file
+#           name ("<name>-auto.iso").
+#   outdir  defaults to the directory of the source ISO, which on a Proxmox
+#           node is usually /var/lib/vz/template/iso.
+#
+# Needs: xorriso, and read access to the source ISO. Run as root (it loop
+# mounts the source image).
+
+set -e
+
+usage() {
+    echo "Usage: $0 <netinst.iso> <preseed.cfg> <name> [outdir]" >&2
+    exit 2
+}
+
+[ $# -ge 3 ] || usage
+
+SRC_ISO=$1
+PRESEED=$2
+NAME=$3
+OUTDIR=${4:-$(dirname "$SRC_ISO")}
+OUT_ISO="$OUTDIR/$NAME-auto.iso"
+
+[ -f "$SRC_ISO" ] || { echo "no such ISO: $SRC_ISO" >&2; exit 1; }
+[ -f "$PRESEED" ] || { echo "no such preseed: $PRESEED" >&2; exit 1; }
+command -v xorriso >/dev/null || { echo "xorriso is not installed" >&2; exit 1; }
+
+WORK=$(mktemp -d)
+MNT=$(mktemp -d)
+
+cleanup() {
+    umount "$MNT" 2>/dev/null || true
+    rmdir "$MNT" 2>/dev/null || true
+    rm -rf "$WORK"
+}
+trap cleanup EXIT INT TERM
+
+echo "==> unpacking $SRC_ISO"
+mount -o loop,ro "$SRC_ISO" "$MNT"
+# -a keeps the symlinks and permissions debian-installer expects.
+cp -a "$MNT/." "$WORK/"
+umount "$MNT"
+
+# The ISO tree comes off a read-only mount, so nothing in it is writable yet.
+chmod -R u+w "$WORK"
+
+echo "==> installing preseed"
+cp "$PRESEED" "$WORK/preseed.cfg"
+
+# Boot straight into the automated install on both firmware paths. Without
+# this the installer still stops at the boot menu and waits for a keypress,
+# which defeats the whole point.
+#
+# priority=critical suppresses every question the preseed does not answer;
+# auto=true makes d-i fetch preseed answers early enough to also cover the
+# locale/keyboard/network questions that are normally asked before preseeding
+# would otherwise kick in.
+APPEND="auto=true priority=critical preseed/file=/cdrom/preseed.cfg quiet ---"
+
+#
+# Replace isolinux.cfg outright rather than just editing txt.cfg. isolinux.cfg
+# is the entry point and pulls in a stack of menu fragments (menu.cfg, gtk.cfg,
+# adtxt.cfg, the speech-synthesis variants, ...); a "default" set in one of the
+# included files does not reliably win, and an ISO built that way boots
+# whatever the menu's own default is. That is how an unattended install ends up
+# sitting in the accessibility installer at
+#   "No sound card detected ... Press enter to continue anyway."
+# A flat config with no includes, no menu and prompt 0 removes the ambiguity.
+cat > "$WORK/isolinux/isolinux.cfg" <<EOF
+default auto
+prompt 0
+timeout 1
+
+label auto
+  kernel /install.amd/vmlinuz
+  append initrd=/install.amd/initrd.gz $APPEND
+EOF
+
+# txt.cfg is no longer included by anything, but leave it consistent so a
+# human poking at the ISO is not misled.
+cat > "$WORK/isolinux/txt.cfg" <<EOF
+label auto
+  menu label ^Automated install
+  kernel /install.amd/vmlinuz
+  append initrd=/install.amd/initrd.gz $APPEND
+EOF
+
+cat > "$WORK/boot/grub/grub.cfg" <<EOF
+set default=0
+set timeout=1
+
+menuentry "Automated install" {
+    linux   /install.amd/vmlinuz $APPEND
+    initrd  /install.amd/initrd.gz
+}
+EOF
+
+# debian-installer verifies the checksums of everything it reads off the
+# medium, so they have to be regenerated after editing the tree.
+echo "==> refreshing md5sum.txt"
+( cd "$WORK" && find . -type f -not -name md5sum.txt -print0 |
+    xargs -0 md5sum > md5sum.txt )
+
+echo "==> writing $OUT_ISO"
+# The El Torito layout below mirrors what Debian's own netinst image uses, so
+# the result stays bootable under both BIOS (isolinux) and UEFI (efi.img).
+#
+# The isohybrid MBR is lifted out of the source image's first 16 sectors
+# rather than from /usr/lib/ISOLINUX/isohdpfx.bin, so the build does not need
+# syslinux installed on the node doing it.
+xorriso -as mkisofs \
+    -r -J -joliet-long \
+    -V "debian-auto-$NAME" \
+    -o "$OUT_ISO" \
+    -isohybrid-mbr --interval:local_fs:0s-15s:zero_mbrpt,zero_gpt:"$SRC_ISO" \
+    -partition_offset 16 \
+    -partition_cyl_align on \
+    --mbr-force-bootable \
+    -c isolinux/boot.cat \
+    -b isolinux/isolinux.bin \
+    -no-emul-boot -boot-load-size 4 -boot-info-table \
+    -eltorito-alt-boot \
+    -e boot/grub/efi.img \
+    -no-emul-boot \
+    -isohybrid-gpt-basdat \
+    "$WORK"
+
+echo "==> done: $OUT_ISO"
+ls -lh "$OUT_ISO"

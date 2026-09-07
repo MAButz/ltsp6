@@ -1,0 +1,43 @@
+# Keep a desktop session's scratch data off the network home directory, and
+# give this host's own defaults precedence over the packaged ones.
+#
+# Sourced by /etc/X11/Xsession, which runs with "set -e" - so every command
+# here has to be guarded. It is numbered below 55xfce4-session on purpose:
+# startxfce4 keeps a pre-set XDG_CONFIG_DIRS and only appends /etc/xdg to it,
+# so prepending our directory has to happen first.
+
+# ---- 1. XDG_CACHE_HOME on local disk -------------------------------------
+#
+# ~/.cache is the busiest directory a desktop session has: fontconfig caches,
+# icon caches, thumbnails, GTK and browser caches. With home directories on
+# NFS, every one of those becomes network traffic, multiplied by the number of
+# sessions on the host - and none of it is worth preserving between logins.
+#
+# The ownership test is not paranoia: the cache root is world-writable with a
+# sticky bit (like /tmp), so another user could have created the directory for
+# our uid first. "-O" is true only if we own it; if we do not, the session
+# silently keeps the default ~/.cache rather than writing into someone else's
+# directory.
+if [ -d /var/cache/ltsp6-sessions ]; then
+    _ltsp6_cache="/var/cache/ltsp6-sessions/$(id -u)"
+    mkdir -p "$_ltsp6_cache" 2>/dev/null || true
+    if [ -d "$_ltsp6_cache" ] && [ ! -L "$_ltsp6_cache" ] && [ -O "$_ltsp6_cache" ]; then
+        chmod 700 "$_ltsp6_cache" 2>/dev/null || true
+        XDG_CACHE_HOME="$_ltsp6_cache"
+        export XDG_CACHE_HOME
+    fi
+    unset _ltsp6_cache
+fi
+
+# ---- 2. our own xfconf defaults ------------------------------------------
+#
+# Shipping into /etc/xdg directly would collide with conffiles that belong to
+# the Xfce packages. A directory of our own, prepended here, gives the same
+# precedence without touching another package's files.
+if [ -d /etc/xdg/ltsp6 ]; then
+    case ":${XDG_CONFIG_DIRS}:" in
+        *":/etc/xdg/ltsp6:"*) : ;;
+        *) XDG_CONFIG_DIRS="/etc/xdg/ltsp6${XDG_CONFIG_DIRS:+:$XDG_CONFIG_DIRS}"
+           export XDG_CONFIG_DIRS ;;
+    esac
+fi

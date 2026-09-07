@@ -45,7 +45,11 @@ Depends: ${shlibs:Depends},
          ${misc:Depends},
          initramfs-tools,
          udev,
-         nbd-client
+         nbd-client,
+         kbd,
+         pciutils,
+         xinit,
+         x11-xserver-utils
 Description: LTSP6 thin client core scripts and helpers
  Core client-side scripts, udev rules, initramfs-tools hooks and
  helper binaries (getltscfg, getltscfg-cluster, jetpipe, nbd-proxy,

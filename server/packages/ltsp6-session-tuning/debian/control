@@ -1,0 +1,30 @@
+Source: ltsp6-session-tuning
+Section: x11
+Priority: optional
+Maintainer: Marc-André Beckmann-Butz <ma@butz.online>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.6.2
+Homepage: https://github.com/MAButz/ltsp6
+Rules-Requires-Root: no
+
+Package: ltsp6-session-tuning
+Architecture: all
+Depends: ${misc:Depends}, x11-common
+Recommends: xfwm4
+Description: tuning for hosts running many desktop sessions at once
+ Settings for an LTSP application server: a host where a lot of people are
+ logged into graphical sessions simultaneously, over RDP, with their home
+ directories on a file server.
+ .
+ It does three things. It moves each session's cache off the network home
+ directory onto local disk, because ~/.cache is the busiest directory a
+ desktop has and none of it is worth sending over NFS. It turns off window
+ manager compositing by default, which on a session server without a GPU is
+ done by the CPU once per session and buys nothing over a compressed remote
+ desktop stream. And it raises the inotify limits a full Xfce session spends
+ freely, whose exhaustion otherwise shows up as a misleading "too many open
+ files".
+ .
+ The settings are deliberately few. README.Debian lists what was left out
+ after being measured as already correct on Debian 13, so the next person
+ does not spend an afternoon re-adding it.

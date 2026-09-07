@@ -70,6 +70,8 @@ override_dh_auto_install:
 	cp -a client/share/ltsp/. debian/ltsp-client-core/usr/share/ltsp/
 	cp -a client/Debian/share/ltsp/. debian/ltsp-client-core/usr/share/ltsp/
 	install -m0755 client/localapps/iptables.sh debian/ltsp-client-core/usr/share/ltsp/
+	install -m0755 common/ltsp-common-functions \
+		debian/ltsp-client-core/usr/share/ltsp/ltsp-client-common-functions
 	install -d debian/ltsp-client-core/usr/share/initramfs-tools/hooks
 	install -m0755 client/Debian/share/initramfs-tools/hooks/* \
 		debian/ltsp-client-core/usr/share/initramfs-tools/hooks/

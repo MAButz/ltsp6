@@ -14,6 +14,12 @@ if [ -z "${IS_SCREEN}" ]; then
         true
     elif [ -x /usr/sbin/ldm ]; then
         set_lts_var SCREEN_07 ldm
+        # Under systemd, ldm.service runs on tty7 with no other screen
+        # actively switching to it first (unlike the old inittab/sysvinit
+        # multi-getty setup), so waiting for tty7 to become the foreground
+        # console would block forever. Xorg switches to vt7 itself once it
+        # starts (see screen.d/ldm's `vt${TTY}` argument).
+        set_lts_var SCREEN_07_WAIT_FGCONSOLE False
     elif [ -x /usr/bin/X ]; then
         set_lts_var SCREEN_07 xdmcp
     fi

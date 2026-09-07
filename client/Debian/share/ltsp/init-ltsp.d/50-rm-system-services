@@ -3,6 +3,17 @@
 # or RM_THIN_SYSTEM_SERVICES lists in lts.conf.
 # The RM_THIN_SYSTEM_SERVICES list is ignored by fat clients.
 # KEEP_SYSTEM_SERVICES is a space separated whitelist of services.
+#
+# NOTE: systemd-logind used to be on the thin-client removal list, back when
+# Xorg was setuid root and did its own VT switching and input device opening.
+# Modern Xorg (>= 1.19, and certainly Xorg 21 as shipped in Debian 13) asks
+# logind over D-Bus for a session and for the DRM/input file descriptors, and
+# exits immediately if it cannot get them. Deleting the unit file also breaks
+# its dbus-org.freedesktop.login1.service alias, so D-Bus activation fails with
+# "Unit dbus-org.freedesktop.login1.service not found" - the result is Xorg
+# dying and screen_session respawning it several times per second forever
+# (visible as a fast flicker between a black screen and the text console, and
+# no login greeter ever appearing). So logind stays.
 
 allowed_services() {
     local service
@@ -72,7 +83,6 @@ NetworkManager        # Network Manager
 NetworkManager-wait-online        # Network Manager Wait Online
 NetworkManager-script-dispatcher  # Network Manager Script Dispatcher Service
 polkitd               # Authenticate and Authorize Users to Run Privileged Tasks
-systemd-logind        # Login Service
 teamviewerd           # TeamViewer remote control daemon
 ufw                   # Uncomplicated Firewall
 upstart-socket-bridge # Bridge socket events into upstart

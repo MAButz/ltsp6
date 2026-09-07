@@ -273,6 +273,60 @@ the node running lb1 (Stop-VM equivalent to pulling power) and observed:
     corosync.conf.
 
 
+What the lab was actually running - and the gap worth knowing about
+----------------------------------------------------------------------
+
+The configuration deployed on lb1/lb2 in the lab had drifted from the design
+above, and the drift was exactly the part this document argues against:
+
+    backend rdp_lab
+        balance source          <- plain IP-hash, no stick-table
+        server ltsp-app1 ...
+        server ltsp-app2 ...
+
+That is affinity without load balancing. A source hash pins a client to a
+server computed from the current server list; it never looks at how many
+sessions that server is already carrying, and - the reason the section above
+recommends against it - it silently hashes a failed-over client back the
+moment its original server returns, killing a healthy session.
+
+It is also easy to mistake for working. A test run from a single machine sends
+every connection from one source address, so every session lands on the same
+backend and the other one stays at zero. That looks like "sessions arrive
+fine" until you count them per server.
+
+Corrected to the documented design (leastconn + stick-table) and measured
+with six distinct source addresses, each holding a connection at the same
+time:
+
+    six concurrent clients      ltsp-app1: 3     ltsp-app2: 3
+    stick-table contents        .60 .62 .64 -> app1,  .61 .63 .65 -> app2
+    after disconnect/reconnect  every client back on its own server,
+                                totals 3 -> 6, assignments unchanged
+
+So: new sessions go to the less loaded server, existing clients return to
+theirs. Both halves demonstrated, not assumed.
+
+One case this does not cover: several users behind a single address (NAT, or a
+multi-user host). A source-IP table cannot tell them apart, so they all follow
+the first one's assignment. If that situation arises, key the table on the RDP
+cookie the client sends instead - "stick on req.rdp_cookie(mstshash)" with a
+"stick-table type string" - which carries the username and so distinguishes
+users sharing an address. Not used here because each thin client has its own
+address, and the source-IP table needs no protocol inspection delay.
+
+Addresses as deployed in the lab:
+
+    VIP_PROD      172.17.249.222   backend rdp_lab      app1 .31, app2 .32
+    VIP_STAGING   172.17.249.223   backend rdp_staging  app3 .33
+    lb1 172.17.250.51 (MASTER, priority 150)
+    lb2 172.17.250.52 (BACKUP, priority 100)
+
+Both VIPs sit in the same VRRP instance deliberately: the same HAProxy process
+on the same node serves both, so there is nothing to gain from letting them
+land on different nodes, and one instance means one failover to reason about.
+
+
 Deployment checklist
 -------------------------
 

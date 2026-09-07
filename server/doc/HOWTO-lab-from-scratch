@@ -1,0 +1,675 @@
+Building the LTSP6 lab from scratch - a reproducible recipe
+=============================================================
+
+This is the order the lab was actually built in, with the commands that
+worked and the traps that cost time. Follow it top to bottom and you get:
+thin clients that network-boot into a graphical login, authenticate
+against a Samba AD domain, and land in an XFCE session on one of several
+application servers behind a load-balanced, highly available RDP entry
+point - plus a separate staging environment for validating changes
+before they reach everyone.
+
+Read "Traps, and how each one announces itself" at the end before you
+start. Every entry there is something that presented as a different
+problem than it was.
+
+
+What you end up with
+------------------------
+
+    thin client
+        |  PXE: proxy DHCP -> TFTP -> iPXE -> kernel+initrd
+        |  root filesystem over NBD, copied into RAM (toram)
+        v
+    ldm greeter (GTK3)  -- verifies the password with the KDC first
+        |
+        |  RDP to the keepalived VIP
+        v
+    lb1 / lb2 (HAProxy + keepalived, one VIP each for prod and staging)
+        |
+        +--> ltsp-app1 ---+
+        +--> ltsp-app2 ---+--> /home over NFS from home1
+        +--> ltsp-app3 (staging pool only)
+                 |
+                 v
+        addc1 (Samba AD DC): Kerberos, LDAP, DNS
+
+Roles are separated on purpose. ltsp-root builds and serves the client
+image and answers PXE; it runs no user sessions. The application servers
+run sessions and never build or serve images. One application server per
+hypervisor node, so the load balancer has genuinely independent backends.
+
+
+Address plan
+----------------
+
+Everything that another machine names by address is static. This is not
+tidiness: DHCP lease changes broke the corosync quorum and then the
+keepalived pair in this very lab, both times presenting as something
+else entirely.
+
+    172.17.250.10   addc1        Samba AD DC, DNS for the domain
+    172.17.250.20   ltsp-root    image server, NBD, TFTP, proxy DHCP
+    172.17.250.31   ltsp-app1    application server (node 1)
+    172.17.250.32   ltsp-app2    application server (node 2)
+    172.17.250.33   ltsp-app3    application server, staging pool
+    172.17.250.40   home1        file server, /srv/home over NFS
+    172.17.250.51   lb1          HAProxy + keepalived, MASTER
+    172.17.250.52   lb2          HAProxy + keepalived, BACKUP
+    172.17.249.222  VIP_PROD     RDP entry point for everyone
+    172.17.249.223  VIP_STAGING  RDP entry point for the pilot group
+
+    realm LTSPLAB.LOCAL / domain ltsplab.local, gateway 172.17.240.1,
+    /20 network, no IPv6 anywhere internally.
+
+
+Prerequisites
+-----------------
+
+  - Two Proxmox VE nodes (this lab ran them nested inside Hyper-V; a
+    physical pair is easier and skips the checksum-offload trap below).
+  - A Debian netinst ISO on each node, in /var/lib/vz/template/iso.
+  - xorriso on whichever node builds the install media.
+  - The scripts from server/tools in this repository.
+  - Roughly 12 GB of RAM across the two nodes for the full set, and
+    about 8 GB of disk per guest. Watch the node that holds the image
+    server: image builds are what fills it up.
+
+
+Step 1 - Build the auto-install media
+-----------------------------------------
+
+Clicking through debian-installer once per guest does not scale, and
+rebuilding a guest later should not depend on anyone remembering which
+answers they gave. server/tools/build-autoinstall-iso turns a netinst
+image plus a preseed into a medium that installs unattended and powers
+itself off when done.
+
+The preseeds in server/tools/preseed encode the role in their package
+list - that is where role separation actually lives:
+
+    addc1.cfg      samba, krb5, dns
+    ltsp-root.cfg  debootstrap, squashfs-tools, nbd-server, tftpd-hpa,
+                   dnsmasq, ethtool, rsync - and no desktop
+    ltsp-app.cfg   xrdp, xorgxrdp, xfce4, xscreensaver, sssd, adcli,
+                   krb5-user, nfs-common, ethtool - and no build tools
+
+The hostname is per instance. Build one medium per guest, changing only
+that line:
+
+    cd /root
+    for host in addc1 ltsp-root ltsp-app1 ltsp-app2 ltsp-app3; do
+        case $host in
+            addc1)     src=preseed/addc1.cfg ;;
+            ltsp-root) src=preseed/ltsp-root.cfg ;;
+            *)         src=preseed/ltsp-app.cfg ;;
+        esac
+        sed "s|^d-i netcfg/get_hostname string .*|d-i netcfg/get_hostname string $host|" \
+            "$src" > "/root/$host.cfg"
+        ./build-autoinstall-iso \
+            /var/lib/vz/template/iso/debian-13.6.0-amd64-netinst.iso \
+            "/root/$host.cfg" "$host"
+    done
+
+Two things this script had to learn the hard way. It replaces
+isolinux/isolinux.cfg outright rather than adding an include, because a
+"default" inside an included fragment does not win - the first attempt
+booted the speech-synthesis installer instead. And it takes the isohybrid
+MBR from the source ISO, so the result boots on BIOS as well as UEFI.
+
+
+Step 2 - Create the guests
+------------------------------
+
+Nothing surprising here; the point is which guest goes where. Put one
+application server on each node, and lb1 and lb2 on different nodes, so
+neither failover story depends on a single host.
+
+    # node 1
+    qm create 202 --name addc1     --memory 1536 --cores 2 ...
+    qm create 210 --name ltsp-root --memory 2048 --cores 2 ...
+    qm create 211 --name ltsp-app1 --memory 2048 --cores 2 ...
+    qm create 200 --name lb1       --memory 1536 --cores 1 ...
+    # node 2
+    qm create 212 --name ltsp-app2 --memory 2048 --cores 2 ...
+    qm create 213 --name ltsp-app3 --memory 1536 --cores 2 ...
+    qm create 201 --name lb2       --memory 1536 --cores 1 ...
+    pct create 220 --hostname home1 ...
+
+Full form for one of them, for reference:
+
+    qm create 213 --name ltsp-app3 --memory 1536 --cores 2 \
+        --net0 virtio,bridge=vmbr0 --scsihw virtio-scsi-single \
+        --scsi0 local:8,format=qcow2 \
+        --ide2 local:iso/ltsp-app3-auto.iso,media=cdrom \
+        --boot order='ide2;scsi0' --ostype l26
+
+Start it, wait for it to power itself off, then detach the medium and
+boot from disk:
+
+    qm start 213
+    # ... wait until: qm status 213 -> stopped
+    qm set 213 --ide2 none,media=cdrom
+    qm set 213 --boot order='scsi0'
+    qm start 213
+
+Do not over-commit memory. Ten gigabytes of guests on four gigabytes of
+host does not fail loudly; it just swaps until everything is too slow to
+diagnose.
+
+The file server can be an unprivileged container only if you do not need
+the kernel NFS server in it. This lab used a privileged container for
+exactly that reason.
+
+
+Step 3 - The domain controller
+----------------------------------
+
+Everything else authenticates against this, so it comes first.
+
+    provision-samba-ad-dc 172.17.250.10/20 172.17.240.1 \
+        LTSPLAB.LOCAL LTSPLAB '<admin-password>'
+
+The script pins the static address, fixes /etc/hosts, provisions the
+domain with --use-rfc2307, sets a DNS forwarder, points the host at
+itself for resolution and verifies the result.
+
+Two details it exists to get right. It refuses to continue if the host
+holds more than one address, because a DC that answers DNS from an
+address the clients did not ask sees every reply discarded. And it sets
+the DNS forwarder rather than checking whether the line exists - the
+first version checked for the presence of "dns forwarder" and happily
+left it at "none".
+
+Verify before moving on:
+
+    samba-tool domain level show
+    host -t SRV _ldap._tcp.ltsplab.local
+    host -t SRV _kerberos._udp.ltsplab.local
+    kinit administrator && klist
+
+
+Step 4 - The image server
+-----------------------------
+
+    setup-ltsp-root 172.17.250.20 ens18 172.17.240.1 172.17.250.10
+
+This sets up the NBD export, dnsmasq for proxy DHCP plus PXE plus TFTP,
+the checksum-offload workaround, and rewrites nbdroot= in the iPXE
+script to point at this host.
+
+Proxy DHCP matters: the network already has a DHCP server, and running a
+second authoritative one alongside it is how you get two servers
+answering the same request. In proxy mode dnsmasq answers only the PXE
+part and leaves addressing alone. One catch - with "port=0" dnsmasq
+advertises no resolver at all, which stalls the Debian installer at
+"Name server addresses"; hand out option:dns-server explicitly.
+
+The iPXE script that ends up in /srv/tftp:
+
+    #!ipxe
+    kernel /vmlinuz initrd=initrd.img root=/dev/nbd0 \
+        nbdroot=172.17.250.20:10809/ltsp-amd64 ro ip=dhcp \
+        init=/sbin/init-ltsp console=tty0 console=ttyS0,115200n8 \
+        random.trust_cpu=on toram
+    initrd /initrd.img
+    boot || goto failed
+
+"toram" copies the image into tmpfs and disconnects NBD, so a client
+survives losing the image server. Confirm it took effect on a booted
+client: /run/toram/root.img mounted on /run/initramfs/rofs, and
+NBD_DISCONNECT in the log.
+
+And the NBD export:
+
+    [ltsp-amd64]
+        exportname = /srv/ltsp/images/amd64.img
+        readonly = true
+
+
+Step 5 - Build the client image
+-----------------------------------
+
+The image is a plain debootstrap tree, squashed. No LTSP build tooling is
+installed on the server; this keeps the recipe legible and means nothing
+hidden happens between "install a package" and "clients get it".
+
+    B=/srv/ltsp/build/unsq
+    debootstrap --arch=amd64 trixie "$B" http://deb.debian.org/debian
+    mount --bind /dev "$B/dev"; mount -t proc proc "$B/proc"
+    mount -t sysfs sys "$B/sys"
+
+    chroot "$B" apt-get install -y --no-install-recommends \
+        linux-image-amd64 initramfs-tools systemd-sysv \
+        xserver-xorg-core xserver-xorg-video-all xinit x11-xserver-utils \
+        kbd pciutils console-setup keyboard-configuration \
+        freerdp3-x11 nbd-client openssh-client
+    # the ldm packages built from the ldm-mabutz repository
+    chroot "$B" dpkg -i /tmp/ldm_*.deb
+
+Then the two configuration files that decide whether any of this works.
+/etc/lts.conf in the image:
+
+    [default]
+        LTSP_CONFIG=True
+        LDM_DEFAULT_BACKEND="xfreerdp"
+        RDP_SERVER="172.17.249.222"          # VIP_PROD
+        RDP_OPTIONS="/cert:ignore /dynamic-resolution /sound /clipboard"
+        XKBLAYOUT=de
+        CONSOLE_KEYMAP=de
+        RDP_PREAUTH=True
+        RDP_PREAUTH_REALM=LTSPLAB.LOCAL
+
+XKBLAYOUT is not cosmetic. Without it the client runs a US layout while
+the user types on a German keyboard, and any password containing a
+character that moves between the two arrives wrong - "-" typed on QWERTZ
+reaches the server as "/". The domain rejects it as a wrong password with
+no hint that the layout is to blame. This cost an hour.
+
+RDP_PREAUTH exists because xrdp has no server-side NLA. Without it a
+wrong password does not end the connection: xrdp accepts it, opens its
+own login dialog inside the session and waits there, so ldm never
+regains control and cannot say anything. With it, ldm asks the KDC first
+and reports the actual reason in the greeter.
+
+For a VM whose DRM device is not on the PCI bus (Hyper-V is one),
+/etc/X11/xorg.conf.d/10-modesetting.conf in the image:
+
+    Section "ServerFlags"
+        Option "AutoAddGPU" "off"
+    EndSection
+    Section "Device"
+        Identifier "Card0"
+        Driver "modesetting"
+        Option "kmsdev" "/dev/dri/card0"
+    EndSection
+
+Then build and publish:
+
+    chroot "$B" update-initramfs -u -k all
+    cp "$B"/boot/vmlinuz-* /srv/tftp/vmlinuz
+    cp "$B"/boot/initrd.img-* /srv/tftp/initrd.img
+    umount "$B/dev" "$B/proc" "$B/sys"
+    mksquashfs "$B" /srv/ltsp/images/amd64.img -noappend -comp xz
+    systemctl restart nbd-server
+
+Expect roughly 660 MB. Note that the image keeps a root password and can
+keep sshd for diagnostics; both are test scaffolding and must come out
+before a production image.
+
+
+Step 6 - The file server for home directories
+-------------------------------------------------
+
+    setup-home-server ltsplab.local LTSPLAB.LOCAL administrator \
+        '<admin-password>' 172.17.240.0/20
+
+Joins the domain, exports /srv/home over NFS with no_root_squash so
+pam_mkhomedir can create directories, and - the part that matters - uses
+the same ldap_id_mapping = True as the application servers, so every
+host derives the same UID from the AD SID. Without that, a home
+directory served to two servers has two different owners.
+
+
+Step 7 - The application servers
+------------------------------------
+
+Run this on each application server, detached: it changes the address,
+so a session running over the old one will be cut.
+
+    setsid nohup setup-ltsp-app 172.17.250.31/20 ens18 172.17.240.1 \
+        172.17.250.10 LTSPLAB.LOCAL administrator '<admin-password>' \
+        172.17.250.40 > /root/setup.log 2>&1 &
+
+Put the password in a small script file rather than on the command line
+if you care about process listings and shell history.
+
+What it does, and why each piece is there rather than left to defaults:
+
+  static address and immutable resolv.conf
+      Debian 13 ships dhcpcd, started by ifupdown rather than a systemd
+      unit, so "systemctl is-enabled dhcpcd" says not-found while six
+      dhcpcd processes are running. It rebinds a lease next to the static
+      address, and it overwrites /etc/resolv.conf with an empty stub. The
+      symptom is not a DNS error: sssd quietly drops offline, and from
+      then on new domain accounts report "no such user" while already
+      cached ones keep working.
+
+  a [realms] block in krb5.conf
+      default_realm alone leaves kinit reporting "Cannot find KDC for
+      realm", because the shipped krb5.conf only knows the MIT examples.
+
+  chrony against the DC
+      Kerberos rejects tickets more than five minutes out. A member that
+      drifts simply stops being able to log anyone in.
+
+  ethtool, then the offload unit
+      In nested virtualisation, checksum offload corrupts UDP and breaks
+      DHCP. The unit that turns it off was present on both servers for
+      days while ethtool was not installed, so it was enabled, visible
+      and permanently "failed". An enabled unit is not evidence.
+
+  xe on the glamor allow list
+      Only relevant later, and inert today - see the GPU note below.
+
+  xscreensaver instead of light-locker
+      light-locker locks by way of the logind seat, and an xrdp session
+      has no seat of its own. The xfce4 power manager goes too: nothing
+      to manage on a session server, and one polling copy per session
+      adds up on a host carrying many.
+
+  the orphaned-session reaper
+      See the traps section - this one made every login fail invisibly.
+
+  adcli join, not realmd
+      realmd verifies its dependencies through PackageKit, which a
+      minimal Debian host does not have, so it refuses the join with
+      "Necessary packages are not installed" while listing packages that
+      are all installed. adcli creates the machine account and keytab,
+      which is all that is needed.
+
+  sssd with the GPO settings
+      Without ad_gpo_map_remote_interactive = +xrdp-sesman, a correct
+      password still fails with "pam_acct_mgmt failed: Permission
+      denied", because sssd's GPO access control runs enforcing and maps
+      every PAM service it does not recognise to Denied - regardless of
+      what AD actually says.
+
+Verify on each:
+
+    klist -k /etc/krb5.keytab | grep -i "host/$(hostname -s)@"
+    id administrator            # same UID on every host, or /home breaks
+    findmnt -no SOURCE,FSTYPE /home
+    systemctl is-active xrdp xrdp-sesman sssd
+    systemctl is-active ltsp-nic-offload     # must be active, not failed
+
+
+Step 8 - The load balancers
+-------------------------------
+
+Addresses first, because keepalived names its peer by address:
+
+    setup-lb-addressing 172.17.250.51/20 172.17.250.52 ens18 \
+        172.17.240.1 172.17.250.10        # on lb1
+    setup-lb-addressing 172.17.250.52/20 172.17.250.51 ens18 \
+        172.17.240.1 172.17.250.10        # on lb2
+
+Then deploy server/doc/examples/haproxy-rdp.cfg, identical on both, with
+the real addresses filled in. The two things to get right:
+
+    backend rdp_prod
+        balance leastconn
+        stick-table type ip size 200k expire 12h
+        stick on src
+        option tcp-check
+        server ltsp-app1 172.17.250.31:3389 check inter 5s rise 2 fall 3
+        server ltsp-app2 172.17.250.32:3389 check inter 5s rise 2 fall 3
+
+leastconn is the load balancing; the stick-table is the affinity. Do not
+use "balance source" instead: an IP hash never looks at how many sessions
+a server already carries, and because it is recomputed from the current
+server list it pulls a failed-over client back the moment its original
+server returns, tearing down a healthy session. A stick-table entry is
+replaced only when it expires or its server goes away.
+
+If several users can share one source address (NAT, a multi-user host),
+key the table on the RDP cookie instead - "stick on
+req.rdp_cookie(mstshash)" with a string table - which carries the
+username. Not needed when each thin client has its own address, and the
+source-IP form needs no protocol inspection delay.
+
+An admin socket is worth having from the start:
+
+    global
+        stats socket /run/haproxy/admin.sock mode 660 level admin
+        stats timeout 30s
+
+Always validate before reloading. A broad regex over this file cost both
+configs once:
+
+    haproxy -c -f /etc/haproxy/haproxy.cfg && systemctl reload haproxy
+
+keepalived, both VIPs in one instance because the same HAProxy serves
+both:
+
+    vrrp_instance VI_RDP_LB {
+        state MASTER                  # BACKUP on lb2
+        priority 150                  # 100 on lb2
+        interface ens18
+        virtual_router_id 51
+        unicast_src_ip 172.17.250.51  # swap on lb2
+        unicast_peer { 172.17.250.52 }
+        virtual_ipaddress {
+            172.17.249.222/20
+            172.17.249.223/20
+        }
+        track_script { chk_haproxy }
+    }
+
+Unicast, because a virtual switch does not relay VRRP multicast between
+guests. That works - but it names each peer by address, which is exactly
+why step one of this section is static addressing. When those addresses
+went stale, neither node saw the other, both promoted themselves, both
+answered ARP for the VIP, and RDP sessions died five to nine seconds in.
+
+Check that exactly one node holds them:
+
+    ip -4 -o addr show | grep -E '172\.17\.249\.22[23]'
+
+
+Step 9 - Domain users
+-------------------------
+
+    samba-tool user create test1 '<password>'
+
+The default domain policy wants at least seven characters and
+complexity; "test1" as a password is rejected. Either use compliant
+passwords or relax the policy deliberately - do not discover this
+halfway through a login test.
+
+
+Acceptance tests
+--------------------
+
+These are the tests that actually caught something. Run them in this
+order; each one assumes the previous passed.
+
+1. The session survives, repeatedly.
+
+    for target in 172.17.250.31 172.17.250.32 172.17.249.222; do
+      for n in 1 2 3; do
+        s=$(date +%s)
+        timeout 12 xfreerdp3 /v:$target /u:test1 /p:'<pw>' /cert:ignore
+        echo "$target try $n: $(( $(date +%s) - s ))s"
+      done
+    done
+
+   A session that ends after one or two seconds with
+   ERRINFO_LOGOFF_BY_USER is the orphaned-session trap, not a user
+   logging off. Twelve seconds means it held until the test cut it.
+
+2. Distribution - and this is the one that needs care. A test from a
+   single machine sends every connection from one source address, so
+   everything lands on one backend and the other stays at zero. That
+   looks like a passed test. Use several source addresses:
+
+    for ip in 172.17.250.60 172.17.250.61 172.17.250.62 \
+              172.17.250.63 172.17.250.64 172.17.250.65; do
+        ip addr add "$ip/20" dev vmbr0
+        ( nc -s "$ip" -w 60 172.17.249.222 3389 >/dev/null 2>&1 ) &
+    done
+    echo 'show stat'  | socat /run/haproxy/admin.sock stdio   # on the LB
+    echo 'show table rdp_prod' | socat /run/haproxy/admin.sock stdio
+
+   Expect the connections split evenly, and every source address named
+   in the table against a server. Disconnect, reconnect, and check the
+   assignments are unchanged while the totals rise. Count per server -
+   counting successes proves nothing here.
+
+3. Failover.
+
+    systemctl stop xrdp        # on one application server
+    # within ~20s (inter 5s, fall 3) it must read DOWN, the others UP,
+    # and a login through the VIP must still succeed
+    systemctl start xrdp       # back to UP
+
+4. Staging isolation, in both directions.
+
+    # six connections to VIP_PROD: only the production pool's counters move
+    # six connections to VIP_STAGING: only the staging pool's counters move
+    # stop xrdp in the staging pool: production stays UP and reachable
+    # stop xrdp on ALL production backends: staging stays UP and reachable
+
+   Both halves matter. A bad staging rollout must not touch production,
+   and a production outage must not take staging down with it.
+
+5. Shared identity and home directories.
+
+    id test1        # identical UID on every application server
+    touch /home/test1/.probe        # on one server
+    ls /home/test1/.probe           # visible on the others and on home1
+
+6. RAM operation on a booted client.
+
+    findmnt | grep -E 'toram|rofs'
+    dmesg | grep -i nbd_disconnect
+
+
+Traps, and how each one announces itself
+--------------------------------------------
+
+Sorted by how much time each cost, worst first.
+
+  A successful login that ends after two seconds, with no error
+  anywhere. The client is told ERRINFO_LOGOFF_BY_USER - "the user logged
+  off". What actually happened: an xfce4-session from an earlier login
+  is still running and holds the org.xfce.SessionManager name on the
+  user's bus, which lives in /run/user/<uid> and survives between
+  sessions. The new xfce4-session finds the name taken and exits 0; xrdp
+  sees its window manager finish cleanly and ends the session. Every
+  link in that chain behaves correctly, which is why nothing is logged.
+  Look for "exited quickly" in xrdp-sesman.log, and for a stray
+  xfce4-session:
+
+    pgrep -a -u "$(id -u test1)" xfce4-session
+
+  Orphans are created by restarting xrdp-sesman while sessions run.
+  setup-ltsp-app installs a reaper as an ExecStartPre of xrdp-sesman,
+  where the rule is sound: before sesman starts it tracks nothing, so
+  any process still carrying XRDP_SESSION belongs to a lost session. The
+  same rule on a running server would be wrong.
+
+  A guest that looks dead but is only waiting. /home is a hard NFS
+  mount. Lose the address and every login blocks in the kernel waiting
+  for a file server it can no longer route to - sshd included - so the
+  machine answers nothing and the console shows nothing. The previous
+  boot's journal tells the story: the address being withdrawn, then
+  hundreds of "nfs: server not responding". Keep the mount hard anyway;
+  a soft mount turns a server outage into short writes and silently
+  damaged files in people's home directories. What has to change is that
+  no configuration step may remove an address and hope ifupdown restores
+  it.
+
+  A wrong password with no way back. xrdp has no server-side NLA, so it
+  accepts the connection and validates inside the session, in its own
+  dialog. Measured against xrdp 0.10.1, the connection stayed open a
+  full minute after AUTHFAIL. Reading the RDP client's exit status does
+  not help - nothing has failed yet. RDP_PREAUTH asks the KDC before
+  starting the client instead.
+
+  Load balancing that is only affinity. "balance source" distributes by
+  nothing. See step 8, and test 2 for why it is hard to notice.
+
+  Both load balancers holding the same VIP. Stale unicast peer
+  addresses. Sessions die five to nine seconds in, HAProxy logs the
+  abort in the data phase (CD), and the session server shows the session
+  still running happily.
+
+  DHCP that never succeeds, on nested virtualisation. Checksum offload.
+  "ethtool -K <if> tx off rx off", and make it persistent - as a pre-up
+  in /etc/network/interfaces if you want it to cover the very first
+  address, not just later traffic.
+
+  Xorg respawning forever on the thin client. LTSP's
+  50-rm-system-services used to delete systemd-logind from the image.
+  Xorg 21 needs a logind session to get its DRM and input file
+  descriptors. Also check the colour depth: 16bpp is right for old
+  hardware and rejected by modern KMS drivers ("failed to add fb -22"),
+  so it must only be the default when there is no /dev/dri/card0.
+
+  A frozen console that is not frozen. Two identical screenshots of a
+  VM console can be one stale framebuffer. Switch VTs, or ping the
+  client, before concluding anything.
+
+  A machine that "cannot join the realm" while every package is
+  installed. realmd and PackageKit. Use adcli.
+
+  A join that reports success but produced nothing. Do not grep the
+  keytab for the hostname: adcli also writes RestrictedKrbHost entries,
+  so a plain hostname match reports "already joined" for a host that
+  never joined. Match "host/<name>@".
+
+
+Recovery: getting into a guest that has no address
+------------------------------------------------------
+
+This happens, and typing into a VM console is not always an option. Edit
+the disk offline instead:
+
+    qm stop 213
+    modprobe nbd max_part=8
+    qemu-nbd --connect=/dev/nbd0 /var/lib/vz/images/213/vm-213-disk-0.qcow2
+    mount /dev/nbd0p1 /mnt/app3
+    # write /etc/network/interfaces, /etc/resolv.conf, whatever is needed
+    umount /mnt/app3
+    qemu-nbd --disconnect /dev/nbd0
+    qm start 213
+
+Always "sync" before stopping a guest you have just written files to.
+Killing a guest right after writing configuration loses it.
+
+
+A note on GPUs, for later
+-----------------------------
+
+If sessions should use a GPU, two things are in the way and only one is
+solved. xorgxrdp gates glamor behind an allow list of DRM driver names -
+Option "DRMAllowList" in /etc/X11/xrdp/xorg.conf - which Debian ships as
+"i915 radeon". Intel's discrete Arc B-series (Battlemage) is driven only
+by xe, never i915: against Debian 13's kernel 6.12.94, the Battlemage PCI
+ids E20B/E20C/E20D/E202/E212 appear in xe's alias list and in none of
+i915's. setup-ltsp-app adds xe to that list, and upstream's devel branch
+now carries "amdgpu i915 xe msm radeon" as well.
+
+The unsolved part: Debian builds xorgxrdp without glamor at all -
+libxorgxrdp.so contains no glamor, EGL, GBM or DRI3 symbols - so GPU use
+needs a self-built xorgxrdp with --enable-glamor, which upstream still
+calls experimental. That is a decision about carrying your own package
+for every session server.
+
+Keep two things apart while planning: glamor accelerates rendering
+inside the session, while the RDP stream's encoding stays in software
+(rfxcodec/openh264; there is no GPU encoding upstream). And the Arc
+B-series has no SR-IOV, so under Proxmox a card passes through to
+exactly one VM - GPU-accelerated sessions concentrate on whichever
+application server holds it, which is a question for the load balancing
+and not only for the driver.
+
+
+File inventory
+------------------
+
+    server/tools/build-autoinstall-iso   unattended install media
+    server/tools/preseed/addc1.cfg       domain controller
+    server/tools/preseed/ltsp-root.cfg   image server
+    server/tools/preseed/ltsp-app.cfg    application server
+    server/tools/provision-samba-ad-dc   the domain
+    server/tools/setup-ltsp-root         NBD, TFTP, proxy DHCP, PXE
+    server/tools/setup-home-server       NFS home directories
+    server/tools/setup-ltsp-app          session server, domain member
+    server/tools/setup-lb-addressing     static addresses for lb1/lb2
+    server/doc/examples/haproxy-rdp.cfg  HAProxy, prod plus staging
+    server/doc/examples/keepalived-*.conf  VRRP pair
+    server/doc/RDP-loadbalancer-HA       the reasoning behind step 8
+    server/doc/PXE-network-boot-test     the boot chain, measured
+    server/doc/NBD-toram                 RAM operation

@@ -105,6 +105,10 @@ case "$IP" in
     # If the user just specified e.g. ip=dhcp
     off|static|none|rarp|bootp|dhcp|both|all)
         autoconf="$IP"
+        # $ip/$tftp/$router/$subnet/$hostname may already be set to the raw
+        # ip= value (e.g. "dhcp") by initramfs-tools' own cmdline parsing;
+        # clear them so do_dhcp() doesn't pass a bogus "-r dhcp" to udhcpc.
+        unset ip tftp router subnet hostname
         ;;
     *)
         local oldifs="${IFS-not set}"

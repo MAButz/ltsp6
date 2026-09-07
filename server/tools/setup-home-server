@@ -1,0 +1,106 @@
+#!/bin/sh
+# Configure the file server that holds the users' home directories.
+#
+# The LTSP application servers mount /home from here over NFS, so a user gets
+# the same desktop and files whichever server HAProxy sends them to. It joins
+# the AD domain for one reason only: so that the numeric owners of the files
+# on disk match the UIDs the application servers derive for the same users.
+#
+# Run this ON the file server, as root.
+#
+# Usage: setup-home-server <domain> <realm> <adminuser> <adminpass> <export-network>
+# Example:
+#   setup-home-server ltsplab.local LTSPLAB.LOCAL administrator '<admin-password>' 172.17.240.0/20
+
+set -e
+
+[ $# -eq 5 ] || { echo "Usage: $0 <domain> <realm> <adminuser> <adminpass> <export-net>" >&2; exit 2; }
+
+DOMAIN=$1
+REALM=$2
+ADMINUSER=$3
+ADMINPASS=$4
+EXPORT_NET=$5
+
+[ "$(id -u)" = 0 ] || { echo "must run as root" >&2; exit 1; }
+
+export DEBIAN_FRONTEND=noninteractive
+
+echo "==> packages"
+apt-get update >/dev/null
+apt-get install -y --no-install-recommends \
+    nfs-kernel-server sssd sssd-tools libnss-sss libpam-sss adcli \
+    krb5-user chrony >/dev/null
+dpkg-query -W -f='${Package} ${Status}\n' nfs-kernel-server sssd adcli
+
+echo "==> time sync against the domain controller"
+# Kerberos will not issue tickets across more than a few minutes of clock
+# skew, so a domain member with a drifting clock stops authenticating.
+DCIP=$(getent hosts "$DOMAIN" | awk '{print $1; exit}')
+[ -n "$DCIP" ] || DCIP=$(awk '/^nameserver/{print $2; exit}' /etc/resolv.conf)
+mkdir -p /etc/chrony/conf.d
+echo "server $DCIP iburst prefer" > /etc/chrony/conf.d/ad-dc.conf
+systemctl restart chrony 2>/dev/null || true
+
+echo "==> joining $REALM"
+# adcli rather than realmd: realmd checks its dependencies through PackageKit,
+# which is absent on a minimal install, and then refuses the join claiming the
+# (installed) sssd packages are missing.
+if klist -k /etc/krb5.keytab 2>/dev/null | grep -qi "$(hostname -s)\\\$@"; then
+    echo "    already joined"
+else
+    i=0
+    while [ $i -lt 24 ]; do
+        host -W 3 -t SRV "_ldap._tcp.$DOMAIN" >/dev/null 2>&1 && break
+        i=$((i + 1))
+        sleep 5
+    done
+    printf '%s' "$ADMINPASS" | adcli join --domain="$DOMAIN" \
+        --login-user="$ADMINUSER" --stdin-password
+fi
+
+echo "==> sssd"
+cat > /etc/sssd/sssd.conf <<EOF
+[sssd]
+domains = $DOMAIN
+config_file_version = 2
+services = nss, pam
+
+[domain/$DOMAIN]
+id_provider = ad
+access_provider = ad
+ad_domain = $DOMAIN
+krb5_realm = $REALM
+cache_credentials = True
+default_shell = /bin/bash
+
+# Must match the application servers exactly: they derive UIDs from the AD SID
+# the same way, and that is what makes the ownership of the exported home
+# directories line up on both sides.
+ldap_id_mapping = True
+use_fully_qualified_names = False
+fallback_homedir = /home/%u
+EOF
+chmod 600 /etc/sssd/sssd.conf
+systemctl enable sssd >/dev/null 2>&1
+systemctl restart sssd
+sleep 4
+id "$ADMINUSER" 2>&1 | head -1
+
+echo "==> NFS export"
+mkdir -p /srv/home
+chmod 0755 /srv/home
+# no_root_squash is needed because the application servers create each user's
+# home directory on first login (pam_mkhomedir runs as root); without it that
+# mkdir is denied and the session starts without a home.
+cat > /etc/exports <<EOF
+/srv/home	$EXPORT_NET(rw,sync,no_subtree_check,no_root_squash)
+EOF
+exportfs -ra
+systemctl enable --now nfs-kernel-server >/dev/null 2>&1
+systemctl restart nfs-kernel-server
+
+echo "==> verification"
+exportfs -v
+systemctl is-active nfs-kernel-server sssd
+echo "==> done"
