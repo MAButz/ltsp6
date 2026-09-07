@@ -6,8 +6,8 @@ Maintainer: Debian LTSP Maintainers <team+ltsp@tracker.debian.org>
 Installed-Size: 69
 Depends: cryptsetup, alsa-utils, cron, cups-bsd, freerdp2-x11 | freerdp-x11 | rdesktop, inputattach | joystick (<< 20051019-6), ldm, libasound2-plugins, ltsp-client-core (>= 5.18.12-3), ltspfsd (>= 1.1), netcat-traditional | netcat, systemd (>= 219-1) | ntpdate, numlockx, pulseaudio, python3-serial, rsyslog | system-log-daemon, sane-utils, sshfs, x11-xserver-utils, xorg
 Homepage: http://ltsp.org
-Priority: 0
-Section: utils
+Priority: optional
+Section: misc
 Filename: pool/main/l/ltsp/ltsp-client_5.18.12-3_amd64.deb
 Size: 65356
 SHA256: c5092a6f7fecea2c9139ac9279f682f6898564c22324d52be8db54c77dd12c2d
@@ -36,8 +36,8 @@ Suggests: alsa-utils, cron, cryptsetup, cups-bsd, freerdp2-x11 | freerdp-x11 | r
 Breaks: ltsp-server (<< 5.3.7)
 Replaces: ltsp-server (<< 5.3.7)
 Homepage: http://ltsp.org
-Priority: 0
-Section: utils
+Priority: optional
+Section: misc
 Filename: pool/main/l/ltsp/ltsp-client-core_5.18.12-3_amd64.deb
 Size: 148672
 SHA256: 06f8f316dda9aa7d271db530fcf23d777597b01158fb7dbc0380646b4d34c533

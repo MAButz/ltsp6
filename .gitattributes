@@ -1,0 +1,9 @@
+# An apt archive is verified byte for byte: Release lists the checksums of
+# Packages, and InRelease carries a signature over exactly those bytes. A
+# line-ending conversion anywhere in the chain - on checkout, on a colleague's
+# machine with core.autocrlf=true, in CI on Windows - turns a valid archive
+# into one that apt reports as corrupt, with a hash mismatch that looks like a
+# mirror problem rather than a git setting.
+#
+# So: git treats nothing here as text.
+* -text

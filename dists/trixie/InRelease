@@ -1,0 +1,39 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+Origin: ltsp6
+Label: ltsp6 Github
+Suite: stable
+Codename: trixie
+Date: Mon, 07 Sep 2026 18:40:10 UTC
+Architectures: amd64
+Components: main
+Description: Debian 13 (trixie) ltsp6 repository
+MD5Sum:
+ 9f81cfd6252b7500327eeab43892f318 1480 main/binary-amd64/Packages
+ 6098b8e34a7b9f12ccd41278346a987a 911 main/binary-amd64/Packages.gz
+ 400a893451d681e4ca2b02c65163487b 135 main/binary-amd64/Release
+SHA1:
+ 0790d2d7469baf0ad2cc20de6e638815352c538d 1480 main/binary-amd64/Packages
+ da6d0d08df010e885b3415e8a46be9a02cdbbb6e 911 main/binary-amd64/Packages.gz
+ b20840de0f3e68ef35d996380b80f40d9958fefc 135 main/binary-amd64/Release
+SHA256:
+ c029d9e07f052221bed3342bbe473201d602156eb74de000c62f9ef484a8dc65 1480 main/binary-amd64/Packages
+ 0b8ce4dac59e0c0b20fa01dc08d8c2fd639e4741246fb41e059d3e9068082fec 911 main/binary-amd64/Packages.gz
+ 43d63f08e8ad502997a7ee8f683fd1926f6f872093538ee93a96c4c00ca5684e 135 main/binary-amd64/Release
+-----BEGIN PGP SIGNATURE-----
+
+iQIzBAEBCgAdFiEET/G5DE/MBWAVAAUTB2byPyDuP8QFAmqfBQoACgkQB2byPyDu
+P8Qv8BAAqfyCkP7j4Mgk+FSR3We6fDuJxLAW9fBXc0QEUZgoEic4S17SiIye5Hn6
+lDke0v7Vc43I/DfVg2y0f9R9tCLzue2alzGN8035iIGOwTErdPMUJ3uw1/0N6d32
+0o3aTYOaG8YkBhoAF/NYyW6ur9HLbuOLtoPZKc/ERt2mpbAEoUP6lEZ4NlF0UqOX
+RNEdosHGGBUtHwfT2/TMtnmggp69fhpQBamJuMbiEPF0slaPtUg1/oZOpbqe3asO
+yxSjw9j6DhCdHNBLH+FpfF1SCgoXZBaT8Z31PcYIBxw3luf7E6KIfpKL3Tm/QOuA
+95X2w3A6G43MdFZ92ESfgy53agUwuayFLkBwlaUW5lwg9VMCk/VcWdUhKkPNFSIL
+2uiClyNXxY56e8oh2mbvo8uvU4CqMQM1zxbfkL03RLA1bRQ0FUa9bgjLJ5MBTmhX
+l8ckqwr9zsh3SvusQ4OpwutNnW7N0MPbg/fzzI22541mqoeRITkv6zcNKNEmkvPM
+r4DzbwE2G3v/LZRLtXnA0Ce8YdjSZ7hKT6s+bD8oin9M3uOweOQlBAj6bIY+p4KW
+c31EQGIRuCLL1ZX84TNP3SXQyqJsPQC28Mc7vhfSvLzmNzJdkp7mY8wBSuHGBKij
+Xp4sfIfYKi5HWsbtmHh3vdq+B2cgczzGdmmhVcqzeQcGtPgc0KM=
+=CuC6
+-----END PGP SIGNATURE-----

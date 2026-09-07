@@ -1,3 +1,6 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
 Origin: ltsp6
 Label: ltsp6 Github
 Suite: stable
@@ -18,3 +21,19 @@ SHA256:
  d9cab57ee156206142ffacd7e4ad848bb3ff1c1e41fb2fbacc72f2a136ebf48a 2804 main/binary-amd64/Packages
  a74159fbafdf98ff317a50c4b6a60fe65631dd83dc63de68f11fc19f860368fe 1221 main/binary-amd64/Packages.gz
  393936667a61a6c4f5eae438f69f247ab96340de1568de836ff9c43652ab3646 134 main/binary-amd64/Release
+-----BEGIN PGP SIGNATURE-----
+
+iQIzBAEBCgAdFiEET/G5DE/MBWAVAAUTB2byPyDuP8QFAmqfBQoACgkQB2byPyDu
+P8R5pQ/+PPkjJsDKJANibIeOQu8paJydd1TnrEUIbUxnzkzQXrtOtpnF7c2yyGIy
+L12+K+UoxiIB9vrenmjJUHykk4jogFBlZkTIH0KtVZpMemBjjVLnnoqi+x0fg1yT
+IRBbAPOBljli9VydW+GglryN67GApSZau+XadNw4DqVYslJXq+IGxxWuYz2TLcVj
+ismpH95xZVfKQ5WiSb78p5cwnXl4P67O/Vh3uCXnvJoix+w0XJGHCcXozYldpfWo
+aBTubyQYWtD1GiCGtWRoJ4dHxR50bcyHkoImW7zqgGqjd82Lh5On1xV6VH4fcoUa
+JNrLAVLRflPGv+QDt0awaM6aW6bO4+SaiAGIGqjc+wOTYFsGYSpR7bvql59O2XaV
+efJRpkjaNUG3zh+iCQbbSs0lsMmaa9B32uLxU6V7PGZQ0uXrFAkddwpxO7+C6/iq
+1c98kiyHIt0zrikyMz2sx3f3eZwJ48722Uh6CL0sdamIo74ynfR3eU7mv98zTKMf
+5DKfzb4zZ3fkHa+usfVU9KV0/SWin8C7lQaQZ2FwhVpQqEUVWeN4/K+6lrjCA3DT
+mVUgT5FGCxpSOsxziF+pehdOO1McPuaLZF8auyQHDM64uPZZeVmi0emKjiTKiS9c
+eJeo6Ni8dtnjSmbVZiXw1nNK6MO34UhJrmNjkKc/4DGLHTdXEZE=
+=fIKx
+-----END PGP SIGNATURE-----
