@@ -67,15 +67,22 @@ keyring file is missing. Do not answer that with `trusted=yes`.
 
 | Suite | Package | Version |
 |---|---|---|
+| `trixie` | `ltsp-client-core`, `ltsp-server` | 6.0.0-3 |
+| `trixie` | `ldm`, `ldm-server` | 3.0.1-2 |
 | `trixie` | `ltsp6-session-tuning` | 1.0.0 |
 | `bookworm` | `ltsp-client`, `ltsp-client-core` | 5.18.12-3 |
+
+The `trixie` packages here are newer than the assets on the older GitHub
+releases, and the difference is not cosmetic: `ltsp-client-core_6.0.0-1`
+shipped without `ltsp-client-common-functions` and `ldm` before 3.0.1-2 had
+a `ldm.service` that could not start an X server. Prefer this archive.
 
 ## The signing key
 
 ```
-rsa4096  4FF1B90C 4FCC0560 15000513 0766F23F 20EE3FC4
+rsa4096  D11AA4D1 93392D7D 61560F54 CC5BC11C 9C111F44
 LTSP6 Repository Signing Key (apt archive on GitHub Pages) <ma@butz.online>
-expires 2029-09-06
+expires 2029-09-09
 ```
 
 Published here as `ltsp6-archive-keyring.asc` (armoured) and

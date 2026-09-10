@@ -1,3 +1,102 @@
+Package: ldm
+Version: 3.0.1-2
+Architecture: amd64
+Maintainer: Marc-André Beckmann-Butz <ma@butz.online>
+Installed-Size: 439
+Depends: libc6 (>= 2.38), libcairo2 (>= 1.2.4), libcrypt1 (>= 1:4.1.0), libgdk-pixbuf-2.0-0 (>= 2.22.0), libglib2.0-0t64 (>= 2.22.0), libgtk-3-0t64 (>= 3.16.2), libx11-6, libxext6, openssh-client, xserver-xorg | xserver, gettext-base, procps, xinit
+Recommends: freerdp3-x11 | freerdp2-x11, netcat-traditional | netcat, xauth
+Homepage: https://github.com/MAButz/ldm
+Priority: optional
+Section: misc
+Filename: pool/main/l/ldm/ldm_3.0.1-2_amd64.deb
+Size: 109324
+SHA256: 7e314b03f6209a818c65c08011a96682db89f8035cd2687b54d1447d22431312
+SHA1: 3fc4ff9dd43af32abc584ce80ff764869e55d1be
+MD5sum: d4b58d1cfb7a80474f9d439c2e82082e
+Description: LTSP display manager (GTK3 / xfreerdp fork)
+ ldm is an X11 display manager similar to xdm, gdm and kdm, used by LTSP
+ (Linux Terminal Server Project) thin clients. This fork replaces the
+ GTK2 greeter with a GTK3 one (required to build at all on current
+ Debian releases, which no longer ship GTK2), adds an xfreerdp backend
+ plugin (auto-detecting xfreerdp3/xfreerdp2, credentials passed via
+ stdin instead of argv, optional default RDP domain) alongside the
+ original ssh backend, and carries a number of security and
+ correctness fixes found during an internal audit (argv-based process
+ spawning instead of shell word-splitting, a heap buffer overflow fix
+ in the LTSP-Cluster load-balancer client, path-traversal and
+ NULL-pointer-dereference fixes, and standard hardening compiler
+ flags).
+
+Package: ldm-server
+Source: ldm
+Version: 3.0.1-2
+Architecture: all
+Maintainer: Marc-André Beckmann-Butz <ma@butz.online>
+Installed-Size: 30
+Depends: python3, x11-common, openssh-server, update-inetd, openbsd-inetd | inet-superserver
+Recommends: xauth
+Homepage: https://github.com/MAButz/ldm
+Priority: optional
+Section: misc
+Filename: pool/main/l/ldm/ldm-server_3.0.1-2_all.deb
+Size: 8944
+SHA256: 7d649d64e335f8bb55919f67f18c8ff2080bd7a095bb4921568822d5ebf5c64f
+SHA1: 2963c21a4199fb01e27fed06c934f8343aa3c8fb
+MD5sum: b768873df3101c053a70dfb7a6d3065e
+Description: server components for LTSP display manager
+ This package includes the server-side components used by ldm to
+ discover available sessions and locales on the server (ldminfod).
+
+Package: ltsp-client-core
+Source: ltsp
+Version: 6.0.0-3
+Architecture: amd64
+Maintainer: Marc-André Beckmann-Butz <ma@butz.online>
+Installed-Size: 385
+Depends: libc6 (>= 2.38), libfl2 (>= 2.5.33), libpopt0 (>= 1.14), initramfs-tools, udev, nbd-client, kbd, pciutils, xinit, x11-xserver-utils
+Homepage: https://github.com/MAButz/ltsp6
+Priority: optional
+Section: admin
+Filename: pool/main/l/ltsp/ltsp-client-core_6.0.0-3_amd64.deb
+Size: 88060
+SHA256: bd31a5743a049ac71153b75c2f4f1a3a2e901df89de768a2a94e039553aed634
+SHA1: 094512638ac382eb9aa03c40db700017e3be97d9
+MD5sum: 44470db391ba60b576be8da52faa3f58
+Description: LTSP6 thin client core scripts and helpers
+ Core client-side scripts, udev rules, initramfs-tools hooks and
+ helper binaries (getltscfg, getltscfg-cluster, jetpipe, nbd-proxy,
+ the localapps/remoteapps helpers) that make up the LTSP thin-client
+ runtime environment. Intended to be installed inside an LTSP client
+ chroot image built by ltsp-build-client, not on a regular desktop or
+ server system.
+
+Package: ltsp-server
+Source: ltsp
+Version: 6.0.0-3
+Architecture: all
+Maintainer: Marc-André Beckmann-Butz <ma@butz.online>
+Installed-Size: 406
+Depends: debootstrap, squashfs-tools, gettext-base, lsb-release, debconf-utils, openssh-client
+Recommends: nbd-server, tftpd-hpa, dnsmasq | isc-dhcp-server, nfs-kernel-server, xinetd
+Homepage: https://github.com/MAButz/ltsp6
+Priority: optional
+Section: admin
+Filename: pool/main/l/ltsp/ltsp-server_6.0.0-3_all.deb
+Size: 76200
+SHA256: ff728526569525214589f847b4a2ef373fa6c97dbaa94a88c3c61f6dc09caef1
+SHA1: edd6857564e4de83ab755562e49c9319d9073c18
+MD5sum: 61acc11f916444df9a0814a374f21976
+Description: LTSP6 thin client server tools
+ ltsp-build-client, ltsp-config, ltsp-chroot, ltsp-info and related
+ server-side tools for building and managing LTSP (Linux Terminal
+ Server Project) thin-client chroot images, plus the NBD root/swap
+ servers used to serve them over the network.
+ .
+ This package also ships example configs and documentation for
+ running an HAProxy + keepalived high-availability RDP load balancer
+ in front of a pool of xrdp servers (see
+ /usr/share/doc/ltsp-server/examples/).
+
 Package: ltsp6-session-tuning
 Version: 1.0.0
 Architecture: all
