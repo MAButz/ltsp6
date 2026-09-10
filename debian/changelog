@@ -1,4 +1,22 @@
-ltsp (6.0.0-1) trixie; urgency=medium
+ltsp (6.0.0-3) trixie; urgency=medium
+
+  * Added ltsp-screen@.service, enabled on tty1. LTSP5 shipped this
+    integration in the ltsp-client package, which ltsp6 does not build:
+    nothing read SCREEN_nn from lts.conf and nothing launched the matching
+    screen.d script, so a client booted correctly all the way to a text
+    login with no error anywhere. Two details in the unit are load-bearing
+    and each fails differently - the instance is the tty number while
+    screen_session is handed it as 0%i (it accepts only [0-1][0-9], and
+    /dev/tty01 does not exist, which systemd reports as 208/STDIN), and
+    StandardInput=tty is required because screen-x-common derives DISPLAY
+    and the vt number from $(tty).
+  * ConditionPathExists=/etc/lts.conf keeps the unit inert on a host that
+    has the package but no LTSP configuration, rather than respawning
+    screen_session against an unset SCREEN_01.
+
+ -- Marc-Andre Beckmann-Butz <ma@butz.online>  Thu, 10 Sep 2026 17:20:00 +0200
+
+ltsp (6.0.0-2) trixie; urgency=medium
 
   * Initial Debian packaging, split into two binary packages:
     - ltsp-server: ltsp-build-client, ltsp-config, ltsp-chroot,

@@ -1,0 +1,36 @@
+[Unit]
+# What LTSP5 shipped in the ltsp-client package and ltsp6 lost: the thing
+# that turns SCREEN_nn in lts.conf into a running screen.d script. Without
+# it a client boots correctly all the way to a text login and nothing says
+# why - graphical.target has nothing to launch.
+#
+# The instance is the tty number (1 -> tty1). screen_session is handed it
+# two digits as 0%i because it accepts only [0-1][0-9], while TTYPath needs
+# /dev/tty1 - instantiating on "01" asks for /dev/tty01, which does not
+# exist, and systemd reports 208/STDIN.
+Description=LTSP screen on tty%i
+After=systemd-user-sessions.service
+Conflicts=getty@tty%i.service
+ConditionPathExists=/etc/lts.conf
+
+[Service]
+Type=simple
+# StandardInput=tty is required, not cosmetic: screen-x-common derives both
+# DISPLAY and the vt number from $(tty). With no controlling terminal that
+# returns "not a tty" and xinit is called as ":not a tty vtnot a tty", which
+# exits at once - screen_session then respawns it forever, which presents as
+# a text console and a service that is "active" with NRestarts=0 while
+# burning a full core.
+ExecStart=/usr/share/ltsp/screen_session 0%i
+Restart=always
+RestartSec=3
+TTYPath=/dev/tty%i
+TTYReset=yes
+TTYVHangup=yes
+StandardInput=tty
+StandardOutput=journal
+StandardError=journal
+UtmpIdentifier=tty%i
+
+[Install]
+WantedBy=graphical.target
