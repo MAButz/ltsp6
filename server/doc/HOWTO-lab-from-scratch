@@ -71,10 +71,41 @@ Prerequisites
   - A Debian netinst ISO on each node, in /var/lib/vz/template/iso.
   - xorriso on whichever node builds the install media.
   - The scripts from server/tools in this repository.
+  - Packages built from the current tree, not the published release
+    assets. See "The packaged release lags the tree" below - a client
+    built from the published ltsp-client-core boots to a text login and
+    nothing says why.
   - Roughly 12 GB of RAM across the two nodes for the full set, and
     about 8 GB of disk per guest. Watch the node that holds the image
     server: image builds are what fills it up.
 
+
+The packaged release lags the tree
+--------------------------------------
+
+Check this before anything else. Both published .deb assets were built
+from an older tree than master, and the difference is not cosmetic:
+
+    ltsp-client-core 6.0.0-1   missing /usr/share/ltsp/ltsp-client-common-functions
+    ldm              3.0.0-1   missing /usr/lib/systemd/system/ldm.service
+
+debian/rules installs the first one correctly (it is the only file that
+differs from a fresh build), so this is a stale artefact, not a
+packaging bug. The file defines run_parts_list and boolean_is_true. With
+it absent, ltsp-client-functions sources a file that is not there, both
+functions are undefined, and init-ltsp and screen_session fail silently
+one line at a time - no error, no service in a failed state, just a
+client that boots to a text login. Nothing in the logs names the cause.
+
+So build from the tree:
+
+    apt-get install -y build-essential debhelper flex bison libpopt-dev \
+        autoconf automake libtool dpkg-dev gettext
+    dpkg-buildpackage -b -us -uc
+
+Bump debian/changelog first. Both releases carry the same version as the
+stale asset, so a rebuild is indistinguishable from what is already
+published and apt sees no upgrade.
 
 Step 1 - Build the auto-install media
 -----------------------------------------
@@ -167,6 +198,20 @@ Step 3 - The domain controller
 
 Everything else authenticates against this, so it comes first.
 
+Debian 13 split the domain controller out of the samba package, and
+preseed/addc1.cfg predates that. Install these first or the script stops
+halfway:
+
+    apt-get install -y samba-ad-provision samba-ad-dc
+
+Without samba-ad-provision, "samba-tool domain provision" aborts with
+"File [AD_DS_Attributes_Windows_Server_v1903.ldf] not found" after it
+has already pinned the address. Without samba-ad-dc there is no service
+unit, and the script's last step fails with "Unit samba-ad-dc.service
+does not exist" - with the domain provisioned but nothing serving it.
+In the same move, disable smbd, nmbd and winbind: in AD DC mode the
+samba-ad-dc unit runs all three itself.
+
     provision-samba-ad-dc 172.17.250.10/20 172.17.240.1 \
         LTSPLAB.LOCAL LTSPLAB '<admin-password>'
 
@@ -181,6 +226,26 @@ the DNS forwarder rather than checking whether the line exists - the
 first version checked for the presence of "dns forwarder" and happily
 left it at "none".
 
+Two things the script gets wrong on a systemd-networkd host, which is
+what you get from a Debian cloud image rather than the installer:
+
+  /etc/resolv.conf is a symlink into /run. The script writes the file
+  directly, so "resolving through ourselves" lands in
+  /run/systemd/resolve/stub-resolv.conf, is gone after a reboot, and
+  systemd-resolved keeps ownership meanwhile. The symptom is not a
+  missing file: Samba's internal DNS binds [::]:53 only, queries to
+  127.0.0.1:53 are refused, and samba_dnsupdate fails with "Timeout
+  while waiting to contact a working DNS server". Disable
+  systemd-resolved, replace the symlink with a real file, and chattr +i
+  it. Only then does the DNS server bind 0.0.0.0:53 as well.
+
+  The DNS forwarder is taken from the gateway argument. That holds only
+  when the gateway is a router that also answers DNS. It is wrong the
+  moment the gateway is ltsp-root, whose dnsmasq runs with port=0 and
+  deliberately serves no DNS at all - the forwarder then points at
+  nothing and every external name fails to resolve. The forwarder
+  belongs in its own parameter; until it is one, fix smb.conf by hand.
+
 Verify before moving on:
 
     samba-tool domain level show
@@ -192,18 +257,34 @@ Verify before moving on:
 Step 4 - The image server
 -----------------------------
 
+    apt-get install -y ipxe        # not in preseed/ltsp-root.cfg
+    cp /usr/lib/ipxe/undionly.kpxe /usr/lib/ipxe/ipxe.efi /srv/tftp/
+
     setup-ltsp-root 172.17.250.20 ens18 172.17.240.1 172.17.250.10
 
-This sets up the NBD export, dnsmasq for proxy DHCP plus PXE plus TFTP,
+The ipxe package is missing from the preseed even though the dnsmasq
+configuration this script writes names undionly.kpxe and ipxe.efi.
+Without them the client gets an address and then stops - dnsmasq logs
+the DHCP exchange and no TFTP transfer follows.
+
+This sets up the NBD export, dnsmasq for DHCP plus PXE plus TFTP,
 the checksum-offload workaround, and rewrites nbdroot= in the iPXE
 script to point at this host.
 
-Proxy DHCP matters: the network already has a DHCP server, and running a
-second authoritative one alongside it is how you get two servers
-answering the same request. In proxy mode dnsmasq answers only the PXE
-part and leaves addressing alone. One catch - with "port=0" dnsmasq
-advertises no resolver at all, which stalls the Debian installer at
-"Name server addresses"; hand out option:dns-server explicitly.
+A note on DHCP mode, because this text and the script disagree. The
+script writes a real "dhcp-range=172.17.249.100,172.17.249.200,..." -
+dnsmasq is authoritative here, not a proxy. That is right on an isolated
+segment, where no other DHCP server exists and a proxy would have
+nothing to attach itself to. It is wrong on a network that already has
+one, where two authoritative servers answer the same request. Decide
+which of the two you are on before running this, and note that
+"bind-interfaces" plus "interface=$IFACE" is what keeps the server off
+every other network the host is attached to - worth confirming with
+"ss -ulnp | grep :67" that it listens on that interface alone.
+
+Either way, with "port=0" dnsmasq advertises no resolver at all, which
+stalls the Debian installer at "Name server addresses"; hand out
+option:dns-server explicitly.
 
 The iPXE script that ends up in /srv/tftp:
 
@@ -244,14 +325,26 @@ hidden happens between "install a package" and "clients get it".
         xserver-xorg-core xserver-xorg-video-all xinit x11-xserver-utils \
         kbd pciutils console-setup keyboard-configuration \
         freerdp3-x11 nbd-client openssh-client
-    # the ldm packages built from the ldm-mabutz repository
-    chroot "$B" dpkg -i /tmp/ldm_*.deb
+    # ldm and ltsp-client-core, built from the tree - see "The packaged
+    # release lags the tree". ltsp-client-core is not optional: it owns
+    # init-ltsp, screen_session, the screen.d scripts and the initramfs
+    # hooks that make nbdroot= and toram work.
+    chroot "$B" sh -c 'dpkg -i /tmp/debs/*.deb || apt-get -y -f install'
+
+The dpkg -i is expected to fail and the apt-get -f install after it is
+what completes the job. ldm depends on libgtk-3-0t64, gettext-base and
+"xserver-xorg | xserver", and the package list above installs
+xserver-xorg-core, which satisfies none of them. Check that ldm ended up
+configured rather than half-unpacked - "Setting up ldm" has to appear in
+the output, and dpkg -l must show ii, not iU.
 
 Then the two configuration files that decide whether any of this works.
 /etc/lts.conf in the image:
 
     [default]
         LTSP_CONFIG=True
+        SCREEN_01=ldm
+        X_COLOR_DEPTH=24
         LDM_DEFAULT_BACKEND="xfreerdp"
         RDP_SERVER="172.17.249.222"          # VIP_PROD
         RDP_OPTIONS="/cert:ignore /dynamic-resolution /sound /clipboard"
@@ -259,6 +352,17 @@ Then the two configuration files that decide whether any of this works.
         CONSOLE_KEYMAP=de
         RDP_PREAUTH=True
         RDP_PREAUTH_REALM=LTSPLAB.LOCAL
+
+SCREEN_01 is what selects the greeter, and on its own it still does
+nothing - see "Nothing starts the greeter" below.
+
+X_COLOR_DEPTH is 24, and the default is already 24, so the line exists
+to stop anyone raising it. The modesetting driver rejects 32 outright:
+"(EE) modeset(0): Given depth (32) is not supported by the driver",
+followed by "no screens found", and X never starts. 24-bit depth in a
+32-bit framebuffer is what "32-bit colour" usually means and is what you
+already get; if a specific card needs the deeper framebuffer spelled
+out, that is DefaultFbBpp in xorg.conf, not this.
 
 XKBLAYOUT is not cosmetic. Without it the client runs a US layout while
 the user types on a German keyboard, and any password containing a
@@ -283,6 +387,58 @@ For a VM whose DRM device is not on the PCI bus (Hyper-V is one),
         Driver "modesetting"
         Option "kmsdev" "/dev/dri/card0"
     EndSection
+
+Nothing starts the greeter yet. LTSP5 shipped that integration in the
+ltsp-client package; ltsp6's debian/control defines only ltsp-server and
+ltsp-client-core, so no getty replacement reads SCREEN_nn and nothing
+launches screen.d/ldm. The client boots cleanly all the way to a text
+login instead.
+
+ldm 3.0.1-1 adds an ldm.service for this, and it does not work on its
+own: it runs /usr/sbin/ldm directly, but src/ldm.c reads DISPLAY from
+the environment and never starts an X server, so the greeter dies with
+"cannot open display" and ldm segfaults in a restart loop. Until that
+unit wraps xinit, drive LTSP's own path instead:
+
+    cat > "$B/etc/systemd/system/ltsp-screen@.service" <<'EOF'
+    [Unit]
+    Description=LTSP screen on tty%i
+    After=systemd-user-sessions.service
+    Conflicts=getty@tty%i.service
+
+    [Service]
+    Type=simple
+    ExecStart=/usr/share/ltsp/screen_session 0%i
+    Restart=always
+    RestartSec=3
+    TTYPath=/dev/tty%i
+    TTYReset=yes
+    TTYVHangup=yes
+    StandardInput=tty
+    StandardOutput=journal
+    StandardError=journal
+    UtmpIdentifier=tty%i
+
+    [Install]
+    WantedBy=graphical.target
+    EOF
+    ln -sf ../ltsp-screen@.service \
+        "$B/etc/systemd/system/graphical.target.wants/ltsp-screen@1.service"
+    ln -sf /dev/null "$B/etc/systemd/system/getty@tty1.service"
+
+Two details in that unit are load-bearing, and each fails differently.
+
+The instance is the tty number, and screen_session gets it as 0%i.
+screen_session accepts only [0-1][0-9] while TTYPath needs /dev/tty1;
+instantiating on "01" asks for /dev/tty01, which does not exist, and
+systemd reports 208/STDIN.
+
+StandardInput=tty is required. screen-x-common derives both DISPLAY and
+the vt number from $(tty). With no controlling terminal that returns
+"not a tty", and the invocation becomes "xinit ... -- :not a tty vtnot a
+tty", which exits at once. screen_session then restarts it forever - the
+visible symptom is a text console and a service that is "active" with
+NRestarts=0 while burning a full core.
 
 Then build and publish:
 
@@ -309,6 +465,43 @@ pam_mkhomedir can create directories, and - the part that matters - uses
 the same ldap_id_mapping = True as the application servers, so every
 host derives the same UID from the AD SID. Without that, a home
 directory served to two servers has two different owners.
+
+In a container, chrony is inert: it cannot set a clock it does not own.
+The script starts it anyway, harmlessly, and the container inherits the
+hypervisor's time. That is fine for Kerberos as long as the *host* is in
+sync - check the host, not the container. Note also that the DC serves
+no NTP by default; chrony there needs an "allow <your network>" line, or
+every member silently falls back to the public pool.
+
+Where /srv/home lives is a decision, not a detail
+.....................................................
+
+A container can hold it two ways, and they buy opposite things.
+
+A bind mount of a host dataset lets you give every user their own ZFS
+dataset, so snapshots and rollback are per user. It also puts the data
+outside everything Proxmox manages: "Bind mounts are considered to not
+be managed by the storage subsystem", and "the contents of bind mount
+points are not backed up when using vzdump". Replication does not see
+them either - it replicates guest volumes.
+
+A storage-backed mount point (pct set <id> -mp0 <storage>:<size>,mp=/srv/home)
+is one dataset, replicated by pvesr, backed up by vzdump, and usable
+under HA. What you give up is per-user granularity, because per-user
+child datasets and PVE replication are mutually exclusive: PVE snapshots
+non-recursively (zfs snapshot, ZFSPoolPlugin.pm) and sends recursively
+(zfs send -RpvU), so a child dataset without that snapshot aborts the
+whole replication:
+
+    cannot send pool/homes@snap recursively:
+        snapshot pool/homes/user1@snap does not exist
+
+Pick the storage-backed volume unless per-user rollback outweighs
+replication and backups. Either way, if child datasets ever do appear
+under the export, the NFS export needs crossmnt - without it clients see
+the child mount points as empty directories, and the failure looks like
+a login that works with an empty home rather than like an export
+problem.
 
 
 Step 7 - The application servers
@@ -597,6 +790,29 @@ Sorted by how much time each cost, worst first.
   hardware and rejected by modern KMS drivers ("failed to add fb -22"),
   so it must only be the default when there is no /dev/dri/card0.
 
+  A client that boots perfectly and shows a text login. The published
+  ltsp-client-core is missing ltsp-client-common-functions, so
+  run_parts_list and boolean_is_true do not exist. init-ltsp sources its
+  scripts through run_parts_list, gets "not found", and carries on;
+  screen_session does the same. Nothing fails, nothing is logged, and
+  every service is active. Test for the cause directly rather than
+  reading logs:
+
+      sh -c '. /usr/share/ltsp/ltsp_config; type run_parts_list'
+
+  A service that is active, restarts zero times, and does nothing but
+  burn CPU. screen_session's "while true" loop respawning a screen
+  script that exits immediately. Read the CGroup in "systemctl status":
+  a screen.d script plus an lspci from XS20-intel-virtual-hack, one per
+  iteration, is the signature. The usual cause is a missing controlling
+  terminal, which turns DISPLAY into ":not a tty".
+
+  A session that ends three seconds in with pam_authenticate failure,
+  after the greeter accepted the password. Check what ldm actually
+  passed: /var/log/ldm.log names the user it started xfreerdp with. A
+  username of "Start123!" means the credentials went into the wrong
+  fields, not that authentication is broken.
+
   A frozen console that is not frozen. Two identical screenshots of a
   VM console can be one stale framebuffer. Switch VTs, or ping the
   client, before concluding anything.
@@ -664,7 +880,7 @@ File inventory
     server/tools/preseed/ltsp-root.cfg   image server
     server/tools/preseed/ltsp-app.cfg    application server
     server/tools/provision-samba-ad-dc   the domain
-    server/tools/setup-ltsp-root         NBD, TFTP, proxy DHCP, PXE
+    server/tools/setup-ltsp-root         NBD, TFTP, DHCP, PXE
     server/tools/setup-home-server       NFS home directories
     server/tools/setup-ltsp-app          session server, domain member
     server/tools/setup-lb-addressing     static addresses for lb1/lb2
