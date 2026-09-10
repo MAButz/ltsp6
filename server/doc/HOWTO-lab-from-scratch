@@ -370,6 +370,16 @@ character that moves between the two arrives wrong - "-" typed on QWERTZ
 reaches the server as "/". The domain rejects it as a wrong password with
 no hint that the layout is to blame. This cost an hour.
 
+RDP_OPTIONS carries no /drive: option, and that is deliberate. FreeRDP
+would redirect the client's local disks into the session with
+"/drive:hotplug,*", which is what xrdp's chansrv exposes as the
+thinclient_drives folder - the replacement for LTSP5's ltspfs, and the
+reason ltsp6 needs no ltspfsd. Left out here on purpose: a thin client is
+a shared machine, and a session that can reach whatever is plugged into
+it is a data path out of the server that nobody is watching. The folder
+still appears in the session; it stays empty. Add the option only if you
+have decided you want that path.
+
 RDP_PREAUTH exists because xrdp has no server-side NLA. Without it a
 wrong password does not end the connection: xrdp accepts it, opens its
 own login dialog inside the session and waits there, so ldm never
@@ -453,6 +463,57 @@ Expect roughly 660 MB. Note that the image keeps a root password and can
 keep sshd for diagnostics; both are test scaffolding and must come out
 before a production image.
 
+
+Step 5b - The same image with ltsp-build-client
+---------------------------------------------------
+
+Step 5 spells the image out by hand because that keeps the recipe
+legible: nothing hidden happens between "install a package" and "clients
+get it". ltsp-server ships the older route as well, and if that is how
+your images have always been built, it still works - ltsp-build-client
+with the full Debian plugin set is in the package.
+
+    ltsp-build-client \
+        --arch amd64 \
+        --dist trixie \
+        --components main,non-free-firmware \
+        --apt-keys /etc/apt/keyrings/ltsp6.asc \
+        --extra-mirror "deb https://mabutz.github.io/ltsp6 trixie main" \
+        --late-packages ldm,ltsp-client-core,freerdp3-x11,firmware-realtek \
+        --purge-chroot
+
+Three things about that command are not obvious, and each one has cost
+somebody an afternoon.
+
+  --components. debootstrap enables main and nothing else, and
+  firmware-realtek lives in non-free-firmware. Leave it out and the image
+  has no rtl_nic/*.fw at all - which on a client with a Realtek 2.5G part
+  (RTL8125/8126, the NIC in a good many small-form-factor machines)
+  presents as a network card that never comes up, and invites the
+  conclusion that the distribution kernel is too old. It usually is not:
+  Debian 13's 6.12 driver knows RTL8125A, B and D and asks for
+  rtl8125d-1.fw by name. What is missing is the file. With NBD root it
+  has to be in the initramfs too, not only in the image - the card must
+  work before there is a root filesystem to read it from.
+
+  030-default-lts-conf overwrites /etc/lts.conf. It runs in the
+  finalization phase and writes a stub over whatever is there, so an
+  lts.conf placed in the chroot beforehand is gone by the time the build
+  finishes. Write it afterwards.
+
+  --apt-keys installs into /etc/apt/trusted.gpg.d/. That trusts the key
+  for every source the image has, not just the one it came with, which is
+  not what the archive's own instructions ask for (Signed-By, bound to
+  one source). For a client image that talks to two mirrors it is a small
+  difference; if it matters to you, drop the key in yourself and write
+  the .sources file with Signed-By instead.
+
+Worth knowing either way: --squashfs-image / --no-squashfs-image decide
+whether you get the image or just the chroot, --install-debs-dir takes a
+directory of local .debs (useful before the packages are published),
+and --backports-dist plus --backports-packages pull single packages from
+backports - which is how you would take a newer kernel for hardware the
+stable one does not cover yet, rather than importing a foreign one.
 
 Step 6 - The file server for home directories
 -------------------------------------------------
