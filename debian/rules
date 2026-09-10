@@ -75,9 +75,6 @@ override_dh_auto_install:
 	install -d debian/ltsp-client-core/usr/lib/systemd/system
 	install -m0644 client/Debian/systemd/ltsp-screen@.service \
 		debian/ltsp-client-core/usr/lib/systemd/system/
-	install -d debian/ltsp-client-core/usr/lib/systemd/system/graphical.target.wants
-	ln -sf ../ltsp-screen@.service \
-		debian/ltsp-client-core/usr/lib/systemd/system/graphical.target.wants/ltsp-screen@1.service
 	install -d debian/ltsp-client-core/usr/share/initramfs-tools/hooks
 	install -m0755 client/Debian/share/initramfs-tools/hooks/* \
 		debian/ltsp-client-core/usr/share/initramfs-tools/hooks/

@@ -1,8 +1,12 @@
 [Unit]
-# What LTSP5 shipped in the ltsp-client package and ltsp6 lost: the thing
-# that turns SCREEN_nn in lts.conf into a running screen.d script. Without
-# it a client boots correctly all the way to a text login and nothing says
-# why - graphical.target has nothing to launch.
+# A generic launcher for any SCREEN_nn in lts.conf, shipped but NOT enabled.
+#
+# The usual case needs nothing here: ldm.service (from the ldm package) runs
+# screen_session 07 for the SCREEN_07=ldm default. This template is for the
+# rest - a second screen on another VT, or a screen script other than ldm -
+# and is enabled by hand:  systemctl enable ltsp-screen@2
+#
+# Do not enable an instance that collides with ldm.service's VT7.
 #
 # The instance is the tty number (1 -> tty1). screen_session is handed it
 # two digits as 0%i because it accepts only [0-1][0-9], while TTYPath needs

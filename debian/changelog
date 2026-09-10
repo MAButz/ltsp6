@@ -1,3 +1,16 @@
+ltsp (6.0.0-4) trixie; urgency=medium
+
+  * ltsp-screen@.service is shipped but no longer enabled on tty1. The
+    greeter is started by ldm.service (ldm >= 3.0.2-1), which runs
+    screen_session 07 for the SCREEN_07=ldm default that
+    ltsp_config.d/15default-screen already sets; enabling an instance here
+    as well put a second greeter on tty1 and had the two fighting over
+    which VT owns the session. The template stays for the cases it is
+    actually useful for - a second screen on another VT, or a screen
+    script other than ldm - and is enabled by hand.
+
+ -- Marc-Andre Beckmann-Butz <ma@butz.online>  Thu, 10 Sep 2026 17:50:00 +0200
+
 ltsp (6.0.0-3) trixie; urgency=medium
 
   * Added ltsp-screen@.service, enabled on tty1. LTSP5 shipped this
