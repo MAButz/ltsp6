@@ -67,14 +67,14 @@ keyring file is missing. Do not answer that with `trusted=yes`.
 
 | Suite | Package | Version |
 |---|---|---|
-| `trixie` | `ltsp-client-core`, `ltsp-server` | 6.0.0-3 |
-| `trixie` | `ldm`, `ldm-server` | 3.0.1-2 |
+| `trixie` | `ltsp-client-core`, `ltsp-server` | 6.0.0-4 |
+| `trixie` | `ldm`, `ldm-server` | 3.0.2-1 |
 | `trixie` | `ltsp6-session-tuning` | 1.0.0 |
 | `bookworm` | `ltsp-client`, `ltsp-client-core` | 5.18.12-3 |
 
 The `trixie` packages here are newer than the assets on the older GitHub
 releases, and the difference is not cosmetic: `ltsp-client-core_6.0.0-1`
-shipped without `ltsp-client-common-functions` and `ldm` before 3.0.1-2 had
+shipped without `ltsp-client-common-functions` and `ldm` before 3.0.2-1 had
 a `ldm.service` that could not start an X server. Prefer this archive.
 
 ## The signing key
