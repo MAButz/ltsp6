@@ -16,6 +16,13 @@ ltsp (6.0.0-5) trixie; urgency=medium
     /usr/share/doc/ltsp-server; they were written but never shipped.
   * The preseeds are installed into /usr/share/ltsp-server/preseed as
     reference material for build-autoinstall-iso(8).
+  * RDP_PREAUTH=True now selects the method rather than meaning Kerberos
+    (ldm >= 3.0.3-1): a configured realm picks Kerberos, no realm picks the
+    ssh probe, and False still means no check at all. Documented with the
+    one asymmetry that matters - the automatic fallback to ssh runs only
+    where the host keys are present, because the probe does not fail open
+    on an unverified key and an upgrade must not turn a working login into
+    a locked one.
   * lts.conf(5) documents RDP_PREAUTH=ssh, RDP_PREAUTH_HOST and
     RDP_PREAUTH_SSH_KNOWN_HOSTS (ldm >= 3.0.3-1): the credential check for
     sites with local accounts and no KDC. It records what that variant

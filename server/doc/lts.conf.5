@@ -36,9 +36,24 @@ client window size, \fB/sound\fR and \fB/clipboard\fR redirect those channels,
 \fB/cert:ignore\fR accepts the server certificate unconditionally \(em
 acceptable on a closed segment, a decision worth revisiting elsewhere.
 .IP "\fBRDP_PREAUTH\fP" 4
-Check the credentials \fIbefore\fR starting the RDP client. Off by default.
-\fBTrue\fR (or \fBkrb5\fR) asks a Kerberos KDC; \fBssh\fR asks an sshd, for
-sites whose accounts are local and which have no domain.
+Check the credentials \fIbefore\fR starting the RDP client. Off by default;
+\fBFalse\fR or unset means no check at all, as before this existed.
+.IP "" 4
+\fBTrue\fR means "check", and lets the client pick the method. A configured
+realm \(em \fBRDP_PREAUTH_REALM\fR, or \fBdefault_realm\fR in krb5.conf \(em
+says there is a domain worth asking, so Kerberos is used. Without one, the
+ssh probe is the only thing that can answer, so that is used instead. One
+spelling therefore works in both kinds of deployment.
+.IP "" 4
+\fBkrb5\fR and \fBssh\fR force one method outright, for sites that would
+rather be told their chosen method is not set up than have another substituted.
+.IP "" 4
+The automatic fallback to ssh happens only when the host keys are actually
+present; the explicit \fBssh\fR is not gated that way. The reason is that the
+ssh probe refuses on an unverified host key and does not fail open there, so
+on a client with no \fIssh_known_hosts\fR it would reject every login \(em and
+arriving at that by upgrading, rather than by asking for it, would be a
+lockout nobody chose.
 .IP "" 4
 Worth understanding before enabling. xrdp has no server\-side NLA, so it
 accepts the connection whatever the password is and validates inside the
