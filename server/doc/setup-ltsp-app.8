@@ -1,0 +1,153 @@
+.TH "setup-ltsp-app" "8" "2026-09-11" "ltsp6"
+.SH "NAME"
+setup\-ltsp\-app \(em Configure an LTSP application server and join it to the domain
+.SH "SYNOPSIS"
+.PP
+\fBsetup\-ltsp\-app\fR \fIip/cidr\fR \fIiface\fR \fIgateway\fR \fIdc\-ip\fR \fIrealm\fR \fIadminuser\fR \fIadminpass\fR [\fIhome\-server\-ip\fR]
+.SH "DESCRIPTION"
+.PP
+Run \fIon\fR the application server, as root. The host accepts the RDP sessions
+that HAProxy distributes to it, runs the desktop inside them, and
+authenticates its users against the Samba AD domain. It builds and serves no
+images \(em that is setup\-ltsp\-root(8)'s job. One of these runs per hypervisor
+node so the load balancers have genuinely independent backends.
+.PP
+Run it detached. From the point where it switches to the static address, a
+session over the old one is cut:
+.PP
+.nf
+setsid nohup setup\-ltsp\-app 172.17.250.31/20 ens18 172.17.240.1 \
+    172.17.250.10 LTSPLAB.LOCAL administrator '<admin\-password>' \
+    172.17.250.40 > /root/setup.log 2>&1 &
+.fi
+.PP
+Put the password in a small script file rather than on the command line if
+process listings and shell history matter.
+.SH "OPTIONS"
+.PP
+.IP "\fIip/cidr\fP" 4
+Static address. HAProxy's backend list names it, and the machine account in AD
+is tied to this host's name and address.
+.IP "\fIiface\fP \fIgateway\fP" 4
+Interface and default gateway.
+.IP "\fIdc\-ip\fP" 4
+Domain controller, written first into /etc/resolv.conf.
+.IP "\fIrealm\fP" 4
+Upper\-case Kerberos realm, for example LTSPLAB.LOCAL.
+.IP "\fIadminuser\fP \fIadminpass\fP" 4
+Credentials used once, for the domain join.
+.IP "\fIhome\-server\-ip\fP" 4
+Optional. When given, /home is mounted from that host over NFS, so every
+application server shows the same home directories.
+.SH "WHAT IT CONFIGURES, AND WHY"
+.PP
+Each item exists because its absence failed in a way that pointed somewhere
+else.
+.IP "\fBStatic address, immutable resolv.conf\fP" 4
+Debian 13 ships dhcpcd started by ifupdown rather than as a systemd unit, so
+\fBsystemctl is\-enabled dhcpcd\fR says \fInot\-found\fR while several dhcpcd
+processes run. It rebinds a lease alongside the static address and overwrites
+/etc/resolv.conf with an empty stub. The symptom is not a DNS error: sssd
+quietly drops offline, after which new domain accounts report \(lqno such
+user\(rq while already cached ones keep working.
+.IP "\fBA [realms] block in krb5.conf\fP" 4
+\fBdefault_realm\fR alone leaves kinit(1) reporting \(lqCannot find KDC for
+realm\(rq, because the shipped krb5.conf knows only the MIT example realms.
+.IP "\fBchrony against the DC\fP" 4
+Kerberos rejects tickets more than five minutes out. A member that drifts
+simply stops being able to log anyone in.
+.IP "\fBethtool, then the offload unit\fP" 4
+Under nested virtualisation checksum offload corrupts UDP and breaks DHCP. The
+unit that turns it off was present on two servers for days while ethtool was
+not installed \(em enabled, visible and permanently \fIfailed\fR. An enabled
+unit is not evidence; check \fBsystemctl is\-active ltsp\-nic\-offload\fR.
+.IP "\fBxe on the glamor allow list\fP" 4
+xorgxrdp gates glamor behind \fBOption "DRMAllowList"\fR in
+/etc/X11/xrdp/xorg.conf, which Debian ships as \fB"i915 radeon"\fR. Intel's Arc
+B\-series is driven only by \fBxe\fR, never i915. Inert until xorgxrdp is built
+with \fB\-\-enable\-glamor\fR, which Debian does not do \(em see NOTES.
+.IP "\fBxscreensaver instead of light\-locker\fP" 4
+light\-locker locks by way of the logind seat, and an xrdp session has no seat
+of its own. The Xfce power manager goes too: nothing to manage on a session
+server, and one polling copy per session adds up.
+.IP "\fBThe orphaned\-session reaper\fP" 4
+See NOTES. This one made every login fail invisibly.
+.IP "\fBadcli join, not realmd\fP" 4
+realmd verifies its dependencies through PackageKit, which a minimal Debian
+host does not have, so it refuses the join with \(lqNecessary packages are not
+installed\(rq while listing packages that are all installed.
+.IP "\fBsssd with the GPO settings\fP" 4
+Without \fBad_gpo_map_remote_interactive = +xrdp\-sesman\fR a correct password
+still fails with \fBpam_acct_mgmt failed: Permission denied\fR: sssd's GPO
+access control runs enforcing and maps every PAM service it does not recognise
+to Denied, whatever AD actually says.
+.SH "NOTES"
+.PP
+.B A successful login that ends after two seconds.
+The client is told \fBERRINFO_LOGOFF_BY_USER\fR \(em \(lqthe user logged
+off\(rq \(em and nothing anywhere logs an error. What happened is that an
+xfce4\-session from an earlier login still holds the D\-Bus name
+\fBorg.xfce.SessionManager\fR on the user bus, which lives in
+/run/user/<uid> and outlives the single session. The new xfce4\-session finds
+the name taken and exits 0; xrdp sees its window manager finish cleanly and
+ends the session. Every link behaves correctly, which is why it is silent.
+Look for \(lqexited quickly\(rq in /var/log/xrdp\-sesman.log and for a stray
+process:
+.PP
+.nf
+pgrep \-a \-u "$(id \-u \fIuser\fR)" xfce4\-session
+.fi
+.PP
+Orphans are made by restarting xrdp\-sesman while sessions run, which is easy
+to do while setting a server up. This script installs
+/usr/local/sbin/xrdp\-reap\-orphan\-sessions as an \fBExecStartPre\fR of
+xrdp\-sesman, where the rule is sound: before sesman starts it tracks nothing,
+so any process still carrying \fBXRDP_SESSION\fR belongs to a lost session. The
+same rule on a running server would be wrong.
+.PP
+.B The address switch must not strand the host.
+An earlier version flushed the interface and left ifupdown to restore it. When
+that did not happen the machine was unreachable with no way in, because /home
+is a hard NFS mount and every login then blocks in the kernel waiting for a
+file server it can no longer route to. It took a power cycle. The interface is
+now brought down and up by name, and the static address is set directly if
+ifupdown did not apply it.
+.PP
+.B GPU acceleration is not reachable with Debian's packages.
+libxorgxrdp.so contains no glamor, EGL, GBM or DRI3 symbols, so glamor needs a
+self\-built xorgxrdp with \fB\-\-enable\-glamor\fR, which upstream still calls
+experimental. Keep apart what is being accelerated: glamor accelerates
+rendering \fIinside\fR the session, while the RDP stream's encoding stays in
+software.
+.SH "VERIFICATION"
+.PP
+.nf
+klist \-k /etc/krb5.keytab | grep \-i "host/$(hostname \-s)@"
+id administrator          # same uid on every host, or /home breaks
+findmnt \-no SOURCE,FSTYPE /home
+systemctl is\-active xrdp xrdp\-sesman sssd
+systemctl is\-active ltsp\-nic\-offload   # must be active, not failed
+.fi
+.PP
+Do not grep the keytab for the hostname alone: adcli also writes
+\fBRestrictedKrbHost\fR entries, so a plain hostname match reports \(lqalready
+joined\(rq for a host that never joined.
+.SH "SEE ALSO"
+.PP
+\fBsetup\-home\-server\fP(8),
+\fBsetup\-lb\-addressing\fP(8),
+\fBprovision\-samba\-ad\-dc\fP(8),
+\fBadcli\fP(8),
+\fBsssd\-ad\fP(5),
+\fBxrdp.ini\fP(5),
+/usr/share/doc/ltsp\-server/RDP\-loadbalancer\-HA,
+/usr/share/doc/ltsp\-server/HOWTO\-lab\-from\-scratch.
+.SH "AVAILABILITY"
+.PP
+\fBsetup\-ltsp\-app\fR is part of the \fBltsp\-server\fP package; the latest
+version is available from \fIhttps://github.com/MAButz/ltsp6\fR.
+.SH "AUTHOR"
+.PP
+Copyright 2026 Marc\-Andr\('e Beckmann\-Butz <ma@butz.online>, distributed
+under the terms of the GNU General Public License version 2 or any later
+version.

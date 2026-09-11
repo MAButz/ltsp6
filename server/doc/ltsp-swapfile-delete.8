@@ -1,0 +1,58 @@
+.TH "ltsp-swapfile-delete" "8" "2026-09-11" "ltsp6"
+.SH "NAME"
+ltsp\-swapfile\-delete \(em Remove swap files of clients that are no longer around
+.SH "SYNOPSIS"
+.PP
+\fBltsp\-swapfile\-delete\fR
+.SH "DESCRIPTION"
+.PP
+Housekeeping for the directory nbdswapd(8) fills. Clients with no local disk
+get a swap file on the server, one per address, named \fIaddress\fB.swap\fR.
+Nothing removes them when a client stops existing, so this runs from cron.
+.PP
+It takes no arguments. For every \fI*.swap\fR in the swap directory it decides
+whether the client is still alive \(em an open connection in netstat(8), or an
+answer to a single ping \(em and touches the file if so. Everything left
+untouched for long enough is then deleted.
+.SH "FILES"
+.PP
+.IP "\fI/etc/ltsp/ltsp.conf\fP" 4
+Read if present. \fBLTSP_SWAP_DIR\fR overrides where the swap files live.
+.IP "\fI/var/lib/ltsp/swapfiles/\fP" 4
+The default swap directory.
+.SH "BUGS"
+.PP
+\fBOn Debian this script deletes nothing, and says nothing about it.\fR The
+last line calls \fB/usr/sbin/tmpwatch\fR, which is a Red Hat tool: Debian has
+no \fBtmpwatch\fR package at all, the equivalent being \fBtmpreaper\fR. The
+call therefore fails with \(lqnot found\(rq \(em and the script ends in
+\fBexit 0\fR regardless, so cron records a success. The visible effect is a
+swap directory that only ever grows, with no error anywhere to explain it.
+.PP
+Until that is fixed, either install a \fBtmpwatch\fR compatible with the
+invocation, or replace the call with the Debian equivalent, which takes its
+age in hours as well:
+.PP
+.nf
+tmpreaper \-\-mtime 360h "$LTSP_SWAP_DIR"
+.fi
+.PP
+The liveness test also needs netstat(8) from \fBnet\-tools\fR, which
+ltsp\-server does not declare as a dependency and a minimal Debian install
+does not necessarily have. Without it the netstat branch fails quietly and
+only the ping decides \(em which marks a client dead as soon as it stops
+answering ICMP, whether or not it is still using the swap file.
+.SH "SEE ALSO"
+.PP
+\fBnbdswapd\fP(8),
+\fBtmpreaper\fP(8),
+\fBnetstat\fP(8).
+.SH "AVAILABILITY"
+.PP
+\fBltsp\-swapfile\-delete\fR is part of the \fBltsp\-server\fP package; the
+latest version is available from \fIhttps://github.com/MAButz/ltsp6\fR.
+.SH "AUTHOR"
+.PP
+Copyright 2008 Warren Togami <wtogami@redhat.com>. Manual page copyright 2026
+Marc\-Andr\('e Beckmann\-Butz <ma@butz.online>, distributed under the terms of
+the GNU General Public License version 2 or any later version.

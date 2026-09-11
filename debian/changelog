@@ -1,3 +1,46 @@
+ltsp (6.0.0-5) trixie; urgency=medium
+
+  * The provisioning tools under server/tools are now installed into
+    /usr/sbin, each with a manual page in section 8: build-apt-repo,
+    build-autoinstall-iso, provision-samba-ad-dc, setup-home-server,
+    setup-lb-addressing, setup-ltsp-app and setup-ltsp-root. They existed
+    only in the git tree until now, so anyone installing ltsp-server from
+    the archive got the documentation's subject but not its object.
+  * The manual pages carry the findings, not just the syntax: why the
+    domain join uses adcli rather than realmd, why sssd needs
+    ad_gpo_map_remote_interactive before a correct password is accepted,
+    why an orphaned xfce4-session makes every later login fail silently,
+    why the offload unit is useless without ethtool installed, and why a
+    keepalived pair on DHCP takes itself apart.
+  * HOWTO-lab-from-scratch and PXE-network-boot-test are installed into
+    /usr/share/doc/ltsp-server; they were written but never shipped.
+  * The preseeds are installed into /usr/share/ltsp-server/preseed as
+    reference material for build-autoinstall-iso(8).
+  * ltsp-swapfile-delete(8) is documented too - it was the last command in
+    the package without a manual page. Writing it turned up a real fault
+    worth recording: the script ends by calling /usr/sbin/tmpwatch, a Red
+    Hat tool that Debian does not package at all (the equivalent being
+    tmpreaper), and then exits 0 regardless. On Debian it marks the live
+    clients and deletes nothing, while cron records a success - so the swap
+    directory only ever grows and no error explains it. The BUGS section
+    gives the tmpreaper invocation to replace it with.
+  * New: lts.conf(5). The example file has always pointed at "your installed
+    lts.conf man page" and this fork never shipped one. It documents the
+    directives added or changed here - LDM_DEFAULT_BACKEND and
+    LDM_FORCE_BACKEND with their precedence, RDP_SERVER, RDP_OPTIONS,
+    RDP_PREAUTH and RDP_PREAUTH_REALM, XKBLAYOUT with CONSOLE_KEYMAP,
+    SCREEN_nn against ldm.service and ltsp-screen@, X_COLOR_DEPTH,
+    LTSP_FATCLIENT, KEEP_SYSTEM_SERVICES and LDM_NBD_CHECKUPDATE - and
+    points at the example file for the upstream remainder.
+  * server/configs/lts.conf documents the directives added since 5.18:
+    LDM_DEFAULT_BACKEND, RDP_SERVER, RDP_OPTIONS, RDP_PREAUTH,
+    RDP_PREAUTH_REALM, LDM_NBD_CHECKUPDATE and KEEP_SYSTEM_SERVICES, plus
+    CONSOLE_KEYMAP next to XKBLAYOUT - a layout mismatch mistypes the
+    password and reads as a rejected login - and a note on SCREEN_07
+    against ldm.service and ltsp-screen@.
+
+ -- Marc-Andre Beckmann-Butz <ma@butz.online>  Fri, 11 Sep 2026 21:30:00 +0200
+
 ltsp (6.0.0-4) trixie; urgency=medium
 
   * ltsp-screen@.service is shipped but no longer enabled on tty1. The

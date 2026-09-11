@@ -27,7 +27,7 @@ override_dh_auto_install:
 		server/ltsp-swapfile-delete server/ltsp-update-image server/ltsp-update-kernels \
 		server/ltsp-update-sshkeys server/nbdrootd server/nbdswapd \
 		debian/ltsp-server/usr/sbin/
-	install -d debian/ltsp-server/usr/bin
+	install -d debian/ltsp-server/usr/bin debian/ltsp-server/usr/sbin
 	install -m0755 server/ltsp-info debian/ltsp-server/usr/bin/
 	install -d debian/ltsp-server/usr/share/ltsp
 	cp -a server/share/ltsp/. debian/ltsp-server/usr/share/ltsp/
@@ -51,7 +51,22 @@ override_dh_auto_install:
 		debian/ltsp-server/usr/share/doc/ltsp-server/examples/xinetd.d/
 	install -m0644 server/doc/FAQ server/doc/QuickInstall server/doc/RDP-loadbalancer-HA \
 		server/doc/NBD-toram server/doc/Upgrading_4.2 \
+		server/doc/HOWTO-lab-from-scratch server/doc/PXE-network-boot-test \
 		debian/ltsp-server/usr/share/doc/ltsp-server/
+	# The provisioning tools, each documented by a manual page in section 8.
+	# They live in /usr/sbin because every one of them needs root - and because
+	# a manual page for a command the package does not ship is worse than none.
+	install -m0755 server/tools/build-apt-repo server/tools/build-autoinstall-iso \
+		server/tools/provision-samba-ad-dc server/tools/setup-home-server \
+		server/tools/setup-lb-addressing server/tools/setup-ltsp-app \
+		server/tools/setup-ltsp-root \
+		debian/ltsp-server/usr/sbin/
+	# The preseeds the install media are built from. Reference material, not
+	# configuration: build-autoinstall-iso(8) takes a copy and edits the hostname.
+	install -d debian/ltsp-server/usr/share/ltsp-server/preseed
+	install -m0644 server/tools/preseed/ltsp-app.cfg \
+		server/tools/preseed/ltsp-root.cfg server/tools/preseed/addc1.cfg \
+		debian/ltsp-server/usr/share/ltsp-server/preseed/
 
 	# ---- ltsp-client-core ----
 	install -d debian/ltsp-client-core/usr/sbin

@@ -1,0 +1,76 @@
+.TH "build-autoinstall-iso" "8" "2026-09-11" "ltsp6"
+.SH "NAME"
+build\-autoinstall\-iso \(em Build an unattended Debian installer ISO from a preseed
+.SH "SYNOPSIS"
+.PP
+\fBbuild\-autoinstall\-iso\fR \fInetinst.iso\fR \fIpreseed.cfg\fR \fIname\fR [\fIoutdir\fR]
+.SH "DESCRIPTION"
+.PP
+Takes a plain Debian netinst image and a preseed file and produces an ISO that
+installs without any interaction and powers the machine off when it is done.
+Every guest in the lab \(em the domain controller, the load balancers, the image
+server and the application servers \(em is installed this way, because clicking
+through debian\-installer once per rebuild does not scale and should not depend
+on anyone remembering which answers they gave last time.
+.PP
+\fIname\fR becomes both the volume id (\fBdebian\-auto\-\fR\fIname\fR) and the
+output file name (\fIname\fR\fB\-auto.iso\fR). \fIoutdir\fR defaults to the
+directory holding the source ISO, which on a Proxmox node is usually
+/var/lib/vz/template/iso.
+.SH "OPTIONS"
+.PP
+.IP "\fInetinst.iso\fP" 4
+The source image. Read only; it is loop mounted, never modified.
+.IP "\fIpreseed.cfg\fP" 4
+The preseed. The ones under server/tools/preseed encode the machine's role in
+their package list \(em that is where role separation actually lives.
+.IP "\fIname\fP" 4
+Volume id and output file name.
+.IP "\fIoutdir\fP" 4
+Where to write the result. Defaults to the source ISO's directory.
+.SH "EXAMPLE"
+.PP
+The hostname is per instance, so build one medium per guest and change only
+that line:
+.PP
+.nf
+for host in addc1 ltsp\-root ltsp\-app1 ltsp\-app2; do
+    sed "s|^d\-i netcfg/get_hostname string .*|d\-i netcfg/get_hostname string $host|" \
+        preseed/ltsp\-app.cfg > "/root/$host.cfg"
+    build\-autoinstall\-iso /var/lib/vz/template/iso/debian\-13.6.0\-amd64\-netinst.iso \
+        "/root/$host.cfg" "$host"
+done
+.fi
+.SH "NOTES"
+.PP
+Two things this script had to learn the hard way, and both are worth knowing
+before modifying it.
+.PP
+It replaces \fBisolinux/isolinux.cfg\fR outright rather than adding an include.
+A \fBdefault\fR directive inside an included fragment does not win over the one
+in the main file, and the first version of this script produced media that
+booted the speech\-synthesis installer instead of the preseeded install \(em with
+no error, because that is a perfectly valid boot entry.
+.PP
+It takes the isohybrid MBR from the source ISO, so the result boots on BIOS
+firmware as well as UEFI. Without it, only UEFI machines start.
+.PP
+The installer stalls at \(lqName server addresses\(rq if the DHCP server on the
+segment advertises no resolver. dnsmasq configured with \fBport=0\fR does exactly
+that; hand out \fBoption:dns\-server\fR explicitly. See setup\-ltsp\-root(8).
+.SH "SEE ALSO"
+.PP
+\fBsetup\-ltsp\-root\fP(8),
+\fBprovision\-samba\-ad\-dc\fP(8),
+\fBsetup\-ltsp\-app\fP(8),
+\fBxorriso\fP(1),
+/usr/share/doc/ltsp\-server/HOWTO\-lab\-from\-scratch.
+.SH "AVAILABILITY"
+.PP
+\fBbuild\-autoinstall\-iso\fR is part of the \fBltsp\-server\fP package; the
+latest version is available from \fIhttps://github.com/MAButz/ltsp6\fR.
+.SH "AUTHOR"
+.PP
+Copyright 2026 Marc\-Andr\('e Beckmann\-Butz <ma@butz.online>, distributed
+under the terms of the GNU General Public License version 2 or any later
+version.

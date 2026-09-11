@@ -1,0 +1,99 @@
+.TH "build-apt-repo" "8" "2026-09-11" "ltsp6"
+.SH "NAME"
+build\-apt\-repo \(em Build and sign the apt archive published over GitHub Pages
+.SH "SYNOPSIS"
+.PP
+\fBbuild\-apt\-repo\fR \fIrepo\-dir\fR [\fIsuite\fR \fIpackage.deb\fR ...]
+.SH "DESCRIPTION"
+.PP
+Writes conf/distributions with \fBSignWith\fR, includes any packages given,
+then exports and signs every suite and verifies its own output before
+finishing. The archive lives on an orphan branch of the source repository and
+is served over HTTPS by GitHub Pages.
+.PP
+Called with only \fIrepo\-dir\fR it re\-exports and re\-signs what is already
+there, which is what an expiring key or a changed suite list needs.
+.SH "OPTIONS"
+.PP
+.IP "\fIrepo\-dir\fP" 4
+A checkout of the archive branch.
+.IP "\fIsuite\fP \fIpackage.deb\fP ..." 4
+Optional. One suite followed by one or more packages to include in it.
+\fBincludedeb\fR replaces an existing version of the same package in that
+suite, so re\-running with a rebuilt package is the normal update path.
+.SH "ENVIRONMENT"
+.PP
+.IP "\fBGNUPGHOME\fP" 4
+Where the signing key lives. Defaults to the caller's ~/.gnupg.
+.IP "\fBLTSP6_REPO_KEY\fP" 4
+Fingerprint of the key to sign with. Without it, the single available secret
+key is used.
+.SH "EXAMPLE"
+.PP
+.nf
+git clone \-b main https://github.com/MAButz/ltsp6.git ltsp6\-apt
+build\-apt\-repo ltsp6\-apt trixie ../ltsp6\-session\-tuning_1.0.0_all.deb
+cd ltsp6\-apt && git add \-A && git commit \-m "publish ..." && git push
+.fi
+.SH "CLIENT SIDE"
+.PP
+.nf
+install \-d \-m 755 /etc/apt/keyrings
+curl \-fsSL \-o /etc/apt/keyrings/ltsp6.asc \
+    https://mabutz.github.io/ltsp6/ltsp6\-archive\-keyring.asc
+
+cat > /etc/apt/sources.list.d/ltsp6.sources <<'SRC'
+Types: deb
+URIs: https://mabutz.github.io/ltsp6
+Suites: trixie
+Components: main
+Architectures: amd64
+Signed\-By: /etc/apt/keyrings/ltsp6.asc
+SRC
+.fi
+.PP
+Both steps are required. Without the key apt refuses the archive, and the only
+way around that is \fB[trusted=yes]\fR, which switches off verification for
+every package from the source. On machines that install software as root that
+is not a corner worth cutting. A correct \fBapt update\fR fetches InRelease and
+says nothing about signatures.
+.SH "NOTES"
+.PP
+\fBSignWith\fR is the whole point of conf/distributions. Without that line the
+export succeeds and produces an archive no client will trust \(em there is no
+error, just a missing InRelease.
+.PP
+The archive branch needs \fB.gitattributes\fR containing \fB* \-text\fR. An apt
+archive is verified byte for byte: Release lists the checksums of Packages, and
+InRelease carries a signature over exactly those bytes. A line\-ending
+conversion anywhere in the chain \(em on checkout, on a colleague's machine with
+\fBcore.autocrlf=true\fR, in CI on Windows \(em produces a hash mismatch that
+reads like a broken mirror rather than a git setting.
+.PP
+\fB.nojekyll\fR keeps GitHub Pages from running Jekyll over checksummed files.
+.PP
+reprepro's db/ is local state rebuilt from conf/ and pool/, not source.
+Committing a Berkeley DB adds a binary blob on every publish for no gain.
+.PP
+The private half of the signing key must never be committed. A signing key that
+has ever been pushed has to be replaced, not deleted in a follow\-up commit.
+.PP
+Every .deb committed to the archive branch stays in the git history forever, so
+each rebuild of a large package adds another full copy. GitHub Pages publishes
+at most 1 GB per site. For anything sizeable, publish a release asset instead
+and keep the archive for small packages.
+.SH "SEE ALSO"
+.PP
+\fBreprepro\fP(1),
+\fBapt\-secure\fP(8),
+\fBsources.list\fP(5),
+\fBgpg\fP(1).
+.SH "AVAILABILITY"
+.PP
+\fBbuild\-apt\-repo\fR is part of the \fBltsp\-server\fP package; the latest
+version is available from \fIhttps://github.com/MAButz/ltsp6\fR.
+.SH "AUTHOR"
+.PP
+Copyright 2026 Marc\-Andr\('e Beckmann\-Butz <ma@butz.online>, distributed
+under the terms of the GNU General Public License version 2 or any later
+version.

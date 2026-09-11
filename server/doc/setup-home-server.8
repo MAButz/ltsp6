@@ -1,0 +1,62 @@
+.TH "setup-home-server" "8" "2026-09-11" "ltsp6"
+.SH "NAME"
+setup\-home\-server \(em Export home directories over NFS to the application servers
+.SH "SYNOPSIS"
+.PP
+\fBsetup\-home\-server\fR \fIdomain\fR \fIrealm\fR \fIadminuser\fR \fIadminpass\fR \fIexport\-network\fR
+.SH "DESCRIPTION"
+.PP
+Run on the file server, as root. Joins the domain, exports /srv/home over NFS
+with \fBno_root_squash\fR so that pam_mkhomedir(8) on the application servers
+can create directories, and configures sssd with the same identity mapping the
+application servers use.
+.SH "OPTIONS"
+.PP
+.IP "\fIdomain\fP" 4
+Lower\-case domain, for example ltsplab.local.
+.IP "\fIrealm\fP" 4
+Upper\-case Kerberos realm, for example LTSPLAB.LOCAL.
+.IP "\fIadminuser\fP \fIadminpass\fP" 4
+Credentials used once, for the domain join.
+.IP "\fIexport\-network\fP" 4
+Who may mount the export, for example 172.17.240.0/20.
+.SH "NOTES"
+.PP
+The point of the sssd configuration here is \fBldap_id_mapping = True\fR,
+identical to the application servers. Every member then derives the same UID
+from the same AD SID, so a home directory served to two servers has one owner
+rather than two. Get this wrong and the failure is not a mount error but files
+that belong to nobody on half the fleet.
+.PP
+Verify across hosts before trusting it:
+.PP
+.nf
+id test1            # same uid on every application server and here
+touch /home/test1/.probe    # on one server
+ls /home/test1/.probe       # visible on the others and here
+.fi
+.PP
+An unprivileged LXC container cannot run the kernel NFS server. If the file
+server is a container, it has to be a privileged one.
+.PP
+The mount on the client side is \fBhard\fR on purpose. A \fBsoft\fR mount turns
+a server outage into short writes and silently damaged files in people's home
+directories; \fBhard\fR turns it into processes that wait. Know what that
+costs: while the server is unreachable every login on an application server
+blocks in the kernel, sshd included, and the machine looks dead from outside.
+.SH "SEE ALSO"
+.PP
+\fBsetup\-ltsp\-app\fP(8),
+\fBprovision\-samba\-ad\-dc\fP(8),
+\fBexports\fP(5),
+\fBsssd.conf\fP(5),
+\fBpam_mkhomedir\fP(8).
+.SH "AVAILABILITY"
+.PP
+\fBsetup\-home\-server\fR is part of the \fBltsp\-server\fP package; the latest
+version is available from \fIhttps://github.com/MAButz/ltsp6\fR.
+.SH "AUTHOR"
+.PP
+Copyright 2026 Marc\-Andr\('e Beckmann\-Butz <ma@butz.online>, distributed
+under the terms of the GNU General Public License version 2 or any later
+version.

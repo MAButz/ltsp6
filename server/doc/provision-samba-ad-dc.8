@@ -1,0 +1,72 @@
+.TH "provision-samba-ad-dc" "8" "2026-09-11" "ltsp6"
+.SH "NAME"
+provision\-samba\-ad\-dc \(em Provision the Samba AD domain controller the lab authenticates against
+.SH "SYNOPSIS"
+.PP
+\fBprovision\-samba\-ad\-dc\fR \fIip/cidr\fR \fIgateway\fR \fIrealm\fR \fInetbios\fR \fIadminpass\fR
+.SH "DESCRIPTION"
+.PP
+Run on the machine that is to become the domain controller, as root. It pins
+the static address, fixes /etc/hosts, provisions the domain with
+\fB\-\-use\-rfc2307\fR, sets a DNS forwarder, points the host's own resolver at
+itself and verifies the result.
+.PP
+Everything else in the lab authenticates against this host, so it is built
+first. Nothing after it will work until \fBhost \-t SRV
+_ldap._tcp.\fR\fIdomain\fR returns an answer.
+.SH "OPTIONS"
+.PP
+.IP "\fIip/cidr\fP" 4
+The static address, for example 172.17.250.10/20.
+.IP "\fIgateway\fP" 4
+Default gateway.
+.IP "\fIrealm\fP" 4
+Kerberos realm in upper case, for example LTSPLAB.LOCAL.
+.IP "\fInetbios\fP" 4
+NetBIOS domain name, for example LTSPLAB.
+.IP "\fIadminpass\fP" 4
+Password for the domain Administrator account. Subject to the default
+complexity policy \(em at least seven characters with mixed classes.
+.SH "EXAMPLE"
+.PP
+.nf
+provision\-samba\-ad\-dc 172.17.250.10/20 172.17.240.1 \
+    LTSPLAB.LOCAL LTSPLAB '<admin\-password>'
+.fi
+.SH "NOTES"
+.PP
+The script refuses to continue if the host holds more than one address. That
+is not fussiness: a domain controller that answers DNS from an address the
+client did not ask has every reply discarded, and the symptom is not a DNS
+error but domain members that intermittently cannot find the realm. Debian 13
+ships \fBdhcpcd\fR, started by ifupdown rather than as a systemd unit, so
+\fBsystemctl is\-enabled dhcpcd\fR reports \fInot\-found\fR while several
+dhcpcd processes are running and holding a second address.
+.PP
+It \fIsets\fR the DNS forwarder rather than checking whether the line exists.
+An earlier version tested for the presence of \fBdns forwarder\fR in smb.conf
+and left the value at \fBnone\fR, which looks configured and forwards nothing.
+.SH "VERIFICATION"
+.PP
+.nf
+samba\-tool domain level show
+host \-t SRV _ldap._tcp.ltsplab.local
+host \-t SRV _kerberos._udp.ltsplab.local
+kinit administrator && klist
+.fi
+.SH "SEE ALSO"
+.PP
+\fBsetup\-ltsp\-app\fP(8),
+\fBsetup\-home\-server\fP(8),
+\fBsamba\-tool\fP(8),
+\fBadcli\fP(8),
+/usr/share/doc/ltsp\-server/HOWTO\-lab\-from\-scratch.
+.SH "AVAILABILITY"
+.PP
+\fBprovision\-samba\-ad\-dc\fR is part of the \fBltsp\-server\fP package; the
+latest version is available from \fIhttps://github.com/MAButz/ltsp6\fR.
+.SH "AUTHOR"
+.PP
+Copyright 2026 Marc\-Andr\('e Beckmann\-Butz <ma@butz.online>, distributed
+under the terms of the GNU General Public License version 2 or any later
+version.

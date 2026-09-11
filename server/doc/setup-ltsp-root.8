@@ -1,0 +1,97 @@
+.TH "setup-ltsp-root" "8" "2026-09-11" "ltsp6"
+.SH "NAME"
+setup\-ltsp\-root \(em Configure the image server: NBD, TFTP, proxy DHCP and PXE
+.SH "SYNOPSIS"
+.PP
+\fBsetup\-ltsp\-root\fR \fIown\-ip\fR \fIiface\fR \fIgateway\fR [\fIdns\fR ...]
+.SH "DESCRIPTION"
+.PP
+Run on the image server, as root. Sets up the nbd\-server export, dnsmasq for
+proxy DHCP plus PXE plus TFTP, the checksum offload workaround, and rewrites
+\fBnbdroot=\fR in the iPXE boot script to point at this host.
+.PP
+This machine builds and serves the client image and answers PXE. It runs no
+user sessions, and the application servers build no images \(em that separation
+is deliberate and is what keeps an image rebuild from disturbing anybody's
+desktop.
+.SH "OPTIONS"
+.PP
+.IP "\fIown\-ip\fP" 4
+This host's address. Written into the iPXE script's \fBnbdroot=\fR, so it must
+be the address clients can reach.
+.IP "\fIiface\fP" 4
+Interface to configure, for example ens18.
+.IP "\fIgateway\fP" 4
+Default gateway.
+.IP "\fIdns\fP" 4
+One or more resolvers, handed to PXE clients as \fBoption:dns\-server\fR.
+.SH "EXAMPLE"
+.PP
+.nf
+setup\-ltsp\-root 172.17.250.20 ens18 172.17.240.1 172.17.250.10
+.fi
+.SH "FILES"
+.PP
+.IP "\fI/etc/nbd\-server/config\fP" 4
+Holds a \fB[generic]\fR stanza with an \fBincludedir\fR plus one stanza per
+image. Several named exports share one port, which is how thin and fat images
+are served side by side:
+.PP
+.nf
+    [thin\-amd64]
+        exportname = /srv/ltsp/images/thin\-amd64.img
+        readonly = true
+
+    [fat\-amd64]
+        exportname = /srv/ltsp/images/fat\-amd64.img
+        readonly = true
+.fi
+.IP "\fI/srv/tftp/ltsp.ipxe\fP" 4
+The boot script. \fBtoram\fR copies the image into tmpfs and disconnects NBD,
+so a booted client survives the image server going away. Confirm it took
+effect on a client with \fBfindmnt | grep \-E 'toram|rofs'\fR and
+\fBdmesg | grep \-i nbd_disconnect\fR.
+.IP "\fI/etc/dnsmasq.d/ltsp.conf\fP" 4
+Proxy DHCP, PXE and TFTP.
+.SH "NOTES"
+.PP
+Proxy DHCP, not a second authoritative server. The segment already has a DHCP
+server; running another one that also hands out addresses is how you get two
+servers answering the same request. In proxy mode dnsmasq answers only the PXE
+part and leaves addressing alone.
+.PP
+\fBport=0\fR keeps dnsmasq out of DNS entirely, which is correct here because
+the domain controller owns the zone \(em but it also means dnsmasq advertises no
+resolver at all, and the Debian installer then stalls at \(lqName server
+addresses\(rq. Pass the \fIdns\fR argument so \fBoption:dns\-server\fR is sent
+explicitly.
+.PP
+Checksum offload is disabled through a systemd unit. Under nested
+virtualisation there is no hardware left to finish the checksum, so DHCP
+replies leave invalid and every client drops them; the symptom is PXE clients
+that never get an address while a capture on this side shows the reply being
+sent. The unit needs \fBethtool\fR installed \(em without the binary it is
+enabled, visible and permanently \fIfailed\fR. Check the state, not the
+intent:
+.PP
+.nf
+systemctl is\-active ltsp\-nic\-offload
+ethtool \-k \fIiface\fR | grep tx\-checksumming
+.fi
+.SH "SEE ALSO"
+.PP
+\fBbuild\-autoinstall\-iso\fP(8),
+\fBltsp\-update\-image\fP(8),
+\fBnbd\-server\fP(1),
+\fBdnsmasq\fP(8),
+/usr/share/doc/ltsp\-server/NBD\-toram,
+/usr/share/doc/ltsp\-server/PXE\-network\-boot\-test.
+.SH "AVAILABILITY"
+.PP
+\fBsetup\-ltsp\-root\fR is part of the \fBltsp\-server\fP package; the latest
+version is available from \fIhttps://github.com/MAButz/ltsp6\fR.
+.SH "AUTHOR"
+.PP
+Copyright 2026 Marc\-Andr\('e Beckmann\-Butz <ma@butz.online>, distributed
+under the terms of the GNU General Public License version 2 or any later
+version.

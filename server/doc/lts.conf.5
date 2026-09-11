@@ -1,0 +1,146 @@
+.TH "lts.conf" "5" "2026-09-11" "ltsp6"
+.SH "NAME"
+lts.conf \(em Per\-client configuration for LTSP clients
+.SH "DESCRIPTION"
+.PP
+\fIlts.conf\fR configures LTSP clients. It is read on the client at boot by
+getltscfg(1), and directives apply from the most specific matching section
+downwards: a section named by MAC address, IP or hostname overrides
+\fB[Default]\fR.
+.PP
+This page documents the directives this fork adds or changes. The full set is
+described in the commented example installed as \fI/etc/ltsp/lts.conf\fR, and
+in the upstream LTSP documentation.
+.SH "SESSION BACKEND"
+.PP
+.IP "\fBLDM_DEFAULT_BACKEND\fP" 4
+Which backend ldm uses to open the session. \fBxfreerdp\fR opens a remote
+desktop against an xrdp server; \fBssh\fR is the original LTSP behaviour and
+remains the built\-in default.
+.IP "" 4
+Precedence, highest first: \fBLDM_FORCE_BACKEND\fR, then whatever the user
+picks in the greeter, then \fBLDM_DEFAULT_BACKEND\fR, then \fBssh\fR. Set
+\fBLDM_DEFAULT_BACKEND\fR to choose the usual case while leaving the greeter
+menu available; set \fBLDM_FORCE_BACKEND\fR to take the choice away.
+.IP "" 4
+Example: \fBLDM_DEFAULT_BACKEND="xfreerdp"\fR
+.IP "\fBLDM_FORCE_BACKEND\fP" 4
+Same values, but the greeter offers no alternative.
+.IP "\fBRDP_SERVER\fP" 4
+Host the \fBxfreerdp\fR backend connects to. Point it at a load balancer
+virtual address rather than at one session server, so that a failed server
+moves its users without anyone editing a client.
+.IP "\fBRDP_OPTIONS\fP" 4
+Passed through to xfreerdp verbatim. \fB/dynamic\-resolution\fR follows the
+client window size, \fB/sound\fR and \fB/clipboard\fR redirect those channels,
+\fB/cert:ignore\fR accepts the server certificate unconditionally \(em
+acceptable on a closed segment, a decision worth revisiting elsewhere.
+.IP "\fBRDP_PREAUTH\fP" 4
+Check the credentials against the KDC \fIbefore\fR starting the RDP client.
+Off by default.
+.IP "" 4
+Worth understanding before enabling. xrdp has no server\-side NLA, so it
+accepts the connection whatever the password is and validates inside the
+session, in its own dialog. A wrong password therefore does not end the
+connection: ldm never regains control and cannot tell the user what went
+wrong, and the connection stays open \(em measured against xrdp 0.10.1, a full
+minute after AUTHFAIL. With this set, ldm asks the KDC first and reports the
+real reason in the greeter: wrong password, locked account, expired password,
+clock skew too large, KDC unreachable.
+.IP "" 4
+It fails open. Any configuration problem \(em no realm, no krb5.conf \(em lets
+the connection proceed exactly as before, rather than locking people out of a
+working server because a check could not run.
+.IP "" 4
+It does not make the client a domain member: there is no machine account and
+no keytab, only the credentials the user has just typed, and the ticket is
+discarded as soon as it arrives.
+.IP "\fBRDP_PREAUTH_REALM\fP" 4
+Realm for the check above. Defaults to the system default realm from
+krb5.conf.
+.SH "KEYBOARD"
+.PP
+.IP "\fBXKBLAYOUT\fP, \fBCONSOLE_KEYMAP\fP" 4
+Set both, and set them before anyone tries to log in. With the client on a US
+layout and the user on a German keyboard, every password containing a
+character that moves between the layouts arrives wrong \(em a \fB\-\fR typed on
+QWERTZ reaches the server as \fB/\fR. The domain rejects it as a wrong password
+with nothing to suggest the layout is at fault, and the same credentials work
+when typed on the server. The Kerberos log is what gives it away:
+\fBPreauthentication failed\fR means wrong password, not unknown user and not
+unreachable server.
+.SH "SCREENS"
+.PP
+.IP "\fBSCREEN_\fP\fInn\fP" 4
+What to run on virtual terminal \fInn\fR, for example \fBSCREEN_02=shell\fR for
+a console on Alt+Ctrl+F2. \fBSCREEN_07=ldm\fR is the default, set by
+\fIltsp_config.d/15default\-screen\fR.
+.IP "" 4
+On a Debian client the greeter is started by \fBldm.service\fR, which runs
+\fBscreen_session 07\fR for that default. \fBltsp\-screen@.service\fR is
+shipped but deliberately not enabled: enable an instance only for an
+\fIadditional\fR screen, and never one that collides with the VT7 ldm uses \(em
+two greeters then fight over which VT owns the session.
+.IP "\fBSCREEN_\fP\fInn\fP\fB_WAIT_FGCONSOLE\fP" 4
+Whether screen_session waits for the console to become foreground before
+starting. Set \fBFalse\fR for the ldm screen on hardware where that wait never
+completes.
+.SH "GRAPHICS"
+.PP
+.IP "\fBX_COLOR_DEPTH\fP, \fBX_SMART_COLOR_DEPTH\fP" 4
+LTSP defaults thin clients to 16 bits per pixel to save bandwidth. Modern KMS
+drivers reject that outright \(em Xorg logs \fBfailed to add fb \-22\fR and the
+server exits \(em so the 16\-bit default now applies only where there is no
+\fI/dev/dri/card0\fR. On anything with a KMS device, leave both unset and let
+Xorg pick 24 or 32.
+.SH "CLIENT TYPE"
+.PP
+.IP "\fBLTSP_FATCLIENT\fP" 4
+Whether the session runs on the client rather than on a server. Normally not
+set by hand: it is derived from the image. If the image contains a local
+desktop session \(em any \fI/usr/share/xsessions/*.desktop\fR \(em the client is
+fat, otherwise thin. That makes the variant a property of the image, so thin
+and fat fleets are two images rather than two configurations, and per\-client
+selection becomes a question of which image a client boots.
+.IP "" 4
+A consequence worth knowing: adding a desktop package to a thin image to try
+something out silently turns it into a fat image at the next boot.
+.IP "\fBFAT_RAM_THRESHOLD\fP" 4
+Megabytes of RAM below which a client stays thin even on a fat image.
+Defaults to 400.
+.SH "SERVICES AND UPDATES"
+.PP
+.IP "\fBKEEP_SYSTEM_SERVICES\fP" 4
+Services the thin\-client cleanup would otherwise remove from the running
+client, space separated. \fB"ssh"\fR is useful while building an image and has
+no place in a production one.
+.IP "" 4
+Note that \fBsystemd\-logind\fR is no longer removed at all, whatever this is
+set to. Xorg 21 needs a logind session to obtain its DRM and input file
+descriptors; without it the X server exits immediately and is respawned
+forever, which presents as a text console rather than as an error.
+.IP "\fBLDM_NBD_CHECKUPDATE\fP" 4
+Whether ldm reboots the client when it finds a newer image on the server. Off
+by default. Reasonable for an unattended fleet, startling for anyone sitting
+in front of one \(em the greeter simply disappears mid\-login.
+.SH "FILES"
+.PP
+.IP "\fI/etc/ltsp/lts.conf\fP" 4
+The commented example, on the server.
+.IP "\fI/etc/lts.conf\fP" 4
+Where the client reads it from, inside the image.
+.SH "SEE ALSO"
+.PP
+\fBgetltscfg\fP(1),
+\fBinit\-ltsp\fP(1),
+\fBsetup\-ltsp\-app\fP(8),
+\fBsetup\-ltsp\-root\fP(8),
+/usr/share/doc/ltsp\-server/HOWTO\-lab\-from\-scratch.
+.SH "AVAILABILITY"
+.PP
+Part of the \fBltsp\-server\fP package; the latest version is available from
+\fIhttps://github.com/MAButz/ltsp6\fR.
+.SH "AUTHOR"
+.PP
+Copyright 2026 Marc\-Andre Beckmann\-Butz <ma@butz.online>, distributed under
+the terms of the GNU General Public License version 2 or any later version.

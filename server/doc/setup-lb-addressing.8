@@ -1,0 +1,68 @@
+.TH "setup-lb-addressing" "8" "2026-09-11" "ltsp6"
+.SH "NAME"
+setup\-lb\-addressing \(em Give the keepalived pair static addresses and matching peers
+.SH "SYNOPSIS"
+.PP
+\fBsetup\-lb\-addressing\fR \fIown\-ip/cidr\fR \fIpeer\-ip\fR \fIiface\fR \fIgateway\fR \fIdns\fR
+.SH "DESCRIPTION"
+.PP
+Run on each load balancer, as root. Sets the static address and rewrites
+\fBunicast_src_ip\fR and \fBunicast_peer\fR in keepalived.conf to match, then
+reboots onto the new configuration.
+.PP
+Run it before deploying haproxy\-rdp.cfg. Everything else on these two hosts
+names a peer by address, and an address that moves takes the pair apart.
+.SH "OPTIONS"
+.PP
+.IP "\fIown\-ip/cidr\fP" 4
+This node's static address.
+.IP "\fIpeer\-ip\fP" 4
+The other node's static address, written into \fBunicast_peer\fR.
+.IP "\fIiface\fP \fIgateway\fP \fIdns\fP" 4
+Interface, default gateway and resolver.
+.SH "EXAMPLE"
+.PP
+.nf
+setup\-lb\-addressing 172.17.250.51/20 172.17.250.52 ens18 \
+    172.17.240.1 172.17.250.10      # on lb1
+setup\-lb\-addressing 172.17.250.52/20 172.17.250.51 ens18 \
+    172.17.240.1 172.17.250.10      # on lb2
+.fi
+.SH "NOTES"
+.PP
+keepalived announces over unicast here because a virtual switch does not relay
+VRRP multicast between guests. Unicast works \(em but it names each peer by
+address, and both nodes were on DHCP. When the leases changed, neither node saw
+the other's advertisements, both promoted themselves to MASTER, and both
+answered ARP for the VIP. Connections were established through one node while
+their follow\-up packets arrived at the other, which reset them: RDP sessions
+died five to nine seconds in, HAProxy logging the abort in the data phase
+(\fBCD\fR), while the session server showed the session running happily.
+.PP
+Check that exactly one node holds the addresses:
+.PP
+.nf
+ip \-4 \-o addr show | grep \-E '172\.17\.249\.22[23]'
+.fi
+.PP
+The same failure had already taken out the Corosync quorum earlier, in a
+different disguise. \fBAny configuration that names a peer by address needs
+that address to be static\fR \(em and on a hypervisor whose virtual switch
+re\-randomises its subnet on host reboot, that includes checking the subnet
+itself has not moved.
+.SH "SEE ALSO"
+.PP
+\fBkeepalived.conf\fP(5),
+\fBhaproxy\fP(1),
+\fBsetup\-ltsp\-app\fP(8),
+/usr/share/doc/ltsp\-server/RDP\-loadbalancer\-HA,
+the keepalived examples under /usr/share/doc/ltsp\-server/examples.
+.SH "AVAILABILITY"
+.PP
+\fBsetup\-lb\-addressing\fR is part of the \fBltsp\-server\fP package; the
+latest version is available from \fIhttps://github.com/MAButz/ltsp6\fR.
+.SH "AUTHOR"
+.PP
+Copyright 2026 Marc\-Andr\('e Beckmann\-Butz <ma@butz.online>, distributed
+under the terms of the GNU General Public License version 2 or any later
+version.
