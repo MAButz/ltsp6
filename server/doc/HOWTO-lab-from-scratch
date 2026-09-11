@@ -916,6 +916,58 @@ Sorted by how much time each cost, worst first.
   any process still carrying XRDP_SESSION belongs to a lost session. The
   same rule on a running server would be wrong.
 
+  The hypervisor's switch moved the whole lab out from under it. Hyper-V's
+  "Default Switch" picks a new subnet on every host reboot - observed
+  going 172.17.240.0/20 -> 172.23.96.0/20 -> 172.24.192.0/20 within one
+  day. A statically addressed lab then sits on a network that no longer
+  exists: no gateway, nothing reachable from outside, and every address
+  anything names a peer by - the domain controller, the HAProxy backends,
+  the keepalived peers, each client's RDP_SERVER - pointing into nothing.
+  Nothing inside the lab is broken, which is what makes it confusing.
+
+  The fix is to stop borrowing that subnet: put the lab on an *internal*
+  switch, which has no DHCP and no management of its own, so its
+  addressing is whatever you say and survives reboots. Give each
+  hypervisor node a second adapter on it and move the bridge port over;
+  keep the first adapter on the Default Switch as a DHCP uplink for apt
+  and as a way in. Do not change the node addresses while doing it -
+  corosync names both nodes by address, and this is the same trap as
+  everywhere else in this document.
+
+  Reboot both nodes together, not one at a time. The moment one sits on
+  the internal switch and the other still on the old one they cannot see
+  each other, and a two-node cluster does not enjoy that.
+
+  Guests unreachable after moving to an internal switch, while the
+  hypervisor node itself answers fine. The node has its address on the
+  bridge interface; the guests are behind bridge ports, so their frames
+  leave the node's adapter carrying *their* MAC addresses, not the
+  adapter's. Hyper-V drops that by default. The setting is per network
+  adapter:
+
+      Get-VMNetworkAdapter -VMName pve1 |
+          Set-VMNetworkAdapter -MacAddressSpoofing On
+
+  It takes effect immediately, no reboot. The symptom is very specific and
+  worth recognising: ping the node - fine; ping anything behind it -
+  nothing, while from the node itself every guest answers.
+
+  HAProxy dead on the standby node, and only there. A frontend that binds
+  a VIP by name can only start on the node that currently holds it; on the
+  other one HAProxy fails outright, not just that frontend, so the standby
+  provides nothing at all. It is silent because the active node works
+  perfectly:
+
+      [ALERT] Binding [haproxy.cfg:59] for frontend rdp_staging_in: cannot
+              bind socket (Cannot assign requested address) for [VIP:3389]
+
+  Fix with net.ipv4.ip_nonlocal_bind = 1 on both nodes, which lets a
+  process bind an address the machine does not own; traffic still only
+  arrives where the VIP actually is. This is the standard pairing for
+  keepalived and HAProxy. Check it explicitly rather than assuming,
+  because a failover test that only ever runs on the active node will not
+  find it - ours did not.
+
   A guest that looks dead but is only waiting. /home is a hard NFS
   mount. Lose the address and every login blocks in the kernel waiting
   for a file server it can no longer route to - sshd included - so the

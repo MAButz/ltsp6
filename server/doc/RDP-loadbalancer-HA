@@ -327,6 +327,36 @@ on the same node serves both, so there is nothing to gain from letting them
 land on different nodes, and one instance means one failover to reason about.
 
 
+A frontend that binds a VIP can only start where the VIP is
+-------------------------------------------------------------
+
+Worth its own heading because it hides behind a working system. The staging
+frontend binds VIP_STAGING by name, which is what keeps the two environments
+apart. On the node that does not currently hold that address, HAProxy does not
+merely skip the frontend - it refuses to start at all:
+
+    [ALERT] Binding [haproxy.cfg:59] for frontend rdp_staging_in: cannot
+            bind socket (Cannot assign requested address) for [VIP:3389]
+
+So the standby node provides nothing, and nobody notices, because the active
+node is serving everything perfectly. The failover this pair exists for would
+have found an empty machine.
+
+    # on both nodes
+    echo 'net.ipv4.ip_nonlocal_bind = 1' > /etc/sysctl.d/60-haproxy-nonlocal-bind.conf
+    sysctl -p /etc/sysctl.d/60-haproxy-nonlocal-bind.conf
+
+That lets a process bind an address the machine does not own. Traffic still
+only arrives where the VIP actually is; the standby simply sits ready. It is
+the standard pairing for keepalived and HAProxy.
+
+Check it on the node that does *not* hold the VIP - that is the whole point,
+and a test run against the active node will always pass:
+
+    systemctl is-active haproxy     # on the standby
+    ss -tlnp | grep 3389
+
+
 Deployment checklist
 -------------------------
 
@@ -340,7 +370,10 @@ Deployment checklist
    and match the virtual_ipaddress block to the same VIPs used in step 3.
 5. In lts.conf: RDP_SERVER=<VIP_PROD> by default; the pilot/staging
    client group gets RDP_SERVER=<VIP_STAGING> instead (by MAC/hostname).
-6. Validate: pull a backend out of the pool (stop xrdp on it) and
+6. Confirm HAProxy is running on the node that does NOT hold the VIPs.
+   Without net.ipv4.ip_nonlocal_bind it cannot be, and nothing else in this
+   checklist would reveal that.
+7. Validate: pull a backend out of the pool (stop xrdp on it) and
    confirm HAProxy's stats page (port 8404) marks it down and traffic
    keeps flowing via the others; then stop haproxy on whichever node
    currently holds the VIPs and confirm the other node picks them up
