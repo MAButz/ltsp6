@@ -1,18 +1,18 @@
 Package: ldm
-Version: 3.0.2-1
+Version: 3.0.3-1
 Architecture: amd64
 Maintainer: Marc-André Beckmann-Butz <ma@butz.online>
-Installed-Size: 457
+Installed-Size: 455
 Depends: libc6 (>= 2.38), libcairo2 (>= 1.2.4), libcrypt1 (>= 1:4.1.0), libgdk-pixbuf-2.0-0 (>= 2.22.0), libglib2.0-0t64 (>= 2.22.0), libgtk-3-0t64 (>= 3.21.5), libkrb5-3 (>= 1.6.dfsg.2), libx11-6, libxext6, openssh-client, xserver-xorg | xserver, gettext-base, procps, xinit
 Recommends: freerdp3-x11 | freerdp2-x11, netcat-traditional | netcat, xauth
 Homepage: https://github.com/MAButz/ldm
 Priority: optional
 Section: misc
-Filename: pool/main/l/ldm/ldm_3.0.2-1_amd64.deb
-Size: 112464
-SHA256: 3ed870428362ff787de848cf8d802b263119e95ac5fe58b9640182adbb174823
-SHA1: 671d7f2e2f32cd3dbcda30717e6685d732cc364d
-MD5sum: 51a5a0ce7503089352d80bdcc637895c
+Filename: pool/main/l/ldm/ldm_3.0.3-1_amd64.deb
+Size: 101492
+SHA256: faa689369d67f91fd71d625f1fa273cbaccb5b27b5f75b4456c207665786b8b0
+SHA1: d6a78d6079c339454e223b5ba4323855b2d54854
+MD5sum: ee458ea755441663a680c11f461813ed
 Description: LTSP display manager (GTK3 / xfreerdp fork)
  ldm is an X11 display manager similar to xdm, gdm and kdm, used by LTSP
  (Linux Terminal Server Project) thin clients. This fork replaces the
@@ -29,39 +29,39 @@ Description: LTSP display manager (GTK3 / xfreerdp fork)
 
 Package: ldm-server
 Source: ldm
-Version: 3.0.2-1
+Version: 3.0.3-1
 Architecture: all
 Maintainer: Marc-André Beckmann-Butz <ma@butz.online>
-Installed-Size: 30
+Installed-Size: 31
 Depends: python3, x11-common, openssh-server, update-inetd, openbsd-inetd | inet-superserver
 Recommends: xauth
 Homepage: https://github.com/MAButz/ldm
 Priority: optional
 Section: misc
-Filename: pool/main/l/ldm/ldm-server_3.0.2-1_all.deb
-Size: 9384
-SHA256: a498326d2660aded8bceba87207856132a76acb04a3f9ba9c5cef44b7f172459
-SHA1: be09edbcc6ed23b03437384b183de33866c499f9
-MD5sum: bd6440d3933b0f9d7530433e2b2a64e7
+Filename: pool/main/l/ldm/ldm-server_3.0.3-1_all.deb
+Size: 10684
+SHA256: 848042b617f5281a3a882a82856882d36097273aaed3ab538615ba71fefbdf3e
+SHA1: c6da149faf701adeccb48214ade4d91b058e28e7
+MD5sum: a5e8e436c5e46b0426e9261b7294b749
 Description: server components for LTSP display manager
  This package includes the server-side components used by ldm to
  discover available sessions and locales on the server (ldminfod).
 
 Package: ltsp-client-core
 Source: ltsp
-Version: 6.0.0-4
+Version: 6.0.0-5
 Architecture: amd64
 Maintainer: Marc-André Beckmann-Butz <ma@butz.online>
-Installed-Size: 383
+Installed-Size: 385
 Depends: libc6 (>= 2.38), libfl2 (>= 2.5.33), libpopt0 (>= 1.14), initramfs-tools, udev, nbd-client, kbd, pciutils, xinit, x11-xserver-utils
 Homepage: https://github.com/MAButz/ltsp6
 Priority: optional
 Section: admin
-Filename: pool/main/l/ltsp/ltsp-client-core_6.0.0-4_amd64.deb
-Size: 88284
-SHA256: 46fce4d8faa012f801a298fb1c6177006b01c881ee29dfc38d74d85cc9a8ad1c
-SHA1: d86c1af7364aae2b0d62afaccb12675e58e6a2f0
-MD5sum: 069ebf8f794878fcbbc28eddf8a4a0ae
+Filename: pool/main/l/ltsp/ltsp-client-core_6.0.0-5_amd64.deb
+Size: 89508
+SHA256: 2611bdf9ebcda290293830f4c7c3835677be79fde5841f758bae13a17c744691
+SHA1: 764bc97b2629670aba65c4ae856f2afbaeade077
+MD5sum: 7eae397f502126c645ce3a54343c85e1
 Description: LTSP6 thin client core scripts and helpers
  Core client-side scripts, udev rules, initramfs-tools hooks and
  helper binaries (getltscfg, getltscfg-cluster, jetpipe, nbd-proxy,
@@ -72,20 +72,20 @@ Description: LTSP6 thin client core scripts and helpers
 
 Package: ltsp-server
 Source: ltsp
-Version: 6.0.0-4
+Version: 6.0.0-5
 Architecture: all
 Maintainer: Marc-André Beckmann-Butz <ma@butz.online>
-Installed-Size: 406
+Installed-Size: 521
 Depends: debootstrap, squashfs-tools, gettext-base, lsb-release, debconf-utils, openssh-client
 Recommends: nbd-server, tftpd-hpa, dnsmasq | isc-dhcp-server, nfs-kernel-server, xinetd
 Homepage: https://github.com/MAButz/ltsp6
 Priority: optional
 Section: admin
-Filename: pool/main/l/ltsp/ltsp-server_6.0.0-4_all.deb
-Size: 76452
-SHA256: 370909626aa9b4a43198f8c530b27b38398ba19e7c5f0fba6b849b82828f1921
-SHA1: a2bca686f14dcbe07bdf3fc35f32ce9fcc0b2c29
-MD5sum: 567cd8f7634e1b786c4c690c13a8f222
+Filename: pool/main/l/ltsp/ltsp-server_6.0.0-5_all.deb
+Size: 139312
+SHA256: 5d4c97a5ab903cb7f406b2363a86108313e603612c388d6a10bf93fac3fa7295
+SHA1: e964d8825b80576d5ba27b0298ca1202372f2384
+MD5sum: 1d42e895f994690f4eee4a8fa12e9203
 Description: LTSP6 thin client server tools
  ltsp-build-client, ltsp-config, ltsp-chroot, ltsp-info and related
  server-side tools for building and managing LTSP (Linux Terminal
