@@ -343,8 +343,9 @@ node is serving everything perfectly. The failover this pair exists for would
 have found an empty machine.
 
     # on both nodes
-    echo 'net.ipv4.ip_nonlocal_bind = 1' > /etc/sysctl.d/60-haproxy-nonlocal-bind.conf
-    sysctl -p /etc/sysctl.d/60-haproxy-nonlocal-bind.conf
+    f=/etc/sysctl.d/60-haproxy-nonlocal-bind.conf
+    echo 'net.ipv4.ip_nonlocal_bind = 1' > $f
+    sysctl -p $f
 
 That lets a process bind an address the machine does not own. Traffic still
 only arrives where the VIP actually is; the standby simply sits ready. It is
