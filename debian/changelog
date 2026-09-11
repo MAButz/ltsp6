@@ -1,4 +1,4 @@
-ltsp (6.0.0-5) trixie; urgency=medium
+ltsp (6.1.0-1) trixie; urgency=medium
 
   * The provisioning tools under server/tools are now installed into
     /usr/sbin, each with a manual page in section 8: build-apt-repo,
@@ -54,6 +54,11 @@ ltsp (6.0.0-5) trixie; urgency=medium
     CONSOLE_KEYMAP next to XKBLAYOUT - a layout mismatch mistypes the
     password and reads as a rejected login - and a note on SCREEN_07
     against ldm.service and ltsp-screen@.
+
+  * Numbered 6.1.0 rather than a fifth revision of 6.0.0: a Debian revision
+    says the packaging changed, and this changes what the package provides -
+    seven commands in /usr/sbin that were not there before, nine manual
+    pages, and two documents that existed only in the source tree.
 
  -- Marc-Andre Beckmann-Butz <ma@butz.online>  Fri, 11 Sep 2026 21:30:00 +0200
 
