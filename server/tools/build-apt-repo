@@ -108,6 +108,26 @@ if ! grep -qx 'db/' "$REPO/.gitignore" 2>/dev/null; then
     printf 'db/\nincoming/\n' >> "$REPO/.gitignore"
 fi
 
+# ------------------------------------------------------------- safety net
+# reprepro's db/ is local state and deliberately not committed, so a fresh
+# checkout starts with an empty database: the .debs are all still in pool/,
+# but nothing indexes them. Include one package into a suite from that state
+# and the export cheerfully publishes a suite containing only that package,
+# silently dropping everything that was there before. Found the hard way -
+# one publish took bookworm from two packages to none.
+#
+# The mapping from pool to suite cannot be recovered from pool/ alone, so this
+# cannot repair itself. What it can do is refuse to publish the loss.
+BEFORE=$(mktemp)
+for suite_dir in "$REPO"/dists/*/; do
+    [ -d "$suite_dir" ] || continue
+    suite=$(basename "$suite_dir")
+    for pkgfile in "$suite_dir"main/binary-*/Packages; do
+        [ -f "$pkgfile" ] || continue
+        awk -v s="$suite" '/^Package: /{print s" "$2}' "$pkgfile"
+    done
+done | sort -u > "$BEFORE"
+
 # ------------------------------------------------------------------ include
 if [ $# -gt 0 ]; then
     SUITE=$1
@@ -125,6 +145,33 @@ fi
 # ------------------------------------------------------------------ export
 echo "==> exporting and signing all suites"
 reprepro -b "$REPO" export
+
+AFTER=$(mktemp)
+for suite_dir in "$REPO"/dists/*/; do
+    [ -d "$suite_dir" ] || continue
+    suite=$(basename "$suite_dir")
+    for pkgfile in "$suite_dir"main/binary-*/Packages; do
+        [ -f "$pkgfile" ] || continue
+        awk -v s="$suite" '/^Package: /{print s" "$2}' "$pkgfile"
+    done
+done | sort -u > "$AFTER"
+
+LOST=$(comm -23 "$BEFORE" "$AFTER")
+rm -f "$BEFORE" "$AFTER"
+if [ -n "$LOST" ]; then
+    echo
+    echo "REFUSING TO PUBLISH: this export would remove packages that were" >&2
+    echo "already published:" >&2
+    echo "$LOST" | sed 's/^/    /' >&2
+    echo >&2
+    echo "Almost certainly an empty reprepro database (db/ is not committed)." >&2
+    echo "Re-include the missing packages from pool/ in the same run, e.g." >&2
+    echo "    $0 $REPO bookworm $REPO/pool/main/l/ltsp/ltsp-client_*.deb" >&2
+    echo "and repeat for each suite, then publish. Set LTSP6_ALLOW_REMOVALS=1" >&2
+    echo "if a package really is meant to disappear." >&2
+    [ "${LTSP6_ALLOW_REMOVALS:-}" = 1 ] || exit 1
+    echo "LTSP6_ALLOW_REMOVALS=1 set - continuing anyway." >&2
+fi
 
 echo "==> verification"
 for suite in bookworm trixie; do
