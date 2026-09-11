@@ -36,17 +36,21 @@ client window size, \fB/sound\fR and \fB/clipboard\fR redirect those channels,
 \fB/cert:ignore\fR accepts the server certificate unconditionally \(em
 acceptable on a closed segment, a decision worth revisiting elsewhere.
 .IP "\fBRDP_PREAUTH\fP" 4
-Check the credentials against the KDC \fIbefore\fR starting the RDP client.
-Off by default.
+Check the credentials \fIbefore\fR starting the RDP client. Off by default.
+\fBTrue\fR (or \fBkrb5\fR) asks a Kerberos KDC; \fBssh\fR asks an sshd, for
+sites whose accounts are local and which have no domain.
 .IP "" 4
 Worth understanding before enabling. xrdp has no server\-side NLA, so it
 accepts the connection whatever the password is and validates inside the
 session, in its own dialog. A wrong password therefore does not end the
 connection: ldm never regains control and cannot tell the user what went
 wrong, and the connection stays open \(em measured against xrdp 0.10.1, a full
-minute after AUTHFAIL. With this set, ldm asks the KDC first and reports the
-real reason in the greeter: wrong password, locked account, expired password,
-clock skew too large, KDC unreachable.
+minute after AUTHFAIL. With this set, ldm asks first and reports the real
+reason in the greeter. Kerberos distinguishes the most: wrong password, locked
+account, expired password, clock skew too large, KDC unreachable. sshd is
+deliberately vaguer - it answers "Permission denied" to a wrong password, a
+disabled account and a denied service alike, which is a security property
+rather than an oversight.
 .IP "" 4
 It fails open. Any configuration problem \(em no realm, no krb5.conf \(em lets
 the connection proceed exactly as before, rather than locking people out of a
@@ -56,8 +60,41 @@ It does not make the client a domain member: there is no machine account and
 no keytab, only the credentials the user has just typed, and the ticket is
 discarded as soon as it arrives.
 .IP "\fBRDP_PREAUTH_REALM\fP" 4
-Realm for the check above. Defaults to the system default realm from
+Realm for the Kerberos variant. Defaults to the system default realm from
 krb5.conf.
+.IP "\fBRDP_PREAUTH=ssh\fP" 4
+Asks sshd on the session host whether it accepts the credentials. That tests
+more than the password: it runs the PAM stack of the machine which will host
+the session, so an expired account, a \fBpam_access\fR rule or an sssd access
+rule deny here too - the kind of refusal a KDC knows nothing about.
+.IP "" 4
+It costs something Kerberos does not. Kerberos never puts the password on the
+wire; this sends it to whatever answers on that address. A thin client boots a
+read-only image and so has no persistent \fIknown_hosts\fR - trust on first
+use never gets past the first use, because every boot is a first use. The host
+keys therefore have to be known in advance:
+.IP "" 4
+.nf
+ltsp\-update\-sshkeys \-e /etc/ltsp/ssh_known_hosts.app 172.17.250.31
+.fi
+.IP "" 4
+The next image build picks that up, into the image's own
+\fIssh_known_hosts\fR. What it copies is \fBssh_host_*_key.pub\fR \(em public
+keys; nothing
+secret goes into the image. With an unknown or changed key, ssh refuses
+\fIbefore\fR asking for a password, so nothing is disclosed. That case is
+deliberately the one place this check does not fail open.
+.IP "\fBRDP_PREAUTH_HOST\fP" 4
+Host to ask, for the ssh variant. Optional: it defaults to \fBRDP_SERVER\fR
+and is only needed when \fBRDP_SERVER\fR is a load balancer. HAProxy forwards
+3389, so an ssh connection to that address reaches the balancer rather than a
+session server, where the accounts may not exist at all. Either name a session
+server here, or give the balancer a second listener on port 22 with the same
+stick\-table, so the check lands on the server that is about to get the
+session.
+.IP "\fBRDP_PREAUTH_SSH_KNOWN_HOSTS\fP" 4
+Where to look for the host keys. Defaults to \fI/etc/ssh/ssh_known_hosts\fR,
+which is where ltsp\-update\-sshkeys(8) puts them.
 .SH "KEYBOARD"
 .PP
 .IP "\fBXKBLAYOUT\fP, \fBCONSOLE_KEYMAP\fP" 4
@@ -135,6 +172,7 @@ Where the client reads it from, inside the image.
 \fBinit\-ltsp\fP(1),
 \fBsetup\-ltsp\-app\fP(8),
 \fBsetup\-ltsp\-root\fP(8),
+\fBltsp\-update\-sshkeys\fP(8),
 /usr/share/doc/ltsp\-server/HOWTO\-lab\-from\-scratch.
 .SH "AVAILABILITY"
 .PP

@@ -16,6 +16,15 @@ ltsp (6.0.0-5) trixie; urgency=medium
     /usr/share/doc/ltsp-server; they were written but never shipped.
   * The preseeds are installed into /usr/share/ltsp-server/preseed as
     reference material for build-autoinstall-iso(8).
+  * lts.conf(5) documents RDP_PREAUTH=ssh, RDP_PREAUTH_HOST and
+    RDP_PREAUTH_SSH_KNOWN_HOSTS (ldm >= 3.0.3-1): the credential check for
+    sites with local accounts and no KDC. It records what that variant
+    costs as well as what it buys - it sends the password to the host it
+    asks, where Kerberos does not, so the host keys belong in the image
+    via ltsp-update-sshkeys(8), which copies ssh_host_*_key.pub and
+    nothing secret. RDP_PREAUTH_HOST exists because HAProxy forwards 3389
+    only: ssh to the load balancer address would reach the balancer, not a
+    session server.
   * ltsp-swapfile-delete(8) is documented too - it was the last command in
     the package without a manual page. Writing it turned up a real fault
     worth recording: the script ends by calling /usr/sbin/tmpwatch, a Red
