@@ -1,5 +1,5 @@
 Package: ldm
-Version: 3.0.3-1
+Version: 3.1.0-1
 Architecture: amd64
 Maintainer: Marc-André Beckmann-Butz <ma@butz.online>
 Installed-Size: 455
@@ -8,11 +8,11 @@ Recommends: freerdp3-x11 | freerdp2-x11, netcat-traditional | netcat, xauth
 Homepage: https://github.com/MAButz/ldm
 Priority: optional
 Section: misc
-Filename: pool/main/l/ldm/ldm_3.0.3-1_amd64.deb
-Size: 101492
-SHA256: faa689369d67f91fd71d625f1fa273cbaccb5b27b5f75b4456c207665786b8b0
-SHA1: d6a78d6079c339454e223b5ba4323855b2d54854
-MD5sum: ee458ea755441663a680c11f461813ed
+Filename: pool/main/l/ldm/ldm_3.1.0-1_amd64.deb
+Size: 101600
+SHA256: 2c6b0f3d013f17c5404b7433184f7906cfc6b7d09c3b65020d440648ee1ba16d
+SHA1: 456a8cf2080fa67454ff38940b1fed4fde2c6177
+MD5sum: 0a8fe3b2cf816ddf5b32159472f0d302
 Description: LTSP display manager (GTK3 / xfreerdp fork)
  ldm is an X11 display manager similar to xdm, gdm and kdm, used by LTSP
  (Linux Terminal Server Project) thin clients. This fork replaces the
@@ -29,7 +29,7 @@ Description: LTSP display manager (GTK3 / xfreerdp fork)
 
 Package: ldm-server
 Source: ldm
-Version: 3.0.3-1
+Version: 3.1.0-1
 Architecture: all
 Maintainer: Marc-André Beckmann-Butz <ma@butz.online>
 Installed-Size: 31
@@ -38,18 +38,18 @@ Recommends: xauth
 Homepage: https://github.com/MAButz/ldm
 Priority: optional
 Section: misc
-Filename: pool/main/l/ldm/ldm-server_3.0.3-1_all.deb
-Size: 10684
-SHA256: 848042b617f5281a3a882a82856882d36097273aaed3ab538615ba71fefbdf3e
-SHA1: c6da149faf701adeccb48214ade4d91b058e28e7
-MD5sum: a5e8e436c5e46b0426e9261b7294b749
+Filename: pool/main/l/ldm/ldm-server_3.1.0-1_all.deb
+Size: 10800
+SHA256: 699d20161df2999ee03bdf76333832486dacf4cabd5ee922a743265a96cffd6c
+SHA1: 8c31dd9daef125fd96413d698a80d7ae5b75adeb
+MD5sum: 9355cd200f00b5738160653f277af38f
 Description: server components for LTSP display manager
  This package includes the server-side components used by ldm to
  discover available sessions and locales on the server (ldminfod).
 
 Package: ltsp-client-core
 Source: ltsp
-Version: 6.0.0-5
+Version: 6.1.0-1
 Architecture: amd64
 Maintainer: Marc-André Beckmann-Butz <ma@butz.online>
 Installed-Size: 385
@@ -57,11 +57,11 @@ Depends: libc6 (>= 2.38), libfl2 (>= 2.5.33), libpopt0 (>= 1.14), initramfs-tool
 Homepage: https://github.com/MAButz/ltsp6
 Priority: optional
 Section: admin
-Filename: pool/main/l/ltsp/ltsp-client-core_6.0.0-5_amd64.deb
-Size: 89508
-SHA256: 2611bdf9ebcda290293830f4c7c3835677be79fde5841f758bae13a17c744691
-SHA1: 764bc97b2629670aba65c4ae856f2afbaeade077
-MD5sum: 7eae397f502126c645ce3a54343c85e1
+Filename: pool/main/l/ltsp/ltsp-client-core_6.1.0-1_amd64.deb
+Size: 90076
+SHA256: 63b503f027ce8adc69fb3c1e176f01239e838d30cb95e88361678b76e6df1a2d
+SHA1: 0d1555ef5421c76ecf79279ad8f9fb753e54eb82
+MD5sum: e49a49b9671728f8e572104e65ab5c9c
 Description: LTSP6 thin client core scripts and helpers
  Core client-side scripts, udev rules, initramfs-tools hooks and
  helper binaries (getltscfg, getltscfg-cluster, jetpipe, nbd-proxy,
@@ -72,20 +72,20 @@ Description: LTSP6 thin client core scripts and helpers
 
 Package: ltsp-server
 Source: ltsp
-Version: 6.0.0-5
+Version: 6.1.0-1
 Architecture: all
 Maintainer: Marc-André Beckmann-Butz <ma@butz.online>
-Installed-Size: 521
+Installed-Size: 526
 Depends: debootstrap, squashfs-tools, gettext-base, lsb-release, debconf-utils, openssh-client
 Recommends: nbd-server, tftpd-hpa, dnsmasq | isc-dhcp-server, nfs-kernel-server, xinetd
 Homepage: https://github.com/MAButz/ltsp6
 Priority: optional
 Section: admin
-Filename: pool/main/l/ltsp/ltsp-server_6.0.0-5_all.deb
-Size: 139312
-SHA256: 5d4c97a5ab903cb7f406b2363a86108313e603612c388d6a10bf93fac3fa7295
-SHA1: e964d8825b80576d5ba27b0298ca1202372f2384
-MD5sum: 1d42e895f994690f4eee4a8fa12e9203
+Filename: pool/main/l/ltsp/ltsp-server_6.1.0-1_all.deb
+Size: 143484
+SHA256: 8ee054fbaab478f954a33510da6cfea352384459641a935bef1ee96c1cf85634
+SHA1: 0e65218b7a893a94941483cc311e0d787c61692c
+MD5sum: aecb74582654bdbde4d344cefed1c4e3
 Description: LTSP6 thin client server tools
  ltsp-build-client, ltsp-config, ltsp-chroot, ltsp-info and related
  server-side tools for building and managing LTSP (Linux Terminal
