@@ -59,6 +59,9 @@ the keyring file is missing. Do not answer that with `trusted=yes`.
 
 | Suite | Package | Version |
 |---|---|---|
+| `trixie` | `ltsp-server` | 6.0.0-4 |
+| `trixie` | `ltsp-client-core` | 6.0.0-4 |
+| `trixie` | `ldm`, `ldm-server` | 3.0.2-1 |
 | `trixie` | `ltsp6-session-tuning` | 1.0.0 |
 | `bookworm` | `ltsp-client`, `ltsp-client-core` | 5.18.12-3 |
 

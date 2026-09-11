@@ -71,10 +71,10 @@ Prerequisites
   - A Debian netinst ISO on each node, in /var/lib/vz/template/iso.
   - xorriso on whichever node builds the install media.
   - The scripts from server/tools in this repository.
-  - Packages built from the current tree, not the published release
-    assets. See "The packaged release lags the tree" below - a client
-    built from the published ltsp-client-core boots to a text login and
-    nothing says why.
+  - ltsp-client-core 6.0.0-4 and ldm 3.0.2-1 or newer, from the apt
+    archive or built from the tree. See "The packaged release lags the
+    tree" below: the first release assets were stale, and a client built
+    from those boots to a text login and nothing says why.
   - Roughly 12 GB of RAM across the two nodes for the full set, and
     about 8 GB of disk per guest. Watch the node that holds the image
     server: image builds are what fills it up.
@@ -83,29 +83,40 @@ Prerequisites
 The packaged release lags the tree
 --------------------------------------
 
-Check this before anything else. Both published .deb assets were built
-from an older tree than master, and the difference is not cosmetic:
+Check this before anything else, and check it by version. The first
+published .deb assets were built from an older tree than master, and the
+difference was not cosmetic:
 
     ltsp-client-core 6.0.0-1   missing /usr/share/ltsp/ltsp-client-common-functions
     ldm              3.0.0-1   missing /usr/lib/systemd/system/ldm.service
 
-debian/rules installs the first one correctly (it is the only file that
-differs from a fresh build), so this is a stale artefact, not a
+debian/rules installs the first one correctly (it was the only file that
+differed from a fresh build), so this was a stale artefact, not a
 packaging bug. The file defines run_parts_list and boolean_is_true. With
 it absent, ltsp-client-functions sources a file that is not there, both
 functions are undefined, and init-ltsp and screen_session fail silently
 one line at a time - no error, no service in a failed state, just a
 client that boots to a text login. Nothing in the logs names the cause.
 
-So build from the tree:
+ltsp-client-core 6.0.0-4 and ldm 3.0.2-1 in the apt archive carry both
+files, so on those versions this section is history and the packages can
+be used as they come. It stays here because the symptom is unreadable
+and the check is one line per package:
+
+    dpkg -L ltsp-client-core | grep ltsp-client-common-functions
+    dpkg -L ldm | grep ldm.service
+
+Run it against whatever version you actually have rather than trusting
+the number. If the file is absent, build from the tree:
 
     apt-get install -y build-essential debhelper flex bison libpopt-dev \
         autoconf automake libtool dpkg-dev gettext
     dpkg-buildpackage -b -us -uc
 
-Bump debian/changelog first. Both releases carry the same version as the
-stale asset, so a rebuild is indistinguishable from what is already
-published and apt sees no upgrade.
+Bump debian/changelog first. A stale asset carries the same version as
+the tree it should have come from, so a rebuild at that version is
+indistinguishable from what is already published and apt sees no
+upgrade.
 
 Step 1 - Build the auto-install media
 -----------------------------------------
@@ -471,19 +482,74 @@ Step 5 spells the image out by hand because that keeps the recipe
 legible: nothing hidden happens between "install a package" and "clients
 get it". ltsp-server ships the older route as well, and if that is how
 your images have always been built, it still works - ltsp-build-client
-with the full Debian plugin set is in the package.
+with the full Debian plugin set is in the package. It needs three
+arguments the older recipes did not, and the reason is the same in each
+case: the plugin set predates both this archive and Debian 13.
 
     ltsp-build-client \
+        --base /srv/ltsp \
         --arch amd64 \
         --dist trixie \
         --components main,non-free-firmware \
         --apt-keys /etc/apt/keyrings/ltsp6.asc \
-        --extra-mirror "deb https://mabutz.github.io/ltsp6 trixie main" \
+        --extra-mirror "https://mabutz.github.io/ltsp6 trixie main" \
+        --early-packages ca-certificates \
         --late-packages ldm,ltsp-client-core,freerdp3-x11,firmware-realtek \
         --purge-chroot
 
-Three things about that command are not obvious, and each one has cost
+Read the last line of the output before you believe the exit status.
+ltsp-build-client returns 0 on a build that ended at "error: LTSP client
+installation ended abnormally", so "echo $?" says nothing useful and a
+failed build leaves a chroot behind that looks plausible until you run
+dpkg -l in it. The successful run ends with "info: LTSP client
+installation completed successfully"; nothing else counts.
+
+Six things about that command are not obvious, and each one has cost
 somebody an afternoon.
+
+  --extra-mirror takes "URI dist components" and no "deb" in front of
+  it. add_mirrors() in ltsp-build-client-functions writes the "deb "
+  prefix itself, so a value that carries its own produces the line
+  "deb deb https://mabutz.github.io/ltsp6 trixie main" in the chroot's
+  sources.list. apt then stops at "Malformed entry 2 in list file
+  /etc/apt/sources.list (URI parse)" and every later stage fails for
+  want of a package list. The error names the file and not the option
+  that wrote it, which is what makes this one slow to find.
+
+  --early-packages ca-certificates, because the archive is HTTPS and the
+  chroot has no CA store. 000-basic-configuration sets DEBOOTSTRAPOPTS
+  to --variant=minbase, and minbase has no ca-certificates; apt inside
+  the chroot then fails on this archive alone with "SSL connection
+  failed: error:0A000086:SSL routines::certificate verify failed", which
+  apt reports as a warning rather than an error. The build continues,
+  the Debian mirrors having answered, and dies later at the late
+  packages with ldm and ltsp-client-core "not found" - a symptom two
+  phases away from its cause.
+
+  That option is also what keeps the default from firing. EARLY_PACKAGES
+  defaults to "ltsp-client", which LTSP5 shipped and this tree does not:
+  debian/control defines ltsp-server and ltsp-client-core, nothing else.
+  Left at the default the build stops at "E: Unable to locate package
+  ltsp-client". Any value at all displaces it, so the two problems have
+  one fix.
+
+  The apt index still needs re-reading after that. Early packages are
+  installed in the after-install phase and late packages in
+  finalization, and no plugin between them runs apt-get update - so the
+  index that failed to verify before ca-certificates existed is still
+  the missing index when ldm is wanted. /etc/ltsp/plugins/ltsp-build-client
+  is searched before the packaged plugins and is the place for this:
+
+    # /etc/ltsp/plugins/ltsp-build-client/031-apt-update-after-certs
+    case "$MODE" in
+        after-install)
+            chroot $ROOT apt-get update
+            ;;
+    esac
+
+  The number puts it after 030-early-packages and before finalization.
+  Without it the build fails exactly as it does without
+  ca-certificates, which makes the two easy to confuse.
 
   --components. debootstrap enables main and nothing else, and
   firmware-realtek lives in non-free-firmware. Leave it out and the image
@@ -494,7 +560,11 @@ somebody an afternoon.
   Debian 13's 6.12 driver knows RTL8125A, B and D and asks for
   rtl8125d-1.fw by name. What is missing is the file. With NBD root it
   has to be in the initramfs too, not only in the image - the card must
-  work before there is a root filesystem to read it from.
+  work before there is a root filesystem to read it from. Debian 13's
+  initramfs.conf ships MODULES=most, which pulls r8169.ko and the whole
+  of rtl_nic in on its own; confirm rather than assume it:
+
+    lsinitramfs /srv/ltsp/amd64/boot/initrd.img-* | grep rtl8125d
 
   030-default-lts-conf overwrites /etc/lts.conf. It runs in the
   finalization phase and writes a stub over whatever is there, so an
@@ -507,6 +577,39 @@ somebody an afternoon.
   one source). For a client image that talks to two mirrors it is a small
   difference; if it matters to you, drop the key in yourself and write
   the .sources file with Signed-By instead.
+
+Because lts.conf is overwritten in finalization, and because a root
+password and sshd cannot be set from the command line either
+(--prompt-rootpass wants a terminal), the build splits in two: build the
+chroot, change it, then make the image.
+
+    ltsp-build-client ... --no-squashfs-image
+    # write lts.conf, ltsp-screen@.service, root password into
+    # /srv/ltsp/amd64 as in step 5
+    chroot /srv/ltsp/amd64 update-initramfs -u -k all
+    ltsp-update-image --config-nbd -b /srv/ltsp amd64
+
+That is the same code the build would have run - 095-squashfs-image
+calls ltsp-update-image --config-nbd and nothing more - so nothing is
+lost by doing it in two steps.
+
+What comes out is not named the way step 4 expects. ltsp-update-kernels
+writes to $TFTP_BOOT_DIR/$ARCH, and TFTP_BOOT_DIR defaults to "ltsp", so
+the kernel lands in /srv/tftp/ltsp/amd64/vmlinuz where the iPXE script
+in step 4 asks for /vmlinuz. ltsp-update-image names the NBD export
+after the chroot's path, so it is [/srv/ltsp/amd64] and not the
+[ltsp-amd64] that same script names in nbdroot=. Neither mismatch says
+anything at build time; the client gets an address, fetches nothing, and
+stops. Set TFTP_BOOT_DIR="" in /etc/ltsp/ltsp-server.conf and rename the
+export in /etc/nbd-server/conf.d, or edit the iPXE script to match what
+you have - but decide it here rather than in front of a booting client.
+
+One more thing ltsp-config leaves behind: the export it writes carries
+"authfile = /etc/ltsp/nbd-server.allow" and nothing ever creates that
+file. nbd-server serves the export anyway, so this does not break a
+lab - it means the export has no address restriction at all, which is a
+different thing from the one the config file appears to promise. On a
+segment with machines that are not yours, write the file.
 
 Worth knowing either way: --squashfs-image / --no-squashfs-image decide
 whether you get the image or just the chroot, --install-debs-dir takes a
