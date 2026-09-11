@@ -1,3 +1,20 @@
+ltsp (6.1.0-2) trixie; urgency=medium
+
+  * Fixed: the scripts under /usr/share/ltsp shipped without their
+    executable bit, so a client booted to a text login and systemd reported
+    ldm.service as "status=203/EXEC" - which names no file and reads like a
+    missing binary rather than a wrong mode. Found on a PXE-booted client:
+    /usr/share/ltsp/screen_session was -rw-r--r--.
+  * Cause was the build, not the tree: git records screen_session, xinitrc
+    and twelve others as 100755, but a Windows checkout has core.filemode
+    false and carries no executable bit at all, and debian/rules copies that
+    tree with cp -a. Only the handful of files installed explicitly with
+    install -m0755 survived. The build now restores the modes git records
+    before packaging.
+  * 6.1.0-1 and 6.0.0-5 are affected and should not be used.
+
+ -- Marc-Andre Beckmann-Butz <ma@butz.online>  Fri, 11 Sep 2026 23:15:00 +0200
+
 ltsp (6.1.0-1) trixie; urgency=medium
 
   * The provisioning tools under server/tools are now installed into
