@@ -1,3 +1,35 @@
+ltsp (6.2.2-1) unstable; urgency=medium
+
+  * HOWTO: lts.conf over TFTP needs a tftp client in the image, and nothing
+    says so when it is missing. init-ltsp.d/05-getltsconffile fetches it with
+    the plain "tftp" command, which ltsp-build-client does not install, and
+    the script only checks that what it fetched is non-empty - so with no
+    tftp binary the client keeps the stub that 030-default-lts-conf wrote
+    during finalization, silently.
+
+    The symptom is a greeter that comes up perfectly and is configured for
+    nothing: no RDP_SERVER, the ssh backend by default, a US keyboard, and
+    KEEP_SYSTEM_SERVICES ignored so sshd is gone as well. It reads as
+    "lts.conf is being ignored", which is true, two steps earlier than it
+    appears. tftp-hpa is now in the documented --late-packages list, with
+    the trap written up next to the others.
+
+    Verified on a PXE-booted client afterwards: the whole chain from
+    ipxe.efi through ltsp.ipxe, kernel, initrd and NBD to a running greeter,
+    with lts.conf fetched over TFTP and its settings present in the greeter
+    process environment.
+
+  * HOWTO: UEFI clients get no boot offer when dnsmasq only has pxe-service.
+    That is the PXE boot menu protocol, which most UEFI firmware does not
+    answer - it reports PXE-E16 "No valid offer received" even though the
+    address was assigned. They need the boot file named directly in the DHCP
+    reply, tied to the client architecture (RFC 4578: 7 and 9 for EFI
+    x86-64). Having both configured is worse than having only dhcp-boot:
+    dnsmasq then points the firmware at the boot server protocol it will not
+    speak.
+
+ -- Marc-Andre Beckmann-Butz <ma@butz.online>  Sat, 12 Sep 2026 10:45:00 +0200
+
 ltsp (6.2.1-1) unstable; urgency=medium
 
   * lts.conf(5): document the lockout warnings that ldm 3.2.0 adds -

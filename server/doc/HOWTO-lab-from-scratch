@@ -358,7 +358,7 @@ same in each case: the plugin set predates both this archive and Debian 13.
         --apt-keys /etc/apt/keyrings/ltsp6.asc \
         --extra-mirror "https://mabutz.github.io/ltsp6 trixie main" \
         --early-packages ca-certificates \
-        --late-packages ldm,ltsp-client-core,freerdp3-x11,firmware-realtek \
+        --late-packages ldm,ltsp-client-core,freerdp3-x11,tftp-hpa,firmware-realtek \
         --purge-chroot
 
 Read the last line of the output before you believe the exit status.
@@ -368,8 +368,24 @@ failed build leaves a chroot behind that looks plausible until you run
 dpkg -l in it. The successful run ends with "info: LTSP client
 installation completed successfully"; nothing else counts.
 
-Seven things about that command are not obvious, and each one has cost
+Eight things about that command are not obvious, and each one has cost
 somebody an afternoon.
+
+  lts.conf over TFTP needs a tftp client IN THE IMAGE, and nothing says
+  so when it is missing. init-ltsp.d/05-getltsconffile fetches lts.conf with
+  the plain "tftp" command; ltsp-build-client's package set does not include
+  one, and the script only checks that what it fetched is non-empty:
+
+      tftp -m binary "$SERVER" -c get .../lts.conf "$tmp"
+      if [ -s "$tmp" ]; then mv "$tmp" /etc/lts.conf; fi
+
+  With no tftp binary the command fails, the temporary file stays empty, and
+  the client keeps the stub that 030-default-lts-conf wrote during
+  finalization - silently. The symptom is a greeter that comes up perfectly
+  and is configured for nothing: no RDP_SERVER, the ssh backend by default,
+  a US keyboard, and KEEP_SYSTEM_SERVICES ignored so sshd is gone too. It
+  looks like lts.conf is being ignored, which is exactly what is happening,
+  just two steps earlier than it appears. Put tftp-hpa in --late-packages.
 
   --apt-keys needs gpg on the BUILD HOST, not in the image. The plugin
   that handles it, Debian/001-apt-keys, runs "gpg --dearmor < $key" as a
@@ -942,6 +958,35 @@ Traps, and how each one announces itself
 --------------------------------------------
 
 Sorted by how much time each cost, worst first.
+
+  PXE-E16 on UEFI clients while BIOS clients boot fine. The firmware
+  says "Station IP address is 172.17.249.182" - so the address was
+  assigned - and immediately after, "PXE-E16: No valid offer received",
+  then falls through HTTP boot to the UEFI shell.
+
+  dnsmasq was offering only pxe-service. That is the PXE boot menu
+  protocol, and most UEFI firmware does not answer it; it wants the boot
+  file named directly in the DHCP reply. Tie one to the client
+  architecture (RFC 4578: 0 is BIOS, 7 and 9 are EFI x86-64):
+
+      dhcp-match=set:efi-x86_64,option:client-arch,7
+      dhcp-match=set:efi-x86_64,option:client-arch,9
+      dhcp-boot=tag:efi-x86_64,tag:!ipxe,ipxe.efi
+
+  Then remove the EFI pxe-service line. Keeping both is worse than
+  having only dhcp-boot: dnsmasq points the firmware at the boot server
+  protocol it will not speak, and the file offer goes unused. With only
+  dhcp-boot the log reads "tags: efi-x86_64" and "sent size: 9 option:
+  67 bootfile-name ipxe.efi", and the transfer follows. The BIOS
+  pxe-service line stays - undionly.kpxe is still served that way.
+
+  A backup file left in /etc/dnsmasq.d/. dnsmasq reads every file in
+  that directory, so a copy of the config next to the config is the
+  config twice: "illegal repeated keyword at line 3 of
+  /etc/dnsmasq.d/ltsp.conf.bak", and the service refuses to start.
+  Note that "dnsmasq --test" passed while the packaged checkconfig
+  helper failed, so the syntax check is not the thing to trust. Put
+  backups anywhere else.
 
   A successful login that ends after two seconds, with no error
   anywhere. The client is told ERRINFO_LOGOFF_BY_USER - "the user logged
