@@ -110,6 +110,63 @@ session.
 .IP "\fBRDP_PREAUTH_SSH_KNOWN_HOSTS\fP" 4
 Where to look for the host keys. Defaults to \fI/etc/ssh/ssh_known_hosts\fR,
 which is where ltsp\-update\-sshkeys(8) puts them.
+.SH "SSH HOST KEYS"
+.PP
+.IP "\fBSSH_KNOWN_HOSTS\fP, \fBSSH_KNOWN_HOSTS_\fP\fIn\fP" 4
+Host keys to add to \fI/etc/ssh/ssh_known_hosts\fR when the client boots.
+Each value is one complete known_hosts line \(em host, key type, key \(em and
+the numbered form takes as many as needed:
+.IP "" 4
+.nf
+SSH_KNOWN_HOSTS_0="172.17.250.31 ssh\-ed25519 AAAAC3Nza..."
+SSH_KNOWN_HOSTS_1="172.17.250.32 ssh\-ed25519 AAAAC3Nza..."
+.fi
+.IP "" 4
+Numbering starts at 0 and stops at the first gap, so a mistyped index shows up
+as one missing key rather than silently dropping every key after it. Entries
+are appended, so keys baked into the image by ltsp\-update\-sshkeys(8) are
+kept; a line that is already present is not added twice, and a malformed line
+or an unrecognised key type is refused with a message on the boot console
+rather than written \(em ssh stops reading known_hosts at the first line it
+cannot parse, which would quietly discard everything below it.
+.IP "" 4
+This exists for \fBRDP_PREAUTH=ssh\fR, which refuses to proceed against a host
+key it does not recognise. A thin client boots a read\-only image and keeps no
+known_hosts between boots, so trust on first use never gets past the first
+use \(em every boot is one. Naming the keys here rather than baking them in
+means a session server can be added, or its key rotated, without rebuilding
+the image, and per\-client sections can give a pilot group a different set of
+servers to trust than production has.
+.IP "" 4
+What it is worth: lts.conf is fetched over TFTP at boot (see FILES), which is
+unauthenticated, so a key named here is only as trustworthy as that transfer.
+That is not a step down from baking it into the image \(em the client already
+fetches its kernel, initrd and whole root filesystem the same way, and
+whoever can interfere with that owns the client regardless. The pinning is
+exactly as strong as the boot chain and no stronger. It would become the weak
+link the moment the boot chain is secured and lts.conf is left on plain TFTP.
+.SH "PER-SCREEN DIRECTIVES"
+.PP
+Any directive can be given per screen by prefixing it with \fBSCREEN_\fInn\fB_\fR.
+When \fBscreen_session\fR runs for screen \fInn\fR it renames those into the
+plain names for that process only, so several greeters can run at once with
+different settings:
+.IP "" 4
+.nf
+SCREEN_05=ldm
+SCREEN_06=ldm
+SCREEN_05_RDP_SERVER=172.17.250.31
+SCREEN_06_RDP_SERVER=172.17.249.223
+SCREEN_06_RDP_PREAUTH=ssh
+.fi
+.IP "" 4
+Each screen gets its own X server and its own DISPLAY, derived from the tty,
+so they do not collide. Only the screen ldm.service starts (07 by default) is
+enabled out of the box; the others are enabled by hand with
+\fBsystemctl enable ltsp\-screen@\fP\fIn\fP. Note that every screen waits for
+its virtual terminal to come to the foreground before starting unless
+\fBSCREEN_\fInn\fB_WAIT_FGCONSOLE\fR is False \(em with it False on all of
+them, all their X servers start at once, which costs the memory of each.
 .SH "KEYBOARD"
 .PP
 .IP "\fBXKBLAYOUT\fP, \fBCONSOLE_KEYMAP\fP" 4
@@ -180,7 +237,15 @@ in front of one \(em the greeter simply disappears mid\-login.
 .IP "\fI/etc/ltsp/lts.conf\fP" 4
 The commented example, on the server.
 .IP "\fI/etc/lts.conf\fP" 4
-Where the client reads it from, inside the image.
+Where the client reads it from \(em getltscfg(1) opens this path and no other.
+.IP "" 4
+It is not necessarily the copy that was in the image.
+\fIinit\-ltsp.d/05\-getltsconffile\fR fetches lts.conf over TFTP from the boot
+server early in the client's startup and overwrites this file when the
+transfer returns something non\-empty, so a client can be reconfigured without
+rebuilding the image. That also means the contents arrive over an
+unauthenticated channel, which is worth knowing before putting anything
+security\-relevant in them \(em see SSH HOST KEYS.
 .SH "SEE ALSO"
 .PP
 \fBgetltscfg\fP(1),

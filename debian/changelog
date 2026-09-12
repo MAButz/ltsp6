@@ -1,3 +1,28 @@
+ltsp (6.2.0-1) trixie; urgency=medium
+
+  * New: SSH_KNOWN_HOSTS and SSH_KNOWN_HOSTS_n in lts.conf, added to
+    /etc/ssh/ssh_known_hosts at boot by init-ltsp.d/06-ssh-known-hosts.
+    RDP_PREAUTH=ssh refuses to proceed against a host key it does not
+    recognise, and a thin client keeps no known_hosts between boots - so
+    the keys have to be known in advance. Until now that meant baking them
+    into the image with ltsp-update-sshkeys(8) and rebuilding 650 MB to add
+    a server or rotate a key. Naming them in lts.conf also allows per-client
+    sections, so a pilot group can trust a different set of servers than
+    production does, which a flat file in the image cannot express.
+  * Entries are appended, so image-baked keys survive; a line already
+    present is not added twice; a malformed line or unrecognised key type is
+    refused with a message rather than written, because ssh stops reading
+    known_hosts at the first line it cannot parse and would discard
+    everything below it. Numbering stops at the first gap so a mistyped
+    index costs one key rather than all the later ones.
+  * lts.conf(5) gains that, a section on the per-screen SCREEN_nn_ prefix -
+    which has always worked and was never written down - and a FILES note
+    that lts.conf is fetched over TFTP at boot and overwrites the copy in
+    the image, which is what makes the above possible and also what limits
+    how much it is worth.
+
+ -- Marc-Andre Beckmann-Butz <ma@butz.online>  Sat, 12 Sep 2026 00:30:00 +0200
+
 ltsp (6.1.0-2) trixie; urgency=medium
 
   * Fixed: the scripts under /usr/share/ltsp shipped without their

@@ -1,0 +1,88 @@
+# Add the SSH host keys named in lts.conf to /etc/ssh/ssh_known_hosts.
+#
+# Why this exists. The RDP backend can verify credentials before starting the
+# session (RDP_PREAUTH=ssh), and that check refuses to proceed against a host
+# key it does not recognise - deliberately, since it is about to send a
+# password. A thin client boots a read-only image and keeps no known_hosts
+# between boots, so "trust on first use" never gets past the first use: every
+# boot is one. The keys therefore have to be known in advance.
+#
+# ltsp-update-sshkeys(8) bakes them into the image, and cleanup.d/50-ssh-keys
+# assembles that file at image build time. This is the other way: name them in
+# lts.conf, and a server can be added or a key rotated without rebuilding a
+# 650 MB image. lts.conf also has per-client sections, so a pilot group can
+# trust a different set of servers than production does - which a flat file in
+# the image cannot express.
+#
+# What it is worth, honestly. lts.conf is fetched over TFTP by
+# 05-getltsconffile, which is unauthenticated - so a host key named here is
+# only as trustworthy as that transfer. That is not a step down from baking it
+# into the image: the client already fetches its kernel, initrd and entire
+# root filesystem over the same unauthenticated path, and whoever can
+# interfere with it owns the client outright, image-baked keys included. The
+# pinning is therefore exactly as strong as the boot chain, and no stronger.
+#
+# It would become the weak link the moment the boot chain is secured - signed
+# iPXE, image over HTTPS - and lts.conf is left on plain TFTP. Then lts.conf
+# has to travel the same way the image does.
+#
+# Appends rather than replaces, so entries baked in at build time survive.
+
+ltsp_add_known_host() {
+    # $1: one known_hosts line: "<host[,host...]> <keytype> <base64> [comment]"
+    local entry host keytype keydata
+
+    entry=$1
+    [ -n "$entry" ] || return 0
+
+    # Three fields minimum, and a key type that looks like one. A malformed
+    # line is not merely useless: ssh stops reading known_hosts at a line it
+    # cannot parse, which would silently discard the entries after it.
+    host=$(echo "$entry" | awk '{print $1}')
+    keytype=$(echo "$entry" | awk '{print $2}')
+    keydata=$(echo "$entry" | awk '{print $3}')
+    if [ -z "$host" ] || [ -z "$keytype" ] || [ -z "$keydata" ]; then
+        echo "ltsp: ssh_known_hosts: ignoring malformed entry: $entry" >&2
+        return 0
+    fi
+    case "$keytype" in
+        ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp256|ecdsa-sha2-nistp384|\
+        ecdsa-sha2-nistp521|sk-ssh-ed25519@openssh.com|\
+        sk-ecdsa-sha2-nistp256@openssh.com) ;;
+        *)
+            echo "ltsp: ssh_known_hosts: ignoring unknown key type '$keytype'" >&2
+            return 0
+            ;;
+    esac
+
+    # Skip a key that is already there, so a rebooted client does not grow the
+    # file and so an image-baked entry is not duplicated.
+    if [ -f /etc/ssh/ssh_known_hosts ] &&
+       grep -qsF " $keytype $keydata" /etc/ssh/ssh_known_hosts; then
+        return 0
+    fi
+
+    mkdir -p /etc/ssh
+    echo "$entry" >> /etc/ssh/ssh_known_hosts
+}
+
+if [ -n "$SSH_KNOWN_HOSTS" ]; then
+    ltsp_add_known_host "$SSH_KNOWN_HOSTS"
+fi
+
+# SSH_KNOWN_HOSTS_0, _1, ... Stops at the first gap rather than scanning a
+# range, so a mistyped index shows up as a missing key instead of silently
+# skipping the ones after it.
+ltsp_khi=0
+while :; do
+    eval ltsp_kh=\"\$SSH_KNOWN_HOSTS_$ltsp_khi\"
+    [ -n "$ltsp_kh" ] || break
+    ltsp_add_known_host "$ltsp_kh"
+    ltsp_khi=$((ltsp_khi + 1))
+done
+unset ltsp_kh ltsp_khi
+
+if [ -f /etc/ssh/ssh_known_hosts ]; then
+    chmod 644 /etc/ssh/ssh_known_hosts
+fi
+unset -f ltsp_add_known_host 2>/dev/null || true
