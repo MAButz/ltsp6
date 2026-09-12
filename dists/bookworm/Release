@@ -2,7 +2,7 @@ Origin: ltsp6
 Label: ltsp6 Github
 Suite: stable
 Codename: bookworm
-Date: Fri, 11 Sep 2026 21:07:01 UTC
+Date: Sat, 12 Sep 2026 06:32:48 UTC
 Architectures: amd64
 Components: main
 Description: Debian ltsp6 x64 github repository
