@@ -1,3 +1,33 @@
+ltsp (6.2.1-1) unstable; urgency=medium
+
+  * lts.conf(5): document the lockout warnings that ldm 3.2.0 adds -
+    RDP_PREAUTH_MAXFAIL, RDP_PREAUTH_FAILWINDOW, RDP_PREAUTH_LOCKTIME -
+    together with the reason they hang off the pre-authentication rather
+    than off RDP itself. Measured against xrdp: a rejected password makes
+    the RDP client neither exit nor report anything, so failed RDP logins
+    are not observable from the client at all, and the pre-auth is the one
+    place a rejection can be seen. Notes that the tally is shared by every
+    screen on the client, because the thing doing the banning counts per
+    address and four greeters share one.
+
+  * HOWTO: two traps found while building the image the documented way.
+
+    ltsp-build-client --apt-keys needs gpg on the build host, not in the
+    image: Debian/001-apt-keys runs "gpg --dearmor" as a plain command,
+    and a minimal Debian ships only gpgv because that is all apt needs.
+    The build unpacks the whole base system first and then stops with
+    "gpg: command not found". curl is missing for the same reason - the
+    archive instructions assume it - so both are now listed under the
+    prerequisites.
+
+    ltsp-update-image does not restart nbd-server, and says so in a line
+    that is easy to read past. Until it is restarted, nbd-server keeps
+    serving the image it already had open, so a rebuilt image changes
+    nothing visible. Also noted that --cleanup is a flag: passing it a
+    value makes that value the chroot name.
+
+ -- Marc-Andre Beckmann-Butz <ma@butz.online>  Sat, 12 Sep 2026 10:30:00 +0200
+
 ltsp (6.2.0-1) trixie; urgency=medium
 
   * New: SSH_KNOWN_HOSTS and SSH_KNOWN_HOSTS_n in lts.conf, added to

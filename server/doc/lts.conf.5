@@ -110,6 +110,72 @@ session.
 .IP "\fBRDP_PREAUTH_SSH_KNOWN_HOSTS\fP" 4
 Where to look for the host keys. Defaults to \fI/etc/ssh/ssh_known_hosts\fR,
 which is where ltsp\-update\-sshkeys(8) puts them.
+.SH "LOCKOUT WARNINGS"
+.PP
+Sites protect RDP with fail2ban, so a few rejected passwords block the client
+at the network level for some minutes. From the seat that is baffling: the
+screen that worked a moment ago now fails in an entirely different way, and
+nothing can be learned by asking the server, because being unable to reach the
+server is the state in question. These settings let the greeter warn before it
+happens and say how long it lasts once it has.
+.PP
+What can honestly be counted was measured, not assumed. Against xrdp a
+rejected password makes the RDP client neither exit nor report anything \(em
+the session stays open showing xrdp's own login window, and the retries happen
+in there, invisible to ldm. Failed RDP logins are therefore not countable from
+the client at all. The pre\-authentication above is the one place a rejection
+is visible, so it is where the counting happens, and these settings do nothing
+unless \fBRDP_PREAUTH\fR is on.
+.PP
+That is not the limitation it appears to be, because pre\-authentication is
+also the fix: a password rejected before the RDP client starts never reaches
+the RDP server, so an RDP jail never sees it. What the count is for is the
+lockout that happens \fIinstead\fR. \fBRDP_PREAUTH=ssh\fR leaves a failed
+password in the sshd log, where an sshd jail bans the client \(em with
+\fBbanaction_allports\fR, on every port, RDP included. \fBRDP_PREAUTH=krb5\fR
+raises \fBbadPwdCount\fR on the domain controller, where the account lockout
+policy is counting. Both punish the next attempt.
+.IP "\fBRDP_PREAUTH_MAXFAIL\fP" 4
+How many rejections make the client count itself as blocked. Unset or 0 turns
+the warnings off, which is the default: the right number is whatever the site
+configured on the server, and a warning about a lockout that does not exist is
+worse than silence. Set it to the jail's \fBmaxretry\fR, or to the domain's
+lockout threshold.
+.IP "" 4
+At one below the number the greeter adds a warning to the rejection message;
+at the number it stops sending attempts altogether and shows the remaining
+wait, because another attempt would only restart the server's clock as well as
+its own.
+.IP "\fBRDP_PREAUTH_FAILWINDOW\fP" 4
+Seconds over which rejections are counted. Default 600. Match the jail's
+\fBfindtime\fR.
+.IP "\fBRDP_PREAUTH_LOCKTIME\fP" 4
+How long the block lasts, in seconds. Default 600. Match the jail's
+\fBbantime\fR. Only used for what the greeter says \(em the block itself is
+enforced elsewhere, and this number does not shorten it.
+.IP "" 4
+A jail set to three strikes and three minutes:
+.IP "" 4
+.nf
+RDP_PREAUTH=True
+RDP_PREAUTH_MAXFAIL=3
+RDP_PREAUTH_FAILWINDOW=180
+RDP_PREAUTH_LOCKTIME=180
+.fi
+.PP
+Two properties are worth knowing. The tally is a file under
+\fI/run/ldm/lockout\fR, so it is shared by every screen on the client:
+SCREEN_05 through SCREEN_08 are four greeters behind one address, and whatever
+is doing the banning counts per address \(em a per\-screen count would see a
+quarter of what the server sees, and somebody would be locked out without ever
+having typed three wrong passwords at one screen. And \fI/run\fR is tmpfs, so
+a reboot forgets the tally while the block outlives it; the greeter then says
+nothing rather than guessing.
+.PP
+One caveat for \fBRDP_PREAUTH=ssh\fR behind a load balancer: see
+\fBRDP_PREAUTH_HOST\fR. If the probe reaches the balancer rather than a
+session server, the failed passwords are logged against the balancer, and a
+jail there would ban it for everyone at once.
 .SH "SSH HOST KEYS"
 .PP
 .IP "\fBSSH_KNOWN_HOSTS\fP, \fBSSH_KNOWN_HOSTS_\fP\fIn\fP" 4
