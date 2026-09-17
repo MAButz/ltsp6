@@ -10,24 +10,51 @@ fi
 cat > /lib/systemd/systemd-shutdown <<EOF
 #!/bin/sh
 # Work around https://github.com/NetworkBlockDevice/nbd/issues/51
+#
+# The nbd device has to be disconnected before the machine goes down, or an
+# old kernel hangs on the way out. Everything after that disconnect runs
+# without a usable root filesystem: the squashfs underneath answers every
+# read with EIO. A page fault in a program that is not already fully resident
+# then kills that program - and when that program is this script, PID 1 dies
+# and the client sits there with a black screen instead of switching off.
+#
+# That race is why the last step is a write to /proc/sysrq-trigger and not
+# "poweroff -f". echo and redirection are shell builtins, /proc is not the
+# root filesystem, and the kernel's sysrq handler calls kernel_power_off()
+# itself rather than running a helper - so nothing has to be read from a disk
+# that is already gone. "poweroff -f" is a big, dynamically linked systemctl
+# and was exactly the wrong thing to reach for at this point.
+#
+# It stays as a fallback for a kernel built without CONFIG_MAGIC_SYSRQ, after
+# a wait spun out of builtins so that even the waiting costs no disk access.
 
 exec 2>/dev/console
 
-# Verbs from systemd/shutdown.c
+# Verbs from systemd/shutdown.c, each with its sysrq key
+# (Documentation/admin-guide/sysrq.rst: b = reboot, o = power off)
 case "\$1" in
-    reboot) command="reboot -f" ;;
-    poweroff) command="poweroff -f" ;;
-    halt) command="halt -f" ;;
+    reboot) command="reboot -f"; sysrq=b ;;
+    poweroff) command="poweroff -f"; sysrq=o ;;
+    halt) command="halt -f"; sysrq=o ;;
     *) echo "Unknown option: \$0 \$1" >&2; exit 1 ;;
 esac
 sync
 # Kill all user processes, including ssh sockets
 pkill --inverse --uid 0
 swapoff -a
-# Cache the command before disconnecting nbd
+# Cache the command before disconnecting nbd, in case the fallback is needed
 \$command --help >/dev/null 2>&1
+# Permit the sysrq keys. Debian already allows reboot and poweroff, but a
+# machine where someone set kernel.sysrq=0 would otherwise have no way out.
+echo 1 > /proc/sys/kernel/sysrq 2>/dev/null
 for nbd in \$(awk '/nbd/ { print \$NF }' < /proc/partitions | sort -rV); do
     nbd-client -d "/dev/\$nbd"
 done
+# Point of no return: from here on, builtins and /proc only
+echo "\$sysrq" > /proc/sysrq-trigger
+# The kernel powers off from a work queue, so give it a moment - without
+# starting sleep(1), which lives on the filesystem that just went away.
+i=0
+while [ \$i -lt 4000000 ]; do i=\$((i+1)); done
 \$command
 EOF

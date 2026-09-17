@@ -1,3 +1,34 @@
+ltsp (6.3.2-1) unstable; urgency=medium
+
+  * Shutting a client down from the greeter now actually switches the
+    machine off, whether or not the image was booted with toram. Until now
+    it was a race the client could lose: init-ltsp.d/50-systemd-shutdown
+    replaces systemd-shutdown with a script that disconnects nbd - the old
+    workaround for NetworkBlockDevice/nbd#51 - and only then runs
+    "poweroff -f". Past that disconnect there is no root filesystem left:
+    the squashfs underneath answers every read with EIO. And /sbin/poweroff
+    under systemd is a symlink to systemctl, a large dynamically linked
+    program that still has pages to fault in. When it lost the race the
+    process died, PID 1 with it, and the client sat there with a black
+    screen and the fans running - services visibly stopped, machine still
+    on.
+
+    The last step is now a write to /proc/sysrq-trigger instead. echo and
+    redirection are shell builtins, /proc is not the root filesystem, and
+    the kernel's sysrq handler calls kernel_power_off() itself rather than
+    running a helper, so nothing has to be read from a disk that is already
+    gone. Measured on a client booted without toram, the kernel reports
+    "sysrq: Power Off" 1.5 ms after the nbd disconnect, ahead of the first
+    squashfs read error; the old path needed the whole of systemctl to
+    survive that window.
+
+    "poweroff -f" stays as a fallback for a kernel built without
+    CONFIG_MAGIC_SYSRQ, reached after a wait spun out of builtins so that
+    even waiting costs no disk access. Verified on a thin client in all
+    four combinations: toram and no toram, poweroff and reboot.
+
+ -- Marc-Andre Butz <butz@labor-heidrich.de>  Thu, 17 Sep 2026 14:56:04 +0200
+
 ltsp (6.3.1-1) unstable; urgency=medium
 
   * Writing SCREEN_07=ldm in lts.conf no longer hangs the client. That line

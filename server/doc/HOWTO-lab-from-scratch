@@ -1290,6 +1290,23 @@ Sorted by how much time each cost, worst first.
   VM console can be one stale framebuffer. Switch VTs, or ping the
   client, before concluding anything.
 
+  A client that shuts down but never switches off. Services stop, the
+  screen goes black, the machine keeps running. init-ltsp.d/50-systemd-
+  shutdown replaces systemd-shutdown with a script that disconnects nbd
+  first - the workaround for NetworkBlockDevice/nbd#51 - and everything
+  after that point runs without a root filesystem, because the squashfs
+  underneath answers every read with EIO. The script used to finish with
+  "poweroff -f", and under systemd /sbin/poweroff is a symlink to
+  systemctl: a large, dynamically linked program that still has pages to
+  fault in. Lose that race and the process dies, PID 1 with it.
+
+  Fixed since 6.3.2-1, which ends with a write to /proc/sysrq-trigger
+  instead - builtins and /proc only, and the kernel's sysrq handler
+  powers the machine off itself. If an older image is in play, the
+  symptom is unmistakable on the serial console: squashfs read errors
+  after "Disconnected due to user request" and no "reboot: Power down".
+  Booting with toram only shifts the odds; it does not decide the race.
+
   A machine that "cannot join the realm" while every package is
   installed. realmd and PackageKit. Use adcli.
 
