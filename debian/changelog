@@ -1,3 +1,35 @@
+ltsp (6.3.5-1) unstable; urgency=medium
+
+  * ltsp-build-client re-reads the package lists after installing the early
+    packages. Without that, an https --extra-mirror could not work at all on
+    a first build: 020-apt-get-update runs against a minbase chroot that has
+    no root certificates yet, so the mirror answers with
+
+        SSL connection failed: certificate verify failed
+
+    and apt continues with the sources it can reach. ca-certificates is
+    installed one step later, as an early package - that is what the option
+    is for - but nothing refreshed the lists afterwards, so 030-late-packages
+    looked its packages up in an index that had never been fetched and the
+    build stopped with
+
+        E: Unable to locate package ldm
+
+    The message named a package; the problem was an unreachable archive, and
+    the two are several hundred log lines apart.
+
+    Found building a client on a server whose only source for ldm and
+    ltsp-client-core was the project's own signed archive, which is served
+    over https and therefore hit this on every attempt.
+
+    The plugin also returns early when no early packages were asked for,
+    rather than running apt-get install with an empty list.
+
+  * HOWTO: the same trap under "Traps, and how each one announces itself",
+    with what it looks like in the build log.
+
+ -- Marc-Andre Butz <butz@labor-heidrich.de>  Thu, 17 Sep 2026 17:27:51 +0200
+
 ltsp (6.3.4-1) unstable; urgency=medium
 
   * lts.conf(5) now documents every directive the client actually reads,

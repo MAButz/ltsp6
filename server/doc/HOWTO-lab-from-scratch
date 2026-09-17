@@ -1307,6 +1307,22 @@ Sorted by how much time each cost, worst first.
   after "Disconnected due to user request" and no "reboot: Power down".
   Booting with toram only shifts the odds; it does not decide the race.
 
+  A build that ends with "unable to locate package" for everything that
+  comes from the extra mirror, while the same mirror works fine on the
+  server. The chroot is a minbase: at the first apt-get update it has no
+  root certificates, so an https mirror answers with
+
+      SSL connection failed: certificate verify failed
+
+  and apt carries on with the sources it can reach. ca-certificates is
+  installed a step later, as an early package, which is what that option
+  is for - but until 6.3.5-1 nothing re-read the lists afterwards, so the
+  late packages were looked up against an index that had never been
+  fetched. The message named a package; the problem was an archive.
+
+  Recognisable in the build log by an "Ign:" and then "Fehl:" on the
+  mirror, several hundred lines before the error that stops the build.
+
   A machine that "cannot join the realm" while every package is
   installed. realmd and PackageKit. Use adcli.
 

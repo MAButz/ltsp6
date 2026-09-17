@@ -8,6 +8,21 @@ case "$MODE" in
         fi
         ;;
     after-install)
+        test -n "$EARLY_PACKAGES" || return 0
         chroot $ROOT apt-get $APT_GET_OPTS install $EARLY_PACKAGES
+        # Read the package lists again. 020-apt-get-update ran before this
+        # plugin, against a minbase chroot that had no root certificates yet,
+        # so an https mirror answered with
+        #
+        #     SSL connection failed: certificate verify failed
+        #
+        # and apt carried on with the sources it could reach. Installing
+        # ca-certificates here is what makes that mirror usable - and the
+        # reason it is an early package in the first place - but nothing
+        # refreshed the lists afterwards, so 030-late-packages then failed
+        # with "unable to locate package" for everything on that mirror.
+        # The build reported a missing package rather than an unreachable
+        # archive, which points at the wrong thing entirely.
+        chroot $ROOT apt-get $APT_GET_OPTS update
         ;;
 esac
