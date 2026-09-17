@@ -1,3 +1,18 @@
+ltsp (6.3.9-1) unstable; urgency=medium
+
+  * Documentation follows ldm 3.4.0-1, which removed ldminfod and the
+    ldm-server package along with it. The fat-client build in the HOWTO no
+    longer installs ldm-server, and the paragraph that explained why it
+    belonged in a fat image now explains why it is gone: the daemon could
+    not run on a current Debian, nothing ever acted on the rating it
+    reported, and load balancing belongs in front of the session servers.
+
+  * lts.conf(5): LDM_SERVER lists servers, it does not rank them. That was
+    true before as well - the ranking was collected and never applied - but
+    the page said otherwise.
+
+ -- Marc-Andre Butz <butz@labor-heidrich.de>  Thu, 17 Sep 2026 18:39:12 +0200
+
 ltsp (6.3.8-1) unstable; urgency=medium
 
   * SSH_KNOWN_HOSTS_n is no longer dropped when the same key is already in

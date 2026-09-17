@@ -170,8 +170,13 @@ Which servers the automatic and guest logins go to, when they should not
 follow the normal server list.
 .IP "\fBLDM_SERVER\fP" 4
 The session server, or several separated by spaces. Unset, the client asks the
-server it booted from. With more than one, the greeter offers the list and
-ldminfod(8) on each is asked which is least loaded.
+server it booted from. With more than one, the greeter offers the list.
+.IP "" 4
+It does not rank them. Until ldm 3.4.0\-1 it asked an \fBldminfod\fR on each
+server for a load rating \(em a daemon that had not been able to run since
+Debian dropped Python 2, and whose rating nothing sorted by even when it did.
+Balancing belongs in front of the session servers, where a proxy sees the
+sessions themselves.
 .IP "\fBLDM_SESSION\fP, \fBLDM_XSESSION\fP, \fBLDM_DEFAULT_XSESSION\fP" 4
 The session command to run after authentication. \fBLDM_SESSION\fR replaces it
 outright; \fBLDM_XSESSION\fR names the wrapper script (normally

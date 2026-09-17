@@ -716,7 +716,7 @@ One base directory, two chroots, distinct names:
         --extra-mirror "https://mabutz.github.io/ltsp6 trixie main" \
         --early-packages ca-certificates \
         --fat-client-desktop xfce4,xfce4-terminal,dbus-x11 \
-        --late-packages ldm,ldm-server,ltsp-client-core,nfs-common,sshfs,\
+        --late-packages ldm,ltsp-client-core,nfs-common,sshfs,\
 tftp-hpa,xserver-xorg-core,xserver-xorg-video-all,xinit,x11-xserver-utils,\
 kbd,console-setup,nbd-client,xterm \
         --purge-chroot --no-squashfs-image
@@ -729,8 +729,11 @@ kbd,console-setup,nbd-client,xterm \
     ltsp-update-image   -b /srv/ltsp amd64-fat
     systemctl restart nbd-server
 
-ldm-server belongs in a fat image: screen.d/ldm calls ldminfod locally
-for fat clients instead of asking the server on port 9571.
+No ldm-server here any more. It existed for ldminfod, the load-balancing
+daemon on port 9571, which ldm 3.4.0-1 removed: it could not run on a
+current Debian, nothing ever acted on the rating it reported, and load
+balancing belongs in front of the session servers - HAProxy - rather than
+in a greeter that has to reach a second daemon first.
 
   THE NAMES MATTER, and not for tidiness. ltsp-update-kernels writes to
   /srv/tftp/ltsp/<chroot name>/ and ltsp-update-image writes
