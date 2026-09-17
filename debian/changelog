@@ -1,3 +1,41 @@
+ltsp (6.3.1-1) unstable; urgency=medium
+
+  * Writing SCREEN_07=ldm in lts.conf no longer hangs the client. That line
+    is the most natural thing an admin can write, and it was the cause:
+    ltsp_config.d/15default-screen sets that default itself when no screen is
+    configured at all, and sets a companion variable along with it -
+    SCREEN_07_WAIT_FGCONSOLE=False. Setting SCREEN_07 by hand made the whole
+    block be skipped, so the companion was never set, and screen_session then
+    waited in
+
+        while boolean_is_true "${WAIT_FGCONSOLE:-True}" &&
+              [ $(fgconsole) -ne "$SCREEN_NUM" ]; do sleep 2; done
+
+    for tty7 to become the foreground console. Under systemd nothing switches
+    to it beforehand, and Xorg - which does switch, with its vt7 argument -
+    only starts after that loop. It waited forever.
+
+    The flag is now filled in for any SCREEN_nn set to ldm, whoever wrote it,
+    and only when the admin has not set it explicitly, so forcing it to True
+    stays possible for a setup that switches terminals by hand.
+
+    What made this expensive to find is how healthy it looks from outside:
+    ldm.service reads "active (running)", no unit has failed,
+    graphical.target is reached, and there is neither an Xorg log nor an ldm
+    log, because neither ever started. The only tell is screen_session with a
+    sleep 2 child - and chvt 7 on the client confirms it in one command.
+
+    Found on a second site running this image, where the client showed a
+    console login instead of the greeter. Tested against five cases: the flag
+    filled in for a hand-written SCREEN_07, left alone when set explicitly,
+    applied per screen for several ldm screens, not applied to non-ldm
+    screens, and matched when the value carries arguments.
+
+  * HOWTO and lts.conf(5) document the trap, including what it looks like
+    from the outside and the one-command confirmation.
+
+ -- Marc-Andre Beckmann-Butz <ma@butz.online>  Thu, 17 Sep 2026 14:00:00 +0200
+
 ltsp (6.3.0-1) unstable; urgency=medium
 
   * New: client/Debian/share/ltsp/ltsp-client-vendor-functions, overriding

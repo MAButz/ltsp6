@@ -1084,6 +1084,47 @@ Traps, and how each one announces itself
 
 Sorted by how much time each cost, worst first.
 
+  A console login where the greeter should be, with nothing failed. The
+  most natural line an admin can write,
+
+      SCREEN_07=ldm
+
+  used to be the cause of it. ltsp_config.d/15default-screen sets that
+  default itself when no screen is configured - and sets a second,
+  inconspicuous variable along with it:
+
+      set_lts_var SCREEN_07 ldm
+      set_lts_var SCREEN_07_WAIT_FGCONSOLE False
+
+  Writing SCREEN_07 by hand skips that whole block, so the companion flag
+  is never set. screen_session then waits in
+
+      while boolean_is_true "${WAIT_FGCONSOLE:-True}" &&
+            [ $(fgconsole) -ne "$SCREEN_NUM" ]; do sleep 2; done
+
+  for tty7 to become the foreground console. Under systemd nothing
+  switches to it beforehand, and Xorg - which does switch, with its vt7
+  argument - only starts after the loop. It waits forever.
+
+  What makes it expensive is how healthy it looks: ldm.service reads
+  "active (running)", no unit has failed, graphical.target is reached,
+  and there is neither an Xorg log nor an ldm log to read. The one tell
+  is the process tree:
+
+      systemctl status ldm.service
+        CGroup: /system.slice/ldm.service
+                |-888 /bin/sh /usr/share/ltsp/screen_session 07
+                `-989 sleep 2
+
+  Confirm it in one command, from ssh on the client: `chvt 7`. If the
+  greeter appears within seconds, this was it.
+
+  ltsp-client-core 6.3.1 sets the flag for any SCREEN_nn=ldm regardless of
+  who wrote it, so it only bites older images. There, add the line by hand:
+
+      SCREEN_07=ldm
+      SCREEN_07_WAIT_FGCONSOLE=False
+
   PXE-E16 on UEFI clients while BIOS clients boot fine. The firmware
   says "Station IP address is 172.17.249.182" - so the address was
   assigned - and immediately after, "PXE-E16: No valid offer received",

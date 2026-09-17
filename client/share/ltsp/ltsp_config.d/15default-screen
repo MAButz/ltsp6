@@ -24,3 +24,38 @@ if [ -z "${IS_SCREEN}" ]; then
         set_lts_var SCREEN_07 xdmcp
     fi
 fi
+
+# The companion flag has to follow SCREEN_nn=ldm wherever it came from - the
+# block above, or lts.conf written by hand - and the block above only runs
+# when no screen is configured at all. So an admin who writes the single most
+# natural line,
+#
+#     SCREEN_07=ldm
+#
+# used to get a client that hangs: setting it skips the block, the flag is
+# never set, and screen_session then sits in
+#
+#     while boolean_is_true "${WAIT_FGCONSOLE:-True}" &&
+#           [ $(fgconsole) -ne "$SCREEN_NUM" ]; do sleep 2; done
+#
+# waiting for tty7 to become the foreground console. Under systemd nothing
+# switches to it beforehand, and Xorg - which does switch, with its vt${TTY}
+# argument - only starts after that loop. It waits forever.
+#
+# From the outside that is invisible: ldm.service is "active (running)",
+# no unit has failed, graphical.target is reached, there is no Xorg log and
+# no ldm log, and the screen shows the tty1 console login. The only tell is
+# screen_session with a `sleep 2` child.
+#
+# Only filled in when the admin has not set it, so forcing True stays
+# possible for a setup that really does switch VTs by hand.
+for i in 01 02 03 04 05 06 07 08 09 10 11 12; do
+    eval screen_val=\"\${SCREEN_${i}}\"
+    case "$screen_val" in
+        ldm|ldm\ *) ;;
+        *) continue ;;
+    esac
+    eval wait_val=\"\${SCREEN_${i}_WAIT_FGCONSOLE}\"
+    test -n "$wait_val" || set_lts_var "SCREEN_${i}_WAIT_FGCONSOLE" False
+done
+unset screen_val wait_val

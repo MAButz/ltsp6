@@ -190,6 +190,30 @@ One caveat for \fBRDP_PREAUTH=ssh\fR behind a load balancer: see
 \fBRDP_PREAUTH_HOST\fR. If the probe reaches the balancer rather than a
 session server, the failed passwords are logged against the balancer, and a
 jail there would ban it for everyone at once.
+.SH "SCREENS"
+.PP
+.IP "\fBSCREEN_\fP\fInn\fP" 4
+What to run on virtual terminal \fInn\fP \(em \fBldm\fR for the greeter,
+\fBshell\fR for a login shell. Left unset, ltsp_config.d/15default-screen
+picks \fBSCREEN_07=ldm\fR when ldm is installed.
+.IP "\fBSCREEN_\fP\fInn\fP\fB_WAIT_FGCONSOLE\fP" 4
+Whether screen_session waits for that terminal to become the foreground
+console before starting anything on it. Defaults to true, which is right for
+a terminal a getty has already brought to the front, and wrong for the one
+ldm.service starts: under systemd nothing switches to tty7 beforehand, and
+Xorg \(em which does switch, with its \fBvt7\fR argument \(em only starts
+after the wait. The client then sits there forever.
+.IP "" 4
+Since 6.3.1 this is filled in as False for any \fBSCREEN_\fP\fInn\fP set to
+\fBldm\fR, whoever wrote it, so it normally needs no attention. Set it
+explicitly to keep control on a setup that really does switch terminals by
+hand.
+.IP "" 4
+Worth knowing for older images, because the failure is silent and looks like
+health: the client shows a console login, \fBldm.service\fR reports "active
+(running)", nothing has failed, graphical.target is reached, and there is no
+Xorg log and no ldm log to read. The tell is \fBscreen_session\fR with a
+\fBsleep 2\fR child; \fBchvt 7\fR on the client confirms it in one command.
 .SH "SSH HOST KEYS"
 .PP
 .IP "\fBSSH_KNOWN_HOSTS\fP, \fBSSH_KNOWN_HOSTS_\fP\fIn\fP" 4
