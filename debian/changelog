@@ -1,3 +1,34 @@
+ltsp (6.3.4-1) unstable; urgency=medium
+
+  * lts.conf(5) now documents every directive the client actually reads,
+    instead of only the ones this fork added. The page went from about
+    thirty directives to a hundred and fifty, and it grew that way because
+    the list was derived from the code rather than remembered: each name the
+    client reads from its environment without setting it first, cross-checked
+    against the shipped example files.
+
+    New sections for sound, local devices, filesystems and home directories,
+    swap, time, network and names, running commands at boot, local kernel
+    updates, and the configuration file's own handling. The existing sections
+    on the session backend, screens, keyboard, graphics and services gained
+    the directives they had been missing - among them every LDM_ option, the
+    whole XRANDR_ family, the X server and touchscreen settings, and the
+    service-removal lists.
+
+    Three things the audit turned up on the way. The page had two sections
+    both called SCREENS, saying overlapping things; they are now one. The
+    kiosk screen's account is called KIOSKUSER, without the underscore that
+    would be natural - written down now, since guessing it costs an evening.
+    And the boot-menu directives that look like lts.conf settings
+    (BOOT_METHODS, the CMDLINE_ series, PXELINUX_DEFAULT) are not: they come
+    from /etc/ltsp/update-kernels.conf, which the page now says outright.
+
+    What is deliberately not listed: script-internal variables, the numbered
+    instances of a documented series, and the settings that belong to
+    ltsp-update-kernels(8).
+
+ -- Marc-Andre Butz <butz@labor-heidrich.de>  Thu, 17 Sep 2026 17:08:42 +0200
+
 ltsp (6.3.3-1) unstable; urgency=medium
 
   * ltsp-client-core depends on iproute2, which it has always needed and

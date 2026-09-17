@@ -1,4 +1,4 @@
-.TH "lts.conf" "5" "2026-09-11" "ltsp6"
+.TH "lts.conf" "5" "2026-09-17" "ltsp6"
 .SH "NAME"
 lts.conf \(em Per\-client configuration for LTSP clients
 .SH "DESCRIPTION"
@@ -8,9 +8,15 @@ getltscfg(1), and directives apply from the most specific matching section
 downwards: a section named by MAC address, IP or hostname overrides
 \fB[Default]\fR.
 .PP
-This page documents the directives this fork adds or changes. The full set is
-described in the commented example installed as \fI/etc/ltsp/lts.conf\fR, and
-in the upstream LTSP documentation.
+This page aims to be complete: every directive the client actually reads is
+listed here. Where a value is derived rather than configured, that is said so,
+because the derived ones are the ones that surprise people.
+.PP
+Boolean directives accept \fBTrue\fR, \fBYes\fR, \fBY\fR and \fB1\fR, in any
+mix of case, and anything else counts as false. A directive that takes a
+numbered series \(em \fBSCREEN_\fP\fInn\fP, \fBFSTAB_\fP\fInn\fP and the rest
+\(em is read in sorted order, so the numbers decide the order of the resulting
+lines, not the order they appear in the file.
 .SH "SESSION BACKEND"
 .PP
 .IP "\fBLDM_DEFAULT_BACKEND\fP" 4
@@ -124,6 +130,87 @@ whatever \fIssh_known_hosts\fR was baked into it at build time, and those keys
 belong to the site it was built for. Deployed anywhere else the file is
 present, non\-empty and irrelevant \(em a set of foreign keys used to be worse
 than no keys at all.
+.IP "\fBRDP_DOMAIN\fP" 4
+Domains to offer in the greeter, separated by \fB|\fR. Setting it adds a domain
+chooser; leaving it unset means the RDP client connects without one.
+.IP "\fBRDP_DEFAULT_DOMAIN\fP" 4
+The domain sent when the greeter offers no choice. Unset means none.
+.IP "\fBRDP_XFREERDP_BIN\fP" 4
+The FreeRDP binary to run. Normally left alone: the backend looks for
+\fBxfreerdp3\fR and falls back to \fBxfreerdp\fR, which is right on every
+current image. Set it to pin a self\-built client.
+.IP "\fBLDM_SSHOPTIONS\fP" 4
+Extra options for the ssh backend's connection, passed through to
+\fBssh\fR(1) verbatim.
+.IP "\fBSSH_OVERRIDE_PORT\fP" 4
+The port the ssh backend connects to, when the session servers do not listen
+on 22.
+.IP "\fBLDM_AUTOLOGIN\fP" 4
+Log in without asking, using \fBLDM_USERNAME\fR and \fBLDM_PASSWORD\fR. The
+greeter never appears. Whoever can read lts.conf can then read the password,
+and lts.conf travels over TFTP \(em see FILES.
+.IP "\fBLDM_USERNAME\fP, \fBLDM_PASSWORD\fP" 4
+The credentials for \fBLDM_AUTOLOGIN\fR, and the prefilled user name for a
+kiosk\-style client.
+.IP "\fBLDM_PASSWORD_HASH\fP" 4
+Whether \fBLDM_PASSWORD\fR holds a hash rather than the password itself. It
+keeps the plaintext out of the file; it does not keep anyone out of the
+session, since the hash is what gets sent.
+.IP "\fBHOST_TO_USERNAME\fP" 4
+Derives \fBLDM_USERNAME\fR from the client's own name, as a
+\fBsed\fR(1) substitution applied to it \(em \fB"s/ltsp/user/"\fR turns
+\fBltsp20\fR into \fBuser20\fR. Where \fBLDM_PASSWORD\fR is unset it is
+set to the same string, so the password is the user name: a lab where the
+seat is the identity and there is nothing to protect. Say that out loud
+before using it.
+.IP "\fBLDM_GUESTLOGIN\fP" 4
+Whether the greeter offers a guest button.
+.IP "\fBLDM_AUTOLOGIN_SERVER\fP, \fBLDM_GUEST_SERVER\fP" 4
+Which servers the automatic and guest logins go to, when they should not
+follow the normal server list.
+.IP "\fBLDM_SERVER\fP" 4
+The session server, or several separated by spaces. Unset, the client asks the
+server it booted from. With more than one, the greeter offers the list and
+ldminfod(8) on each is asked which is least loaded.
+.IP "\fBLDM_SESSION\fP, \fBLDM_XSESSION\fP, \fBLDM_DEFAULT_XSESSION\fP" 4
+The session command to run after authentication. \fBLDM_SESSION\fR replaces it
+outright; \fBLDM_XSESSION\fR names the wrapper script (normally
+\fI/etc/X11/Xsession\fR); \fBLDM_DEFAULT_XSESSION\fR is the fallback when the
+first two are unset.
+.IP "\fBLDM_FORCE_SESSION\fP" 4
+Removes the session chooser from the greeter, so the configured session is the
+only one.
+.IP "\fBLDM_LANGUAGE\fP, \fBLDM_FORCE_LANGUAGE\fP" 4
+The preselected language, and whether to remove the language chooser along
+with the choice.
+.IP "\fBLDM_LOGIN_TIMEOUT\fP" 4
+Seconds the greeter waits with nothing typed before logging in automatically.
+Only useful together with a configured user; without one the timeout has
+nothing to do.
+.IP "\fBLDM_THEME\fP" 4
+The greeter's theme directory under \fI/usr/share/ldm/themes\fR.
+.IP "\fBLDM_GREETER\fP" 4
+The greeter binary ldm starts. Replacing it is how a site writes its own.
+.IP "\fBLDM_WINMANAGER\fP" 4
+A window manager to run behind the greeter. Normally unnecessary: the greeter
+is the only window on that display.
+.IP "\fBLDM_CLOCK_FORMAT\fP" 4
+See CLIENT IDENTITY.
+.IP "\fBLDM_DIRECTX\fP" 4
+Whether the session's X traffic bypasses the ssh tunnel. Faster, and
+unencrypted on the wire \(em the password still goes through ssh, everything
+afterwards does not.
+.IP "\fBLDM_NOMAD\fP" 4
+Enables the Nomad remote\-desktop mode, for the installations that use it.
+.IP "\fBLDM_SYSLOG\fP, \fBLDM_LOGLEVEL\fP" 4
+Whether ldm logs to syslog rather than \fI/var/log/ldm.log\fR, and how much.
+The level runs from 0 to 7; 7 includes the pre\-authentication's own account of
+what it asked and what it heard back, which is the setting to reach for when a
+login fails without saying why.
+.IP "" 4
+On a thin client \fI/var/log\fR lives in RAM, so the log dies with the session
+that produced it. \fBLDM_SYSLOG=True\fR together with \fBSYSLOG_HOST\fR puts
+it on a machine that will still be running afterwards.
 .SH "LOCKOUT WARNINGS"
 .PP
 Sites protect RDP with fail2ban, so a few rejected passwords block the client
@@ -214,6 +301,72 @@ health: the client shows a console login, \fBldm.service\fR reports "active
 (running)", nothing has failed, graphical.target is reached, and there is no
 Xorg log and no ldm log to read. The tell is \fBscreen_session\fR with a
 \fBsleep 2\fR child; \fBchvt 7\fR on the client confirms it in one command.
+.IP "" 4
+On a Debian client the greeter is started by \fBldm.service\fR, which runs
+\fBscreen_session 07\fR for that default. \fBltsp\-screen@.service\fR is
+shipped but deliberately not enabled: enable an instance only for an
+\fIadditional\fR screen, and never one that collides with the VT7 ldm uses
+\(em two greeters then fight over which terminal owns the session.
+.IP "\fBSCREEN_DEFAULT\fP" 4
+Which terminal is brought to the front once the client is up. Unset, the
+highest\-numbered configured screen wins. Naming a terminal with no
+\fBSCREEN_\fP\fInn\fP of its own is ignored, with a complaint on the console.
+.PP
+The scripts a screen can run live in \fI/usr/share/ltsp/screen.d\fR. Each takes
+its own directives:
+.IP "\fBldm\fR" 4
+The graphical greeter. Everything under SESSION BACKEND applies.
+.IP "\fBshell\fR" 4
+A root shell on that terminal. Useful while building an image, and an open
+door on a production one.
+.IP "\fBssh\fR" 4
+A text login over ssh. \fBSSH_HOST\fR is the host to reach, \fBserver\fR by
+default; the user name is typed at the prompt.
+.IP "\fBtelnet\fR" 4
+A text login over telnet, to \fBTELNET_HOST\fR or the boot server. Sends the
+password in clear.
+.IP "\fBxdmcp\fR" 4
+An X server querying a display manager on \fBXDM_SERVER\fR (the boot server by
+default). \fBDISABLE_ACCESS_CONTROL\fR adds \fB\-ac\fR, which turns off X
+access control for every client on the network, not only this one.
+\fBstartx\fR is an alias for this screen.
+.IP "\fBxterm\fR" 4
+A bare X server with a single terminal window.
+.IP "\fBkiosk\fR" 4
+A browser, full screen, with nothing else reachable. \fBKIOSK_EXE\fR is the
+program \(em Firefox, Chromium, Chrome or Opera, whichever is found first when
+it is unset \(em and \fBKIOSK_OPTIONS\fR its arguments, usually the URL.
+\fBKIOSKUSER\fR is the account it runs as (\fBltspkiosk\fR unless set,
+created on the spot if it does not exist), \fBKIOSK_WM\fR a window manager to
+put behind it, \fBKIOSK_DAEMON\fR whether to restart it when it exits, and
+\fBKIOSK_USER_STARTUP\fR a command to run first.
+.IP "\fBmenu\fR" 4
+A text menu offering several of the above. \fBMENU_TITLE\fR is the prompt,
+\fBMENU_ITEM_\fP\fInn\fP the label of each entry and \fBMENU_COMMAND_\fP\fInn\fP
+what it runs, up to 20 of them. \fBMENU_LISTHEIGHT\fR sets the visible rows and
+\fBMENU_APPEND_PATH\fR where the commands are looked for \(em \fBnone\fR means
+the commands must carry their own path.
+.IP "\fBxfreerdp\fR, \fBrdesktop\fR" 4
+A remote desktop without a greeter in front of it. The RDP directives under
+SESSION BACKEND apply.
+.PP
+Directives for the X screens themselves:
+.IP "\fBX_ARGS\fP" 4
+Extra arguments for the X server on a screen that starts one.
+.IP "\fBXINITRC_DAEMON\fP" 4
+Whether the session is restarted when it exits, rather than the screen ending.
+.IP "\fBXINITRC_PROMPT_ON_EXIT\fP, \fBXINITRC_COMMAND_ON_EXIT\fP" 4
+Whether to ask before the screen goes away, and what to run at that point.
+.IP "\fBXINITRC_PROMPT_ON_ERROR\fP, \fBXINITRC_COMMAND_ON_ERROR\fP, \fBXINITRC_ERROR_CODES\fP" 4
+The same for a session that ended badly: the exit codes that count as an
+error, whether to say so, and what to run. Without a command of its own a
+dialog appears saying only that an error occurred.
+.IP "\fBLTS_OPTION1\fP, \fBLTS_OPTION2\fP" 4
+Two free arguments appended to the session command, for a screen script that
+wants them.
+.IP "\fBUSE_XFS\fP, \fBXFS_SERVER\fP" 4
+Whether to fetch fonts from a font server, and which. A relic: current X
+clients carry their own fonts.
 .SH "SSH HOST KEYS"
 .PP
 .IP "\fBSSH_KNOWN_HOSTS\fP, \fBSSH_KNOWN_HOSTS_\fP\fIn\fP" 4
@@ -304,22 +457,11 @@ with nothing to suggest the layout is at fault, and the same credentials work
 when typed on the server. The Kerberos log is what gives it away:
 \fBPreauthentication failed\fR means wrong password, not unknown user and not
 unreachable server.
-.SH "SCREENS"
-.PP
-.IP "\fBSCREEN_\fP\fInn\fP" 4
-What to run on virtual terminal \fInn\fR, for example \fBSCREEN_02=shell\fR for
-a console on Alt+Ctrl+F2. \fBSCREEN_07=ldm\fR is the default, set by
-\fIltsp_config.d/15default\-screen\fR.
-.IP "" 4
-On a Debian client the greeter is started by \fBldm.service\fR, which runs
-\fBscreen_session 07\fR for that default. \fBltsp\-screen@.service\fR is
-shipped but deliberately not enabled: enable an instance only for an
-\fIadditional\fR screen, and never one that collides with the VT7 ldm uses \(em
-two greeters then fight over which VT owns the session.
-.IP "\fBSCREEN_\fP\fInn\fP\fB_WAIT_FGCONSOLE\fP" 4
-Whether screen_session waits for the console to become foreground before
-starting. Set \fBFalse\fR for the ldm screen on hardware where that wait never
-completes.
+.IP "\fBXKBMODEL\fP, \fBXKBVARIANT\fP, \fBXKBOPTIONS\fP, \fBXKBRULES\fP" 4
+The rest of the X keyboard description, with the same meanings they have in
+\fBxkeyboard\-config\fR(7): the physical model, the layout variant (\fBnodeadkeys\fR
+and the like), extra options such as \fBcompose:menu\fR, and the rule set.
+\fBXKBLAYOUT\fR alone is enough for most fleets.
 .SH "CLIENT IDENTITY"
 .PP
 .IP "\fBHOSTNAME\fP" 4
@@ -360,6 +502,79 @@ drivers reject that outright \(em Xorg logs \fBfailed to add fb \-22\fR and the
 server exits \(em so the 16\-bit default now applies only where there is no
 \fI/dev/dri/card0\fR. On anything with a KMS device, leave both unset and let
 Xorg pick 24 or 32.
+.IP "\fBCONFIGURE_X\fP" 4
+Whether to write an \fIxorg.conf\fR at all. Off by default, and rightly: a
+modern Xorg configures itself better than a generated file can, and several
+directives below only take effect because setting them turns this on
+implicitly.
+.IP "\fBCONFIGURE_X_COMMAND\fP, \fBX_CONF\fP" 4
+The command that generates the file, and where it is written.
+\fBXF86CONFIG_FILE\fR is the LTSP 4 name for the latter.
+.IP "\fBXSERVER\fP" 4
+The X server or driver to use. \fBauto\fR, the default, lets Xorg decide.
+Naming a driver is a way to work around a broken autodetection and a way to
+create one.
+.IP "\fBX_HORZSYNC\fP, \fBX_VERTREFRESH\fP" 4
+The monitor's sync ranges, for a monitor that cannot be asked. Only reached
+when an \fIxorg.conf\fR is written. \fBX_HORIZSYNC\fR is accepted as a
+spelling variant for LTSP 4 configurations.
+.IP "\fBMODELINES\fP" 4
+Extra modelines for the same case.
+.IP "\fBX_VIDEO_RAM\fP" 4
+Video memory in kilobytes, for hardware that misreports it.
+\fBX_VIDEORAM\fR is the LTSP 4 spelling.
+.IP "\fBX_RAMPERC\fP" 4
+The percentage of free memory the X server may use before the screen gives up
+rather than swapping the client to a standstill. 100 by default, which means
+no limit.
+.IP "\fBX_VIRTUAL\fP, \fBX_VIRTUAL_AUTO\fP" 4
+A virtual screen larger than the monitor, given outright or computed from the
+\fBXRANDR_MODE_\fP\fIn\fP entries. Needed for a multi\-head client, because the
+virtual size has to cover every head and Xorg fixes it at startup.
+.IP "\fBX_OPTION_\fP\fInn\fP" 4
+Extra \fBOption\fR lines for the device section, written in order.
+.IP "\fBX_MONITOR_OPTION_\fP\fInn\fP" 4
+The same for the monitor section.
+.IP "\fBX_MOUSE_DEVICE\fP, \fBX_MOUSE_PROTOCOL\fP, \fBX_MOUSE_EMULATE3BTN\fP" 4
+A mouse that is not on the usual device nodes: which device, which protocol
+(\fBauto\fR by default) and whether two buttons should stand in for three.
+Serial mice, in other words.
+.IP "\fBUSE_TOUCH\fP, \fBX_TOUCH_DEVICE\fP, \fBX_TOUCH_DRIVER\fP" 4
+A touchscreen: whether to configure one, on which device, with which driver.
+.IP "\fBX_TOUCH_MINX\fP, \fBX_TOUCH_MAXX\fP, \fBX_TOUCH_MINY\fP, \fBX_TOUCH_MAXY\fP" 4
+Its calibration.
+.IP "\fBX_TOUCH_RPTDELAY\fP, \fBX_TOUCH_UNDELAY\fP" 4
+Its report and untouch delays.
+.IP "\fBX_NUMLOCK\fP" 4
+Whether Num Lock is on when the session starts. Needs \fBnumlockx\fR in the
+image; without it the directive does nothing, silently.
+.IP "\fBX_BLANKING\fP" 4
+Minutes before the screen blanks, or \fB0\fR to disable blanking and DPMS
+together.
+.IP "\fBXRANDR_DISABLE\fP" 4
+Turns the whole xrandr stage off, for hardware where it does more harm than
+good.
+.IP "\fBXRANDR_OUTPUT\fP, \fBXRANDR_MODE\fP, \fBXRANDR_RATE\fP" 4
+A single display: which output, which mode, which refresh rate.
+.IP "\fBXRANDR_ROTATE\fP, \fBXRANDR_REFLECT\fP, \fBXRANDR_ORIENTATION\fP" 4
+Rotation, mirroring and orientation of that display.
+.IP "\fBXRANDR_DPI\fP, \fBXRANDR_SIZE\fP" 4
+Its resolution in dots per inch and its physical size.
+.IP "\fBXRANDR_NEWMODE\fP" 4
+A mode to define first, for a monitor whose EDID does not offer the one
+wanted.
+.IP "\fBXRANDR_OUTPUT_\fP\fIn\fP and friends" 4
+Every directive in this group also exists with a trailing index \(em
+\fBXRANDR_OUTPUT_0\fR, \fBXRANDR_MODE_0\fR, \fBXRANDR_RATE_0\fR and so on \(em
+for a client with several displays. Index 0 is the first head.
+.IP "\fBX_MODE_0\fP" 4
+An older spelling of \fBXRANDR_NEWMODE_0\fR, still honoured.
+.IP "\fBXRANDR_AUTO_MULTIHEAD\fP" 4
+Arranges the connected outputs left to right without naming them, which covers
+most two\-head clients.
+.IP "\fBXRANDR_ARGS\fP, \fBXRANDR_COMMAND_\fP\fIn\fP" 4
+Arguments appended to every xrandr call, and whole commands to run afterwards
+when the directives above cannot express what is wanted.
 .SH "CLIENT TYPE"
 .PP
 .IP "\fBLTSP_FATCLIENT\fP" 4
@@ -390,6 +605,172 @@ forever, which presents as a text console rather than as an error.
 Whether ldm reboots the client when it finds a newer image on the server. Off
 by default. Reasonable for an unattended fleet, startling for anyone sitting
 in front of one \(em the greeter simply disappears mid\-login.
+.IP "\fBRM_SYSTEM_SERVICES\fP" 4
+Services to remove from the running client, on top of the built\-in list. The
+built\-in list covers what a diskless client has no use for \(em a mail
+transport, a DHCP server, an automatic updater. Removal happens in RAM; the
+image is untouched.
+.IP "\fBRM_THIN_SYSTEM_SERVICES\fP" 4
+The same, applied only to thin clients. Fat clients keep these, because they
+run a real desktop and need the machinery behind it.
+.IP "\fBRM_LOW_RAM_SERVICES\fP, \fBRM_RAM_THRESHOLD\fP" 4
+A further list, applied only below \fBRM_RAM_THRESHOLD\fR megabytes of RAM
+(200 by default). For hardware where cron and its neighbours are the
+difference between a session and a swap storm.
+.IP "\fBRM_SESSION_SERVICES\fP, \fBKEEP_SESSION_SERVICES\fP" 4
+The same idea one level up: autostart entries removed from the desktop
+session, and the exceptions to that.
+.IP "\fBDISABLE_GETTYS\fP" 4
+Whether to remove the text logins on terminals 2 to 6. True by default. Set it
+false to keep a console on a machine being worked on \(em and remember that a
+console on a thin client is a root prompt.
+.IP "\fBDEFAULT_DISPLAY_MANAGER\fP" 4
+What goes into \fI/etc/X11/default\-display\-manager\fR, \fI/usr/sbin/ldm\fR
+unless set. An empty value leaves the file alone, which is what a fat client
+running its own display manager wants.
+.SH "SOUND"
+.PP
+.IP "\fBSOUND\fP" 4
+Whether sound is available in the session. Derived rather than configured:
+true on a thin client when a sound daemon is present, false on a fat client,
+which plays its own audio locally and needs no forwarding.
+.IP "\fBSOUND_DAEMON\fP" 4
+Which daemon does it \(em \fBpulse\fR when PulseAudio is in the image. Also
+derived, and forced off for fat clients.
+.SH "LOCAL DEVICES AND APPLICATIONS"
+.PP
+.IP "\fBLOCALDEV\fP" 4
+Whether USB sticks and other media plugged into the client appear inside the
+session. Derived: true when \fBltspfsd\fR is in the image, off for fat
+clients, which mount their own media directly.
+.IP "\fBLOCAL_STORAGE\fP" 4
+The LTSP 4 name for the same thing, honoured for old configurations.
+.IP "\fBLOCAL_APPS\fP" 4
+Whether applications may run on the client instead of the server, with the
+user's home directory mounted over sshfs. Derived: true when \fBsshfs\fR is in
+the image. The sshfs mount is skipped when the home directory already arrives
+another way, for example over NFS on a fat client.
+.IP "\fBSCANNER\fP" 4
+Whether to start \fBsaned\fR on the client, so a scanner attached to it can be
+reached from the session.
+.SH "FILESYSTEMS AND HOME DIRECTORIES"
+.PP
+.IP "\fBCONFIGURE_FSTAB\fP" 4
+Whether LTSP writes the client's \fI/etc/fstab\fR at boot. True unless set
+otherwise; false leaves whatever the image carries.
+.IP "\fBFSTAB_\fP\fInn\fP" 4
+Additional \fIfstab\fR lines, written in the order of their numbers. The whole
+line, exactly as it would appear in the file.
+.IP "\fBNFS_HOME\fP" 4
+The home directories, mounted over NFS. Either \fIserver:/path\fR or just
+\fI/path\fR, in which case the boot server is used. The mount point is created
+if it does not exist. This is how a fat client gets real home directories
+instead of writing into RAM that vanishes at logout.
+.IP "\fBNFS_HOME_OPTIONS\fP" 4
+Mount options for it, \fBdefaults\fR unless set.
+.IP "\fBOVERLAY_DIR\fP" 4
+A directory in the image whose contents are unpacked over \fI/\fR at boot,
+\fI/etc/ltsp/overlay\-dir\fR by default. The way to place a handful of files on
+every client without a hook script.
+.SH "SWAP"
+.PP
+.IP "\fBUSE_LOCAL_SWAP\fP" 4
+Whether to use swap partitions found on a local disk. Off by default, because
+a thin client is not supposed to touch the disk it boots past.
+.IP "\fBNBD_SWAP\fP" 4
+Whether to swap over the network to the server. Switched on automatically
+below \fBNBD_SWAP_THRESHOLD\fR megabytes of RAM when no local swap was found.
+.IP "\fBNBD_SWAP_THRESHOLD\fP" 4
+That threshold: 800 MB for a thin client, 2100 for a fat one.
+.IP "\fBNBD_SWAP_HOST\fP" 4
+Which server serves it, the boot server unless set.
+.IP "\fBENCRYPT_SWAP\fP" 4
+Whether swap is encrypted. Derived: true when \fBcryptsetup\fR is in the
+image. Worth leaving on \(em network swap carries whatever was in the session's
+memory across the wire.
+.SH "TIME"
+.PP
+.IP "\fBTIMEZONE\fP" 4
+The client's time zone, as a zoneinfo name such as \fBEurope/Berlin\fR.
+Without it the client displays UTC, which looks like a clock that is wrong
+rather than a clock in another zone \(em the greeter shows it, and so does
+every log line written on the client.
+.IP "\fBTIMESERVER\fP" 4
+An NTP server to set the clock from at boot, or \fBauto\fR for the boot
+server. Needs \fBntpdate\fR in the image; where systemd's time
+synchronisation already runs, this is unnecessary.
+.IP "\fBHWCLOCK\fP" 4
+Whether the hardware clock is written back as \fButc\fR (the default) or
+\fBlocal\fR.
+.SH "NETWORK AND NAMES"
+.PP
+.IP "\fBSERVER\fP" 4
+The boot server, used as the default for nearly everything else here \(em
+lts.conf is fetched from it, swap and syslog go to it, and it is the fallback
+session server. Normally derived from how the client booted.
+.IP "\fBSERVER_NAME\fP" 4
+The name that server is given in the client's \fI/etc/hosts\fR, \fBserver\fR
+by default.
+.IP "\fBDNS_SERVER\fP" 4
+Nameservers for the client, space separated. Unset, the client uses what DHCP
+gave it, then tries the boot server and the gateway in turn.
+.IP "\fBSEARCH_DOMAIN\fP, \fBDNSDOMAIN\fP" 4
+The DNS search domain, and the domain appended to the client's own name.
+.IP "\fBHOSTS_\fP\fInn\fP" 4
+Additional \fI/etc/hosts\fR lines, in the order of their numbers.
+.IP "\fBNET_DEVICE_METHOD\fP" 4
+How \fI/etc/network/interfaces\fR describes the boot interface, \fBmanual\fR
+by default \(em the address is already configured by the time that file
+matters, and anything else invites a second configuration of the interface the
+root filesystem is arriving over.
+.IP "\fBSYSLOG_HOST\fP" 4
+A host to send the client's log to. On a thin client \fI/var/log\fR is in RAM
+and dies with the client, so this is the only way to read afterwards what
+happened during a boot that failed.
+.SH "LOCAL KERNEL UPDATES"
+.PP
+A client that boots its kernel from a local disk rather than over the
+network needs that copy refreshed when the image gets a new one.
+.IP "\fBKERNEL_DEVICE\fP" 4
+The partition holding it, for example
+\fB/dev/disk/by\-label/LTSP\fR. Nothing happens unless this is set and
+the device exists. It can also come from the kernel command line as
+\fBltsp.kernel_device=\fR.
+.IP "\fBKERNEL_NAME\fP, \fBINITRD_NAME\fP" 4
+What the kernel and initrd are called there, \fBvmlinuz\fR and
+\fBinitrd.img\fR unless set.
+.SH "RUNNING THINGS AT BOOT"
+.PP
+.IP "\fBMODULE_\fP\fInn\fP" 4
+Kernel modules to load, with their parameters, in the order of their numbers.
+The whole \fBmodprobe\fR argument list, not only the name.
+.IP "\fBINIT_COMMAND_\fP\fInn\fP" 4
+Shell commands run during the client's startup, in the order of their numbers.
+They are sourced, not executed, so they see and can change the LTSP variables.
+.IP "\fBRCFILE_\fP\fInn\fP" 4
+Lines appended to \fI/etc/rc.local\fR, which runs later than
+\fBINIT_COMMAND_\fP\fInn\fP \(em after the services are up rather than while
+the client is still assembling itself.
+.IP "\fBCRONTAB_\fP\fInn\fP" 4
+Lines added to the client's crontab. Full crontab syntax including the user
+field.
+.IP "\fBSHUTDOWN_TIME\fP" 4
+A time of day, \fBHH:MM\fR, at which the client switches itself off. A client
+with a session open is not cut off mid\-work: it is marked to shut down when
+that session ends.
+.SH "THE CONFIGURATION FILE ITSELF"
+.PP
+.IP "\fBLTSCONF\fP" 4
+The file name fetched over TFTP, \fBlts.conf\fR unless set. The directory
+comes from the boot path \(em see FILES.
+.IP "\fBPROCESS_LTS_CONF\fP" 4
+Whether lts.conf is read at all. Off means the image's built\-in defaults
+stand, whatever the server offers.
+.IP "" 4
+Not everything LTSP reads lives here. \fBltsp\-update\-kernels\fR(8)
+takes its settings \(em \fBBOOT_METHODS\fR, the \fBCMDLINE_\fR series,
+\fBPXELINUX_DEFAULT\fR and the rest of the boot\-menu directives \(em from
+\fI/etc/ltsp/update\-kernels.conf\fR in the image, not from lts.conf.
 .SH "FILES"
 .PP
 .IP "\fI/etc/ltsp/lts.conf\fP" 4
