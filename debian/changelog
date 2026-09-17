@@ -1,3 +1,31 @@
+ltsp (6.3.8-1) unstable; urgency=medium
+
+  * SSH_KNOWN_HOSTS_n is no longer dropped when the same key is already in
+    the image under another name. The duplicate check compared key type and
+    key material and ignored the host, so two names for one key counted as a
+    repeat.
+
+    That is not a corner case, it is what an image built by
+    ltsp-build-client hands you: the build bakes the server's own keys in
+    under the name "server", while RDP_SERVER is normally an address. The
+    address entry from lts.conf looked like a repeat and was discarded, so
+    ssh-keygen -F found nothing for that address, and RDP_PREAUTH=ssh
+    disabled itself: no ssh connection at all, straight through to the RDP
+    client, one line in the client's log as the only trace.
+
+    The check now includes the host. Covered by a harness that drives the
+    real hook against a temporary key file: same host and key still does not
+    grow the file, a second name for the same key is added, a malformed line
+    and an unsupported key type are still refused. The old code fails that
+    third case and passes the rest.
+
+    lts.conf(5) says outright that the build leaves the server's keys under
+    the name "server", that the address entry is still needed, and that
+    RDP_PREAUTH_HOST=server is the way to get the same result on an image
+    built before this fix.
+
+ -- Marc-Andre Butz <butz@labor-heidrich.de>  Thu, 17 Sep 2026 18:01:54 +0200
+
 ltsp (6.3.7-1) unstable; urgency=medium
 
   * The client loads its console font before systemd starts, which removes

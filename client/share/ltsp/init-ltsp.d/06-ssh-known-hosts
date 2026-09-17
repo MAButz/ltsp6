@@ -55,10 +55,20 @@ ltsp_add_known_host() {
             ;;
     esac
 
-    # Skip a key that is already there, so a rebooted client does not grow the
-    # file and so an image-baked entry is not duplicated.
+    # Skip an entry that is already there, so a rebooted client does not grow
+    # the file and so an image-baked entry is not duplicated.
+    #
+    # The host is part of that test, and has to be. Matching on the key alone
+    # treats two names for one key as a duplicate - and that is not a corner
+    # case, it is what an image built by ltsp-build-client hands you: the
+    # build bakes the server's keys in under the name "server", while a client
+    # reaches that same server by address, so the address entry from lts.conf
+    # looked like a repeat of one already present and was dropped. Everything
+    # that then looked the host up by address found nothing, which for
+    # RDP_PREAUTH=ssh means the check disables itself and says so only in the
+    # log.
     if [ -f /etc/ssh/ssh_known_hosts ] &&
-       grep -qsF " $keytype $keydata" /etc/ssh/ssh_known_hosts; then
+       grep -qsF "$host $keytype $keydata" /etc/ssh/ssh_known_hosts; then
         return 0
     fi
 

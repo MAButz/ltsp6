@@ -424,6 +424,22 @@ fetches its kernel, initrd and whole root filesystem the same way, and
 whoever can interfere with that owns the client regardless. The pinning is
 exactly as strong as the boot chain and no stronger. It would become the weak
 link the moment the boot chain is secured and lts.conf is left on plain TFTP.
+.IP "" 4
+An image built by \fBltsp\-build\-client\fP(8) already carries the build
+server's own host keys, written by \fBltsp\-update\-sshkeys\fP(8) under the name
+\fBserver\fR \(em the name \fIinit\-ltsp.d/09\-hostname\fR also puts in the
+client's \fI/etc/hosts\fR. That does not make the lts.conf entry redundant:
+\fBRDP_SERVER\fR is normally an address, ssh looks the key up by the name it was
+given, and a key filed under \fBserver\fR is not found when the question is
+about \fB192.168.67.1\fR.
+.IP "" 4
+Until 6.3.8\-1 adding it did not help either, because the duplicate check
+compared key material and ignored the host: the address entry looked like a
+repeat of the one already in the image and was dropped. The symptom was a
+pre\-authentication that disabled itself \(em no ssh connection at all, straight
+to the RDP client, and a line in the client's log as the only trace.
+\fBRDP_PREAUTH_HOST=server\fR is the way to get the same result on an older
+image, since that name is in both the key file and \fI/etc/hosts\fR.
 .SH "PER-SCREEN DIRECTIVES"
 .PP
 Any directive can be given per screen by prefixing it with \fBSCREEN_\fInn\fB_\fR.
