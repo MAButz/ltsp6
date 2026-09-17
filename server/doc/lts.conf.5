@@ -110,6 +110,20 @@ session.
 .IP "\fBRDP_PREAUTH_SSH_KNOWN_HOSTS\fP" 4
 Where to look for the host keys. Defaults to \fI/etc/ssh/ssh_known_hosts\fR,
 which is where ltsp\-update\-sshkeys(8) puts them.
+.IP "" 4
+With no entry for the host it would ask, the check is skipped and says so in
+the log, naming the host and the file; the login proceeds exactly as it would
+with \fBRDP_PREAUTH\fR unset. Missing configuration is a gap, not an attack,
+and refusing every login over it would be a lockout \(em announced, on top of
+that, as "the session server could not be verified", which points at the wrong
+problem. A key that is present and does \fInot\fR match still refuses: that is
+the case the check exists to catch.
+.IP "" 4
+The test is per host, not per file, and the difference bites. An image carries
+whatever \fIssh_known_hosts\fR was baked into it at build time, and those keys
+belong to the site it was built for. Deployed anywhere else the file is
+present, non\-empty and irrelevant \(em a set of foreign keys used to be worse
+than no keys at all.
 .SH "LOCKOUT WARNINGS"
 .PP
 Sites protect RDP with fail2ban, so a few rejected passwords block the client
@@ -187,6 +201,28 @@ the numbered form takes as many as needed:
 SSH_KNOWN_HOSTS_0="172.17.250.31 ssh\-ed25519 AAAAC3Nza..."
 SSH_KNOWN_HOSTS_1="172.17.250.32 ssh\-ed25519 AAAAC3Nza..."
 .fi
+.IP "" 4
+Where to get those lines. On any machine that can reach the session server:
+.IP "" 4
+.nf
+ssh\-keyscan \-t ed25519 172.17.250.31
+.fi
+.IP "" 4
+prints exactly one line in exactly the form this setting wants \(em host,
+key type, key \(em and that line is what goes in the quotes. A server
+without an ed25519 key answers to \fBssh\-keyscan\fR without \fB\-t\fR,
+which lists every key it has; any one of them will do. The same thing read
+from the server itself is
+.IP "" 4
+.nf
+cat /etc/ssh/ssh_host_ed25519_key.pub
+.fi
+.IP "" 4
+except that this file has no host name in front and a comment
+(\fBroot@hostname\fR) at the end: prepend the address the client will use
+and drop the comment. Verify it out of band \(em comparing
+\fBssh\-keygen \-lf\fR on the server with what ssh\-keyscan returned is
+the point of pinning a key at all.
 .IP "" 4
 Numbering starts at 0 and stops at the first gap, so a mistyped index shows up
 as one missing key rather than silently dropping every key after it. Entries

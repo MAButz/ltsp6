@@ -1,0 +1,35 @@
+# Debian-specific function overrides for the client common functions.
+#
+# Sourced by ltsp-client-functions when present, which is the extension point
+# the server side has been using all along - server/Debian has had its own
+# vendor-functions since forever, the client never did.
+#
+# Why it is needed. detect_arch() in common/ltsp-common-functions returns
+# `uname -m`, which on a PC is "x86_64". The server overrides it with
+# `dpkg --print-architecture`, which returns "amd64" - and "amd64" is the name
+# the server then uses for the chroot and for the TFTP tree,
+# /srv/tftp/ltsp/amd64. Client and server therefore disagree about what this
+# architecture is called.
+#
+# The disagreement is invisible with PXELINUX, because DHCP option 67 carries a
+# full path there (/ltsp/amd64/pxelinux.0) and init-ltsp.d/05-getltsconffile
+# takes the directory from that, never reaching the fallback. With iPXE the
+# boot file is just "ltsp.ipxe" with no directory at all, so the fallback is
+# what runs - and the client asks the server for /ltsp/x86_64/lts.conf.
+#
+# That file does not exist, and nothing says so: 05-getltsconffile only checks
+# that what it fetched is non-empty, and keeps the old file otherwise. The
+# client then boots with whatever lts.conf was baked into the image, and every
+# change made on the server is ignored in silence. The greeter comes up
+# perfectly and is configured for nothing.
+#
+# Found by the log line that should have been looked for much earlier:
+#     file /srv/tftp/ltsp/x86_64/lts.conf not found for 172.17.249.182
+
+detect_arch() {
+    if [ -x /usr/bin/dpkg ]; then
+        dpkg --print-architecture
+    else
+        uname -m
+    fi
+}

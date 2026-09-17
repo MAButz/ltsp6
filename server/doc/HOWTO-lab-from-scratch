@@ -680,6 +680,131 @@ keep sshd for diagnostics; both are test scaffolding and must come out
 before a production image.
 
 
+
+Step 5c - A fat client image alongside the thin one
+-----------------------------------------------------
+
+A fat client runs the desktop locally instead of over RDP. It still uses
+ldm as its greeter, but with the ssh backend, and the session starts on
+the client. Both images are served at the same time; which one a client
+gets is decided in DHCP, per MAC.
+
+What the pieces do, because the division of labour is not obvious:
+
+  - ldm's ssh backend opens a connection to LDM_SERVER. If sshd refuses
+    it, the password was wrong: that connection IS the authentication,
+    and the server validates it through PAM, which is where sssd asks
+    the domain controller. The client never talks to the DC and never
+    joins the domain - a shared image cannot hold a machine account per
+    client.
+
+  - ldm-rc.d/X01-localapps then reuses that same connection to fetch the
+    identity: `getent passwd $(id -u)` and `getent group $(id -G)` from
+    the server, and creates the user and groups locally with the same
+    UID and GID. That is why /home over NFS works at all - the numbers
+    match what the file server sees.
+
+  - The same script mounts the home with sshfs, unless it is already
+    mounted. `stat -c %m "$LDM_HOME"` different from "/" is the test, so
+    an FSTAB_ entry in lts.conf is all it takes to get NFS instead.
+
+One base directory, two chroots, distinct names:
+
+    ltsp-build-client --base /srv/ltsp-fat --arch amd64 --dist trixie \
+        --components main,non-free-firmware \
+        --apt-keys /etc/apt/keyrings/ltsp6.asc \
+        --extra-mirror "https://mabutz.github.io/ltsp6 trixie main" \
+        --early-packages ca-certificates \
+        --fat-client-desktop xfce4,xfce4-terminal,dbus-x11 \
+        --late-packages ldm,ldm-server,ltsp-client-core,nfs-common,sshfs,\
+tftp-hpa,xserver-xorg-core,xserver-xorg-video-all,xinit,x11-xserver-utils,\
+kbd,console-setup,nbd-client,xterm \
+        --purge-chroot --no-squashfs-image
+
+    # then move it under the common base with a name of its own
+    mv /srv/ltsp-fat/amd64 /srv/ltsp/amd64-fat
+    mv /srv/ltsp/amd64     /srv/ltsp/amd64-thin     # rename the thin one too
+    ltsp-update-kernels -b /srv/ltsp amd64-thin
+    ltsp-update-kernels -b /srv/ltsp amd64-fat
+    ltsp-update-image   -b /srv/ltsp amd64-fat
+    systemctl restart nbd-server
+
+ldm-server belongs in a fat image: screen.d/ldm calls ldminfod locally
+for fat clients instead of asking the server on port 9571.
+
+  THE NAMES MATTER, and not for tidiness. ltsp-update-kernels writes to
+  /srv/tftp/ltsp/<chroot name>/ and ltsp-update-image writes
+  /srv/ltsp/images/<chroot name>.img - both keyed on the name of the
+  chroot directory, not on the base. Two chroots both called "amd64",
+  under different bases, therefore overwrite each other's kernel and
+  initrd in the TFTP tree, silently. Here the fat build replaced the thin
+  client's 39 MB initrd with its own 57 MB one, and the thin clients
+  would have booted the fat initrd on their next reboot.
+
+  <arch>-<role> keeps the architecture visible, which starts to matter
+  the moment an arm64 client appears and "fat" alone is ambiguous.
+
+lts.conf for the fat clients, in its own TFTP directory:
+
+    [default]
+        LTSP_FATCLIENT=True
+        LOCAL_APPS=True
+        LDM_DEFAULT_BACKEND="ssh"
+        LDM_SERVER="172.17.250.31 172.17.250.32"
+        XKBLAYOUT=de
+        CONSOLE_KEYMAP=de
+        FSTAB_1="172.17.250.40:/srv/home  /home  nfs  defaults,nolock  0  0"
+        SSH_KNOWN_HOSTS_0="172.17.250.31 ssh-ed25519 AAAAC3Nza..."
+        SSH_KNOWN_HOSTS_1="172.17.250.32 ssh-ed25519 AAAAC3Nza..."
+
+The host keys are not optional here. ldm's ssh backend is the login, so
+an unknown key makes ssh ask its interactive question, ldm gets no answer
+and restarts - a boot loop with a black screen and nothing in it that
+says why. `ssh-keyscan -t ed25519 <server>` prints the line to paste.
+
+Two iPXE scripts, and the choice made in DHCP:
+
+    # /srv/tftp/ltsp-fat.ipxe
+    kernel /ltsp/amd64-fat/vmlinuz BOOT_IMAGE=/ltsp/amd64-fat/vmlinuz \
+        initrd=initrd.img root=/dev/nbd0 \
+        nbdroot=172.17.250.20:10809/ltsp-amd64-fat ro ip=dhcp \
+        init=/sbin/init-ltsp console=tty0 random.trust_cpu=on toram
+    initrd /ltsp/amd64-fat/initrd.img
+
+    # /etc/dnsmasq.d/zz-fat-clients.conf
+    dhcp-host=bc:24:11:5a:8d:be,set:fat
+    dhcp-boot=tag:fat,tag:ipxe,ltsp-fat.ipxe
+
+  The file name has to sort AFTER the one carrying the general
+  dhcp-boot, because with several matching dhcp-boot lines dnsmasq uses
+  the one it read last, not the one with the most tags. Named
+  "30-fat-clients.conf" the client was tagged "fat" - the log says so -
+  and was sent ltsp.ipxe anyway, because ltsp.conf came later in the
+  directory. Hence "zz-".
+
+  Note what this does NOT do: lts.conf cannot choose the image. By the
+  time anything reads lts.conf the image is already loaded and running.
+  LTSP_FATCLIENT only decides whether an image that HAS a desktop runs
+  the session locally or hands it to a server - so one fat image plus a
+  per-MAC section in lts.conf is a real alternative to two images, at
+  the price of every client downloading the larger one.
+
+A desktop metapackage brings its own display manager, and it wins.
+xfce4 pulls in lightdm, whose postinst takes over
+/etc/systemd/system/display-manager.service. ldm then never runs, and
+the client stops at a text login on tty1 with no error anywhere. Purge
+it and point the symlink back:
+
+    ltsp-chroot --base /srv/ltsp --arch amd64-fat apt-get purge -y lightdm
+    ln -sf /usr/lib/systemd/system/ldm.service \
+        /srv/ltsp/amd64-fat/etc/systemd/system/display-manager.service
+
+Verified on a booted fat client: xfce4-session, pulseaudio and dbus
+running locally as the domain user, the user created locally with the
+same uid the servers use (270001117), /home mounted nfs4 from the file
+server, zero sshfs mounts, and a file written from the session visible
+on the application server as the same user.
+
 Step 6 - The file server for home directories
 -------------------------------------------------
 

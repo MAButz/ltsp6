@@ -1,3 +1,61 @@
+ltsp (6.3.0-1) unstable; urgency=medium
+
+  * New: client/Debian/share/ltsp/ltsp-client-vendor-functions, overriding
+    detect_arch() the same way the server side has always done. The server
+    has had vendor overrides since forever; the client never did, so it fell
+    back to the common implementation, `uname -m`, and called this
+    architecture "x86_64" while the server calls it "amd64" and names the
+    chroot and the TFTP tree accordingly.
+
+    The disagreement is invisible with PXELINUX, because DHCP option 67
+    carries a full path there (/ltsp/amd64/pxelinux.0) and
+    init-ltsp.d/05-getltsconffile takes the directory from it, never reaching
+    the fallback. With iPXE the boot file is just "ltsp.ipxe" with no
+    directory at all, so the fallback is exactly what runs - and the client
+    asks for /ltsp/x86_64/lts.conf, which does not exist. 05-getltsconffile
+    only checks that what it fetched is non-empty, so the failure is silent:
+    the client keeps whatever lts.conf was baked into the image and every
+    change made on the server is ignored.
+
+    Found in a log line that should have been looked for a week earlier:
+        file /srv/tftp/ltsp/x86_64/lts.conf not found for 172.17.249.182
+
+    This corrects 6.2.2-1, which claimed the TFTP fetch was verified. It was
+    not: the settings the check found had come from a copy baked into the
+    image in the same session.
+
+  * HOWTO: BOOT_IMAGE= on the iPXE kernel line, which fixes the same problem
+    from the other end and is needed anyway to give two images two different
+    lts.conf files. 05-getltsconffile prefers the directory from BOOT_IMAGE
+    over everything else.
+
+  * HOWTO, new step 5c: a fat client image alongside the thin one. How the
+    login actually works (ldm's ssh backend is the authentication; the same
+    connection carries the identity, so no client joins the domain), how to
+    get /home over NFS instead of sshfs, and four traps that each cost an
+    afternoon:
+
+    - Two chroots both named "amd64" overwrite each other in the TFTP tree,
+      which is keyed on the chroot name and not on the base directory. The
+      fat build silently replaced the thin client's initrd. Hence
+      <arch>-<role> naming.
+    - A desktop metapackage brings its own display manager: xfce4 pulls in
+      lightdm, whose postinst takes display-manager.service away from ldm.
+      The client then stops at a text login with no error anywhere.
+    - With several matching dhcp-boot lines dnsmasq uses the one it read
+      last, not the most specific one, so a per-MAC exception has to sort
+      after the general rule in /etc/dnsmasq.d.
+    - lts.conf cannot choose which image is loaded - by the time anything
+      reads it, the image is running. LTSP_FATCLIENT only decides what an
+      image that has a desktop does with it.
+
+  * lts.conf(5): where SSH_KNOWN_HOSTS_n lines come from (ssh-keyscan -t
+    ed25519, or the server's own ssh_host_ed25519_key.pub with the address
+    prepended and the comment dropped), and what RDP_PREAUTH=ssh does when
+    there is no key for the host it would ask - see ldm 3.3.0.
+
+ -- Marc-Andre Beckmann-Butz <ma@butz.online>  Thu, 17 Sep 2026 13:00:00 +0200
+
 ltsp (6.2.2-1) unstable; urgency=medium
 
   * HOWTO: lts.conf over TFTP needs a tftp client in the image, and nothing
