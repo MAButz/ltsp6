@@ -1323,6 +1323,28 @@ Sorted by how much time each cost, worst first.
   Recognisable in the build log by an "Ign:" and then "Fehl:" on the
   mirror, several hundred lines before the error that stops the build.
 
+  A build with its own --base that changes the TFTP tree anyway. The
+  option isolates two things - the chroot and, with it, the image - and
+  not the third: 035-update-kernels copies the new kernel and initrd into
+  every TFTP root it knows about, and removes the ones that no longer
+  correspond to a chroot. On a server that has been in use for a while
+  that means the running clients boot a different initrd than they did an
+  hour ago, and an older kernel someone kept around is simply gone.
+
+  It is not a bug - the point of that step is that a freshly built chroot
+  becomes bootable - but it is worth knowing before building "just to
+  try" on a machine with clients on it. The log says so plainly, two
+  lines that are easy to read past:
+
+      Updating /var/lib/tftpboot directories for chroot: amd64
+      Removing /var/lib/tftpboot/ltsp/amd64/vmlinuz-6.14.5-1-bpo12-pve
+
+  Before a trial build on a live server, copy the TFTP directory aside.
+  Afterwards, check that the initrd the clients fetch still belongs to
+  the image they mount: the two come from the same chroot, and mixing a
+  new initrd with an old image is the kind of mismatch that boots nine
+  times and hangs the tenth.
+
   A machine that "cannot join the realm" while every package is
   installed. realmd and PackageKit. Use adcli.
 

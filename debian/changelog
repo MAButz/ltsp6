@@ -1,3 +1,20 @@
+ltsp (6.3.6-1) unstable; urgency=medium
+
+  * HOWTO: --base does not isolate the TFTP tree. It isolates the chroot and
+    the image; 035-update-kernels still copies the new kernel and initrd
+    into every TFTP root it knows about, and removes the ones that no longer
+    correspond to a chroot. On a server with clients on it, that means they
+    boot a different initrd than they did an hour ago, and an older kernel
+    someone kept around is gone.
+
+    Not a bug - that step exists so a freshly built chroot becomes bootable
+    - but worth knowing before building "just to try" on a live server. The
+    two log lines that say it are easy to read past, so they are quoted, and
+    the entry says what to check afterwards: that the initrd the clients
+    fetch still comes from the same chroot as the image they mount.
+
+ -- Marc-Andre Butz <butz@labor-heidrich.de>  Thu, 17 Sep 2026 17:38:11 +0200
+
 ltsp (6.3.5-1) unstable; urgency=medium
 
   * ltsp-build-client re-reads the package lists after installing the early
