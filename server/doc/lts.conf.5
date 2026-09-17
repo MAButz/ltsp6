@@ -320,6 +320,38 @@ two greeters then fight over which VT owns the session.
 Whether screen_session waits for the console to become foreground before
 starting. Set \fBFalse\fR for the ldm screen on hardware where that wait never
 completes.
+.SH "CLIENT IDENTITY"
+.PP
+.IP "\fBHOSTNAME\fP" 4
+The client's name, set outright. Leave it unset and the name is built from
+\fBHOSTNAME_BASE\fR and \fBHOSTNAME_EXTRA\fR instead, which is what a fleet
+wants: one lts.conf, a different name per machine.
+.IP "\fBHOSTNAME_BASE\fP" 4
+The fixed part, \fBltsp\fR by default.
+.IP "\fBHOSTNAME_EXTRA\fP" 4
+What distinguishes one client from the next. \fBip\fR (the default) appends the
+host part of the address, so 192.168.67.20 in a /24 becomes \fBltsp20\fR;
+\fBmac\fR appends the MAC with dashes, which survives a changed address but is
+unreadable across a room. A name without either is the same on every client,
+which is fine for one machine on a bench and useless in a lab \(em the greeter
+shows this name, and it is the first thing anyone reads off a screen when
+reporting a fault.
+.IP "" 4
+Both forms need \fBiproute2\fR in the image; \fIltsp\-client\-core\fR depends
+on it since 6.3.3\-1. An older image without it produces the bare base name
+with nothing appended, and silently \(em there is no error, just every client
+called \fBltsp\fR.
+.IP "\fBLDM_CLOCK_FORMAT\fP" 4
+The date and time in the greeter's status line, as an \fBstrftime\fR(3) format
+that may contain Pango markup. The default is \fB"%Y\-%m\-%d, <b>%H:%M</b>"\fR.
+For the German convention:
+.IP "" 4
+\fBLDM_CLOCK_FORMAT="%d.%m.%Y, <b>%H:%M</b>"\fR
+.IP "" 4
+Deliberately not \fB%x\fR, which is the locale's date format and therefore only
+as good as the locale the image happens to carry \(em a stock build is en_US,
+and \fB%x\fR then shows 09/17/2026 to a room in Germany. Worse than foreign, it
+is ambiguous: 09/10 is two different days depending on the reader.
 .SH "GRAPHICS"
 .PP
 .IP "\fBX_COLOR_DEPTH\fP, \fBX_SMART_COLOR_DEPTH\fP" 4

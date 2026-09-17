@@ -1,3 +1,33 @@
+ltsp (6.3.3-1) unstable; urgency=medium
+
+  * ltsp-client-core depends on iproute2, which it has always needed and
+    never asked for. A client image built without it comes up with no
+    /sbin/ip at all, and six scripts then do nothing - none of them
+    noticeably, because a missing command in a pipeline yields an empty
+    string rather than an error:
+
+      - init-ltsp.d/09-hostname loses the part that tells clients apart, so
+        every machine in the room is called "ltsp". The greeter shows that
+        name, and it is the first thing anyone reads off a screen when
+        reporting a fault.
+      - init-ltsp.d/50-machine-id writes the same D-Bus machine id on every
+        client, since the MAC it is built from comes out empty.
+      - init-ltsp.d/50-valid-lft cannot re-arm an address whose DHCP lease
+        expires, which is the thing that script exists for.
+      - ltsp_config.d/50-client-mac leaves LTSP_CLIENT_MAC empty.
+      - init-ltsp.d/10-resolv-conf cannot find the gateway to test as a
+        fallback nameserver.
+      - init-ltsp.d/02-initramfs-env cannot derive $DEVICE when the
+        initramfs did not leave one.
+
+    Found on a client whose greeter read "ltsp" with nothing after it.
+
+  * lts.conf(5) documents HOSTNAME, HOSTNAME_BASE and HOSTNAME_EXTRA - the
+    knobs that decide what a client calls itself - and LDM_CLOCK_FORMAT.
+    None of them were written down anywhere.
+
+ -- Marc-Andre Butz <butz@labor-heidrich.de>  Thu, 17 Sep 2026 16:50:20 +0200
+
 ltsp (6.3.2-1) unstable; urgency=medium
 
   * Shutting a client down from the greeter now actually switches the
