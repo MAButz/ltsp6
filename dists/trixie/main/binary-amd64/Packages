@@ -1,18 +1,18 @@
 Package: ldm
-Version: 3.3.2-1
+Version: 3.3.3-1
 Architecture: amd64
 Maintainer: Marc-André Beckmann-Butz <ma@butz.online>
-Installed-Size: 486
+Installed-Size: 488
 Depends: libc6 (>= 2.38), libcairo2 (>= 1.2.4), libcrypt1 (>= 1:4.1.0), libgdk-pixbuf-2.0-0 (>= 2.22.0), libglib2.0-0t64 (>= 2.70.0), libgtk-3-0t64 (>= 3.21.5), libkrb5-3 (>= 1.6.dfsg.2), libx11-6, libxext6, openssh-client, xserver-xorg | xserver, gettext-base, procps, xinit
 Recommends: freerdp3-x11 | freerdp2-x11, netcat-traditional | netcat, xauth
 Homepage: https://github.com/MAButz/ldm
 Priority: optional
 Section: misc
-Filename: pool/main/l/ldm/ldm_3.3.2-1_amd64.deb
-Size: 122524
-SHA256: 9cbd13d979dd1a71fc6f7ff2ae08bedc6a71372cbc68183697a810b940d90438
-SHA1: 88d57755567873cebc607568150d45bd03b71032
-MD5sum: c6c6b3c7e1d0f11284425e2d28acc153
+Filename: pool/main/l/ldm/ldm_3.3.3-1_amd64.deb
+Size: 123084
+SHA256: 4fa413d86dd897c201271d44f6aeaddafff9fd0f92143b5a34b6077e6292d9b4
+SHA1: 2cafb5e59336739a30c6ef31fc9ea908e4cc01dd
+MD5sum: 4f51759efd09cc389ca31b9bebe59519
 Description: LTSP display manager (GTK3 / xfreerdp fork)
  ldm is an X11 display manager similar to xdm, gdm and kdm, used by LTSP
  (Linux Terminal Server Project) thin clients. This fork replaces the
@@ -29,20 +29,20 @@ Description: LTSP display manager (GTK3 / xfreerdp fork)
 
 Package: ldm-server
 Source: ldm
-Version: 3.3.2-1
+Version: 3.3.3-1
 Architecture: all
 Maintainer: Marc-André Beckmann-Butz <ma@butz.online>
-Installed-Size: 34
+Installed-Size: 35
 Depends: python3, x11-common, openssh-server, update-inetd, openbsd-inetd | inet-superserver
 Recommends: xauth
 Homepage: https://github.com/MAButz/ldm
 Priority: optional
 Section: misc
-Filename: pool/main/l/ldm/ldm-server_3.3.2-1_all.deb
-Size: 13932
-SHA256: 97c6d399b97201305939885f43c4c35c45c6bd6a1e7f3899b1bd88ab9fe05d8e
-SHA1: 35f76ffb5e0ad64d63dd34e647741d2fb5a195af
-MD5sum: ff91d8e3fa98d6c6df4634a01f587c52
+Filename: pool/main/l/ldm/ldm-server_3.3.3-1_all.deb
+Size: 14456
+SHA256: 3be36ea98a0f540d66d0f30b5ecca9f8076074ec362a00cef913507d8797539f
+SHA1: 2aff6d5f2035a39083b04f4ce2d0a5ad0e9237a1
+MD5sum: ded827111a5138d003aed8c8c208fd46
 Description: server components for LTSP display manager
  This package includes the server-side components used by ldm to
  discover available sessions and locales on the server (ldminfod).
