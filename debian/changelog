@@ -1,3 +1,30 @@
+ltsp (6.3.7-1) unstable; urgency=medium
+
+  * The client loads its console font before systemd starts, which removes
+    the row of empty boxes from the early boot messages.
+
+    The kernel's built-in font maps Latin-1 and nothing else. systemd writes
+    its messages in the client's locale, quotes unit names typographically
+    and ends them with an ellipsis - none of which exist in that font, so
+    each of those characters is drawn as an empty box. console-setup fixes
+    it, but its service is WantedBy=multi-user.target and runs long after
+    the messages anyone reads have gone past.
+
+    init-ltsp.d/50-console-font runs the font script console-setup already
+    cached in the image, while init-ltsp still owns the machine, and puts
+    the console into UTF-8 mode. No configuration to repeat and nothing new
+    to install: the image was carrying the answer, just not early enough.
+
+    CONSOLE_FONT in lts.conf names a different font for that early phase,
+    documented in lts.conf(5) along with what it does not do - console-setup
+    still loads its own font afterwards.
+
+    Reported as "kleine Kloetzchen" where a special character belongs, seen
+    on a German client whose image locale is de_DE.UTF-8. Not specific to
+    German: an English one quotes with U+2018 and U+2019 and fares no better.
+
+ -- Marc-Andre Butz <butz@labor-heidrich.de>  Thu, 17 Sep 2026 17:51:03 +0200
+
 ltsp (6.3.6-1) unstable; urgency=medium
 
   * HOWTO: --base does not isolate the TFTP tree. It isolates the chroot and

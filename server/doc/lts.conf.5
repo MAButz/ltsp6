@@ -462,6 +462,25 @@ The rest of the X keyboard description, with the same meanings they have in
 \fBxkeyboard\-config\fR(7): the physical model, the layout variant (\fBnodeadkeys\fR
 and the like), extra options such as \fBcompose:menu\fR, and the rule set.
 \fBXKBLAYOUT\fR alone is enough for most fleets.
+.IP "\fBCONSOLE_FONT\fP" 4
+The font loaded on the text console before systemd starts, as a name from
+\fI/usr/share/consolefonts\fR with or without the \fI.psf.gz\fR \(em for
+example \fBUni3\-Terminus16\fR. Unset, the client runs the font console\-setup
+already cached in the image, which is the right answer almost always.
+.IP "" 4
+It exists because of what the early boot looks like without it. The kernel's
+built\-in font maps Latin\-1 and nothing else, while systemd writes its messages
+in the client's locale, quotes unit names typographically \(em \fB\(dqfoo\(dq\fR
+on a German system, \fB'foo'\fR on an English one \(em and ends them with an
+ellipsis. None of those characters are in the built\-in font, so every one of
+them is drawn as an empty box until console\-setup runs, which its service does
+at \fBmulti\-user.target\fR: long after the messages anyone reads have scrolled
+past. Since 6.3.7\-1 the client loads the font itself, early, and the boxes are
+gone.
+.IP "" 4
+Note that console\-setup still loads its own font later, over the top. This
+directive decides what the early boot looks like, not what the console settles
+on; for both, configure console\-setup in the image.
 .SH "CLIENT IDENTITY"
 .PP
 .IP "\fBHOSTNAME\fP" 4

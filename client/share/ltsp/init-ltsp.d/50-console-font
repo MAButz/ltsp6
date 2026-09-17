@@ -1,0 +1,45 @@
+# Load the console font before systemd starts talking.
+#
+# The kernel's built-in font maps Latin-1 and nothing else. systemd writes its
+# messages in the client's locale and quotes unit names typographically - „foo"
+# on a German system, 'foo' on an English one - and ends them with an ellipsis.
+# None of those characters exist in the built-in font, so for the whole early
+# boot they come out as empty boxes, one per character. It looks like a broken
+# image and is nothing but a font that has not been loaded yet.
+#
+# console-setup does load one, but its service is WantedBy=multi-user.target,
+# which is well after the messages anyone actually reads have scrolled past. Its
+# cached script does the same work with no configuration to repeat, and can be
+# run here, while init-ltsp still owns the machine.
+#
+# CONSOLE_FONT overrides it, for an image whose console-setup is configured for
+# something other than the screen in front of the user - a name from
+# /usr/share/consolefonts, with or without the .psf.gz:
+#
+#     CONSOLE_FONT=Uni3-Terminus16
+#
+# Note that console-setup will later load its own font over the top of that one.
+# Setting CONSOLE_FONT changes what the early boot looks like, not what the
+# console settles on; to change both, configure console-setup in the image.
+#
+# Failure here is never worth stopping a boot for: a client with the wrong font
+# is a client that works and looks odd.
+
+if [ -n "$CONSOLE_FONT" ] && [ -x /usr/bin/setfont ]; then
+    setfont "$CONSOLE_FONT" 2>/dev/null || true
+elif [ -x /etc/console-setup/cached_setup_font.sh ]; then
+    /etc/console-setup/cached_setup_font.sh 2>/dev/null || true
+else
+    return 0
+fi
+
+# Tell the console the bytes arriving are UTF-8. Without this the font is
+# loaded and the multi-byte characters are still drawn one byte at a time,
+# which is the same boxes in a different arrangement. cached_setup_font.sh
+# does this itself; repeating it costs nothing and covers the CONSOLE_FONT
+# path above.
+for ltsp_vcs in /dev/vcs[0-9]*; do
+    test -e "$ltsp_vcs" || continue
+    printf '\033%%G' > "/dev/tty${ltsp_vcs#/dev/vcs}" 2>/dev/null || true
+done
+unset ltsp_vcs
