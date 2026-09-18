@@ -28,7 +28,8 @@ Displays information useful to troubleshooting issues on an LTSP
 server. Information should include server distro and release,
 versions of LTSP related packages installed on the server, LTSP
 chroots and their package versions, the TFTP directories the clients
-boot from, LTSP image files and lts.conf(5).
+boot from, LTSP image files, and both places a client reads its
+lts.conf(5) from - whether each one is there, and which of the two wins.
 
 Options:
   -h, --help                    Displays the ltsp-info help message.
@@ -47,32 +48,41 @@ find_chroots() {
     fi
 }
 
-find_lts_conf() {
-    chroot=$1
-    lts_conf="$chroot/etc/lts.conf"
-    if [ -f "$lts_conf" ]; then
-        echo found: "$lts_conf"
-        if [ "$verbose" = "true" ]; then
-            cat "$lts_conf"
-        fi
-        echo
-    fi
-}
-
-# The TFTP tree is reported on its own, not once per chroot.  The client reads
-# its lts.conf and its kernel from there and nowhere else, so what is in there
-# matters whether or not a chroot is still around: the chroot may have been
-# built under a different BASE (ltsp-build-client --base), or removed once its
-# image was in place.  Tying this listing to the chroots, as it used to be,
-# meant a server that boots clients perfectly reported no lts.conf at all.
-find_tftp() {
-    found=""
+# The TFTP trees that exist. Empty output means none of TFTP_DIRS is there.
+tftp_roots() {
     for tftpdir in $TFTP_DIRS ; do
         tftpboot="$tftpdir/$TFTP_BOOT_DIR"
         tftpboot=${tftpboot%/}
-        if [ ! -d "$tftpboot" ]; then
-            continue
+        if [ -d "$tftpboot" ]; then
+            echo "$tftpboot"
         fi
+    done
+}
+
+# Every architecture there is any evidence of: a chroot under BASE, or a
+# directory in a TFTP tree. The two need not agree - a chroot built under a
+# different base leaves only the TFTP side behind, and an image put in place
+# by hand leaves only that.
+find_arches() {
+    {
+        if [ -d "$BASE" ]; then
+            find -L "$BASE/" -mindepth 1 -maxdepth 1 -type d ! -name images -printf '%f\n'
+        fi
+        for tftpboot in $(tftp_roots) ; do
+            find -L "$tftpboot/" -mindepth 1 -maxdepth 1 -type d -printf '%f\n'
+        done
+    } | sort -u
+}
+
+# The TFTP tree is reported on its own, not once per chroot. The client reads
+# its kernel from there and from nowhere else, so what is in there matters
+# whether or not a chroot is still around: the chroot may have been built
+# under a different BASE (ltsp-build-client --base), or removed once its image
+# was in place. Tying this listing to the chroots, as it used to be, meant a
+# server that boots clients perfectly reported nothing at all.
+find_tftp() {
+    found=""
+    for tftpboot in $(tftp_roots) ; do
         for dir in $(find -L "$tftpboot/" -mindepth 1 -maxdepth 1 -type d | sort) ; do
             found="true"
             echo "found tftp directory: $dir"
@@ -81,15 +91,6 @@ find_tftp() {
                     echo "  boot file: $(basename "$f")"
                 fi
             done
-            lts_conf="$dir/lts.conf"
-            if [ -f "$lts_conf" ]; then
-                echo "  found: $lts_conf"
-                if [ "$verbose" = "true" ]; then
-                    sed 's/^/    /' "$lts_conf"
-                fi
-            else
-                echo "  no lts.conf here"
-            fi
             echo
         done
     done
@@ -101,16 +102,67 @@ find_tftp() {
     fi
 }
 
+lts_conf_line() {
+    file=$1
+    note=$2
+    if [ -f "$file" ]; then
+        printf '  present  %-48s %s\n' "$file" "$note"
+        if [ "$verbose" = "true" ]; then
+            sed 's/^/             /' "$file"
+        fi
+    else
+        printf '  missing  %-48s %s\n' "$file" "$note"
+    fi
+}
+
+# Both places a client's lts.conf can come from, named in full and in the
+# order that decides which one the client ends up with.
+report_lts_conf() {
+    echo "lts.conf, the two places a client reads it from:"
+    echo "  init-ltsp fetches it over tftp from the directory the kernel came"
+    echo "  from and writes it over /etc/lts.conf in the running client - but"
+    echo "  only when the transfer returns a non-empty file. The tftp copy"
+    echo "  therefore wins whenever it is there; the one in the image is what"
+    echo "  is left when it is not - including when the client asks for a"
+    echo "  directory that is not the one below, which fails silently."
+    echo
+
+    roots=$(tftp_roots)
+    if [ -z "$roots" ]; then
+        # None of them exists. Name the first anyway: a path to create is
+        # more use than silence.
+        set -- $TFTP_DIRS
+        roots="$1/$TFTP_BOOT_DIR"
+        roots=${roots%/}
+    fi
+
+    arches=$(find_arches)
+    if [ -z "$arches" ]; then
+        echo "  no architecture found under $BASE or in $TFTP_DIRS, so these are"
+        echo "  the paths as such, with <arch> standing for amd64 and the like:"
+        arches="<arch>"
+    fi
+
+    for arch in $arches ; do
+        echo "$arch:"
+        for tftpboot in $roots ; do
+            lts_conf_line "$tftpboot/$arch/lts.conf" "served by tftp - takes precedence"
+        done
+        lts_conf_line "$BASE/$arch/etc/lts.conf" "in the chroot - the fallback"
+        echo
+    done
+}
+
 find_images() {
     if [ -d "$BASE/images" ]; then
         for image in $(find -L "$BASE/images/" -type f -name '*.img'); do
             echo found image: $image
             if [ "$verbose" = "true" ] && [ -x /usr/bin/file ]; then
-                file $image 
+                file $image
             fi
             echo
         done
-    fi     
+    fi
 }
 
 # Distros may override that if they don't support lsb_release
@@ -181,7 +233,7 @@ for chroot in $chroots ; do
         chroot_release
     fi
     chroot_packages $chroot
-    find_lts_conf $chroot
 done
 find_tftp
+report_lts_conf
 find_images

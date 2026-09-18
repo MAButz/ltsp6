@@ -10,7 +10,7 @@ ltsp-info \(em display troubleshooting information about ltsp server and chroots
 LTSP server: the server's distribution and release, the versions of the LTSP
 packages installed on it, the chroots found under the base directory and their
 package versions, the TFTP directories the clients boot from, the image files,
-and every \fBlts.conf\fP(5) it finds.
+and both places a client reads its \fBlts.conf\fP(5) from.
 .PP
 The TFTP directories are reported in their own right, not once per chroot. The
 client reads its \fBlts.conf\fP(5) and its kernel from there and from nowhere
@@ -20,6 +20,32 @@ its image was in place. Which directories are looked at is set by
 \fBTFTP_DIRS\fR and \fBTFTP_BOOT_DIR\fR, see \fBltsp-server.conf\fP(5); by
 default that is \fI/var/lib/tftpboot/ltsp\fR, \fI/tftpboot/ltsp\fR and
 \fI/srv/tftp/ltsp\fR.
+.SH "LTS.CONF"
+.PP
+A client can read its configuration from two places, and the report names both
+in full for every architecture it finds, says whether each one is there, and
+which of the two wins:
+.PP
+.RS 4
+\fI/var/lib/tftpboot/ltsp/\fIarch\fI/lts.conf\fR \(em served by tftp
+.br
+\fI/opt/ltsp/\fIarch\fI/etc/lts.conf\fR \(em inside the chroot
+.RE
+.PP
+\fIarch\fR stands for \fBamd64\fR and the like; the first path follows
+\fBTFTP_DIRS\fR and \fBTFTP_BOOT_DIR\fR, the second follows \fB\-\-base\fR.
+.PP
+The tftp copy takes precedence. \fBinit-ltsp\fP(1) fetches it from the directory
+the kernel was loaded from and writes it over \fI/etc/lts.conf\fR in the running
+client \(em but only when the transfer returns a non-empty file. So the one in
+the image is the fallback: it is what the client is left with when no copy
+arrives, which includes the case where the client asks for a directory that does
+not exist on the server. That failure is silent, and it is the usual reason an
+\fBlts.conf\fP(5) that looks right has no effect.
+.PP
+When no architecture can be found at all, the paths are still printed, with
+\fB<arch>\fR in place of the name \(em a path to create is more use than
+silence.
 .SH "OPTIONS"
 .IP "\fB\-b\fP, \fB\-\-base\fP \fIdirectory\fR" 4
 Look for chroots and images under \fIdirectory\fR instead of \fI/opt/ltsp\fR.
@@ -31,7 +57,9 @@ does. The \fBBASE\fR environment variable does the same thing.
 .IP "\fB\-n\fP, \fB\-\-no\-server\-info\fP" 4
 Do not display server information.
 .IP "\fB\-v\fP, \fB\-\-verbose\fP" 4
-Display more information, such as including the contents of detected files.
+Display more information, such as including the contents of detected files \(em
+among them each \fBlts.conf\fP(5) that is present, indented under its path, so
+the two can be compared where both exist.
 .IP "\fB\-h\fP, \fB\-\-help\fP" 4
 Display a short help message and exit.
 .IP "\fB\-\-version\fP" 4
@@ -55,7 +83,8 @@ ltsp-info \-v \-b /srv/ltsp
 \fBno chroot under /opt/ltsp\fR is not in itself a fault. A server that builds
 with \fB\-\-base\fR, or that keeps only the image and deletes the chroot after
 building, has none, and boots clients perfectly well. What matters in that case
-is the TFTP listing and the image, both of which are reported regardless.
+is the TFTP listing, the lts.conf report and the image, all of which are
+reported regardless.
 .SH "SEE ALSO"
 .PP
 \fBlts.conf\fP(5), \fBltsp-server.conf\fP(5), \fBltsp-build-client\fP(8),

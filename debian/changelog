@@ -1,3 +1,51 @@
+ltsp (6.3.11-1) unstable; urgency=medium
+
+  * ltsp-info: name both places a client reads lts.conf from, for every
+    architecture found, and say which of the two wins:
+
+        amd64:
+          present  /var/lib/tftpboot/ltsp/amd64/lts.conf   served by tftp - takes precedence
+          missing  /opt/ltsp/amd64/etc/lts.conf            in the chroot - the fallback
+
+    The order is not a guess: init-ltsp.d/05-getltsconffile fetches the file
+    over tftp from the directory the kernel was loaded from and writes it
+    over /etc/lts.conf in the running client, but only when the transfer
+    returns a non-empty file. So the tftp copy wins whenever it is there
+    and the one in the image is what is left when it is not - including
+    when the client asks for a directory the server does not have, which
+    fails silently and is the usual reason an lts.conf that looks right has
+    no effect. -v prints the contents of each under its path, so the two
+    can be compared where both exist.
+
+    When no architecture can be found at all, the paths are printed anyway
+    with <arch> in place of the name: a path to create is more use than
+    silence.
+
+  * ltsp-build-client(8) and the lab HOWTO: name the firmware package you
+    want, never the firmware-linux metapackage. It reaches
+    firmware-amd-graphics, 93 MB of firmware for AMD graphics chips, onto a
+    client that may have none; firmware-intel-graphics is 32 MB. The
+    documented example said firmware-linux, which was wrong advice on an
+    image every client pulls over the network at every boot.
+
+  * Same two documents: a backports kernel is not just newer. Debian split
+    the kernel package after 6.12 - in trixie
+    linux-image-6.12.107+deb13-amd64 is one 106 MB package holding kernel
+    and modules, in backports the same kernel is linux-base plus
+    linux-binary plus a 153 MB linux-modules, 62 MB more and a package name
+    in the build log that was never there before. And it depends on
+    "dracut | initramfs-tools | linux-initramfs-tool" where the trixie
+    kernel names initramfs-tools first. Backports packages are installed
+    before --late-packages, so ltsp-client-core has not pulled
+    initramfs-tools in yet and apt takes dracut - whose initramfs carries
+    none of LTSP's hooks. Ask for it by name in --early-packages.
+
+  * ltsp-build-client(8), HOWTO: the components on the backports line come
+    from --components, so a package outside main needs its component named
+    there as well.
+
+ -- Marc-Andre Butz <butz@labor-heidrich.de>  Fri, 18 Sep 2026 11:47:14 +0200
+
 ltsp (6.3.10-1) unstable; urgency=medium
 
   * ltsp-build-client: --backports-mirror on its own no longer forces
