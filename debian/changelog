@@ -1,3 +1,43 @@
+ltsp (6.3.10-1) unstable; urgency=medium
+
+  * ltsp-build-client: --backports-mirror on its own no longer forces
+    packages out of the backports suite. It defaulted to ltsp-client,
+    ltsp-client-core, ltspfsd, ltspfsd-core and ldm - a list from the days
+    when Debian shipped LTSP 5, and not one of those packages has been in
+    Debian for years. Each was handed to apt as package/suite, so the plain
+    option could not do anything but fail, with
+
+        E: Release 'trixie-backports' for 'ldm' was not found
+
+    which reads as if the suite were unknown. It is not: trixie-backports
+    exists, answers, and carries 3279 packages in main/amd64 - just none of
+    those five. Only what --backports-packages names is taken from
+    backports now, and the build says so when a mirror is given without
+    any.
+
+  * ltsp-info: report the TFTP directories in their own right instead of
+    once per chroot. The client reads its lts.conf and its kernel from
+    there and from nowhere else, so that listing matters whether or not a
+    matching chroot exists - and it often does not, because the chroot was
+    built under --base elsewhere or removed once its image was in place. A
+    server that boots clients perfectly well reported no lts.conf at all.
+    Which directories are looked at now comes from TFTP_DIRS and
+    TFTP_BOOT_DIR, as everywhere else in LTSP; ltsp-info was the one place
+    that hardcoded the paths and so ignored ltsp-server.conf.
+
+  * ltsp-info: new --base/-b option, so the chroot listing can be pointed
+    at a build tree kept apart from the running one. When no chroot is
+    found, say so and name the directory that was searched, rather than
+    printing nothing.
+
+  * ltsp-info(1), ltsp-build-client(8) and the lab HOWTO document all of
+    the above, including how to check a backports suite (Packages.xz, not
+    Packages.gz - Debian no longer ships the gzipped index, and the 404
+    that comes back is 300 bytes of HTML that a careless check reads as an
+    empty suite).
+
+ -- Marc-Andre Butz <butz@labor-heidrich.de>  Fri, 18 Sep 2026 11:08:42 +0200
+
 ltsp (6.3.9-1) unstable; urgency=medium
 
   * Documentation follows ldm 3.4.0-1, which removed ldminfod and the

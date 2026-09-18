@@ -21,41 +21,84 @@
 
 # generic functions
 usage() {
-    cat <<EOF
+    cat <<USAGE_EOF
 Usage: $0 [OPTION]
 
 Displays information useful to troubleshooting issues on an LTSP
 server. Information should include server distro and release,
 versions of LTSP related packages installed on the server, LTSP
-chroots and their package versions, LTSP image files and lts.conf(5).
+chroots and their package versions, the TFTP directories the clients
+boot from, LTSP image files and lts.conf(5).
 
 Options:
   -h, --help                    Displays the ltsp-info help message.
+  -b, --base DIR                Look for chroots and images under DIR instead
+                                of /opt/ltsp.
   -n, --no-server-info          Do not display server information.
   -v, --verbose                 Display more information, such as including the contents
                                 of detected files.
       --version                 Output version information and exit.
-EOF
+USAGE_EOF
 }
 
 find_chroots() {
-    find -L "$BASE/" -mindepth 1 -maxdepth 1 -type d ! -name images
+    if [ -d "$BASE" ]; then
+        find -L "$BASE/" -mindepth 1 -maxdepth 1 -type d ! -name images
+    fi
 }
 
 find_lts_conf() {
     chroot=$1
-    chroot_name=$(basename $chroot)
-    lts_conf_dirs="$chroot/etc /var/lib/tftpboot/ltsp/$chroot_name /srv/tftp/ltsp/$chroot_name /tftpboot/ltsp/$chroot_name"
-    for lts_conf_dir in $lts_conf_dirs ; do
-        lts_conf=$lts_conf_dir/lts.conf
-        if [ -f "$lts_conf" ]; then
-            echo found: "$lts_conf"
-            if [ "$verbose" = "true" ]; then
-                cat "$lts_conf"
+    lts_conf="$chroot/etc/lts.conf"
+    if [ -f "$lts_conf" ]; then
+        echo found: "$lts_conf"
+        if [ "$verbose" = "true" ]; then
+            cat "$lts_conf"
+        fi
+        echo
+    fi
+}
+
+# The TFTP tree is reported on its own, not once per chroot.  The client reads
+# its lts.conf and its kernel from there and nowhere else, so what is in there
+# matters whether or not a chroot is still around: the chroot may have been
+# built under a different BASE (ltsp-build-client --base), or removed once its
+# image was in place.  Tying this listing to the chroots, as it used to be,
+# meant a server that boots clients perfectly reported no lts.conf at all.
+find_tftp() {
+    found=""
+    for tftpdir in $TFTP_DIRS ; do
+        tftpboot="$tftpdir/$TFTP_BOOT_DIR"
+        tftpboot=${tftpboot%/}
+        if [ ! -d "$tftpboot" ]; then
+            continue
+        fi
+        for dir in $(find -L "$tftpboot/" -mindepth 1 -maxdepth 1 -type d | sort) ; do
+            found="true"
+            echo "found tftp directory: $dir"
+            for f in "$dir"/vmlinuz* "$dir"/initrd* ; do
+                if [ -f "$f" ]; then
+                    echo "  boot file: $(basename "$f")"
+                fi
+            done
+            lts_conf="$dir/lts.conf"
+            if [ -f "$lts_conf" ]; then
+                echo "  found: $lts_conf"
+                if [ "$verbose" = "true" ]; then
+                    sed 's/^/    /' "$lts_conf"
+                fi
+            else
+                echo "  no lts.conf here"
             fi
             echo
-        fi
+        done
     done
+    if [ -z "$found" ]; then
+        echo "no tftp directory found in: $TFTP_DIRS"
+        echo "(each is looked at under its $TFTP_BOOT_DIR subdirectory; both are"
+        echo " set in ltsp-server.conf(5))"
+        echo
+    fi
 }
 
 find_images() {
@@ -97,22 +140,42 @@ MODULES_BASE=${MODULES_BASE:-/usr/share/ltsp}
 # This also sources vendor functions and .conf file settings
 . ${MODULES_BASE}/ltsp-server-functions
 
-export BASE=${BASE:-/opt/ltsp}                # LTSP base directory
+BASE=${BASE:-/opt/ltsp}                # LTSP base directory
 
-for opt in $@ ; do
-    case $opt in
+while [ -n "$1" ] ; do
+    case "$1" in
         --help|-h) usage; exit 0 ;;
+        --base|-b)
+            shift
+            if [ -z "$1" ]; then
+                echo "$0: --base needs a directory" >&2
+                exit 1
+            fi
+            BASE="$1"
+            ;;
+        --base=*) BASE="${1#--base=}" ;;
         --no-server-info|-n) server_info="false" ;;
         --verbose|-v) verbose="true" ;;
         --version) ltsp_version; exit 0 ;;
+        *) echo "$0: unknown option: $1" >&2; usage >&2; exit 1 ;;
     esac
+    shift
 done
+
+export BASE
 
 if [ "$server_info" != "false" ]; then
     server_info
     server_packages
 fi
-for chroot in $(find_chroots) ; do
+chroots=$(find_chroots)
+if [ -z "$chroots" ]; then
+    echo "no chroot under $BASE"
+    echo "(that is normal when the image was built elsewhere; ltsp-info -b DIR"
+    echo " looks at another base)"
+    echo
+fi
+for chroot in $chroots ; do
     chroot_name=$(basename $chroot)
     if [ "$verbose" = "true" ]; then
         chroot_release
@@ -120,4 +183,5 @@ for chroot in $(find_chroots) ; do
     chroot_packages $chroot
     find_lts_conf $chroot
 done
+find_tftp
 find_images

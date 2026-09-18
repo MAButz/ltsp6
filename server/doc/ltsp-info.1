@@ -1,35 +1,71 @@
-.TH "ltsp-info" "1" "20100129" "Vagrant Cascadian" ""
+.TH "ltsp-info" "1" "20260918" "Vagrant Cascadian" ""
 .SH "NAME"
 ltsp-info \(em display troubleshooting information about ltsp server and chroots
 .SH "SYNOPSIS"
-.PP 
-\fBltsp-info\fR
+.PP
+\fBltsp-info\fR [\fB\-nv\fR] [\fB\-b\fR \fIdirectory\fR]
 .SH "DESCRIPTION"
-.PP 
+.PP
 \fBltsp-info\fR will display information useful to troubleshooting issues on an
-LTSP server. Information should include server distro and release, versions of
-LTSP related packages installed on the server, LTSP chroots and their package
-versions, LTSP image files and lts.conf(5).
-
+LTSP server: the server's distribution and release, the versions of the LTSP
+packages installed on it, the chroots found under the base directory and their
+package versions, the TFTP directories the clients boot from, the image files,
+and every \fBlts.conf\fP(5) it finds.
+.PP
+The TFTP directories are reported in their own right, not once per chroot. The
+client reads its \fBlts.conf\fP(5) and its kernel from there and from nowhere
+else, so that listing matters whether or not a matching chroot still exists \(em
+the chroot may have been built under a different base directory, or removed once
+its image was in place. Which directories are looked at is set by
+\fBTFTP_DIRS\fR and \fBTFTP_BOOT_DIR\fR, see \fBltsp-server.conf\fP(5); by
+default that is \fI/var/lib/tftpboot/ltsp\fR, \fI/tftpboot/ltsp\fR and
+\fI/srv/tftp/ltsp\fR.
 .SH "OPTIONS"
-
-.IP "\fB\-\-verbose\fP
-Display more information, such as including the contents of detected files.
-.IP "\fB\-\-no\-server\-info\fP
+.IP "\fB\-b\fP, \fB\-\-base\fP \fIdirectory\fR" 4
+Look for chroots and images under \fIdirectory\fR instead of \fI/opt/ltsp\fR.
+Use this when the chroot was built elsewhere, as
+.br
+\fBltsp\-build\-client \-\-base /srv/ltsp\fR
+.br
+does. The \fBBASE\fR environment variable does the same thing.
+.IP "\fB\-n\fP, \fB\-\-no\-server\-info\fP" 4
 Do not display server information.
-
+.IP "\fB\-v\fP, \fB\-\-verbose\fP" 4
+Display more information, such as including the contents of detected files.
+.IP "\fB\-h\fP, \fB\-\-help\fP" 4
+Display a short help message and exit.
+.IP "\fB\-\-version\fP" 4
+Output version information and exit.
 .SH "EXAMPLE"
-.PP 
+.PP
+Report on the default base directory:
+.PP
+.RS 4
 ltsp-info
+.RE
+.PP
+Report on a build tree kept apart from the running one, with the contents of
+every file found:
+.PP
+.RS 4
+ltsp-info \-v \-b /srv/ltsp
+.RE
+.SH "NOTES"
+.PP
+\fBno chroot under /opt/ltsp\fR is not in itself a fault. A server that builds
+with \fB\-\-base\fR, or that keeps only the image and deletes the chroot after
+building, has none, and boots clients perfectly well. What matters in that case
+is the TFTP listing and the image, both of which are reported regardless.
 .SH "SEE ALSO"
-.PP 
-lts.conf(5)
+.PP
+\fBlts.conf\fP(5), \fBltsp-server.conf\fP(5), \fBltsp-build-client\fP(8),
+\fBltsp-update-kernels\fP(8)
 .SH "AVAILABILITY"
-.PP 
-\fBltsp-info\fR is part of \fBltsp\fP package 
-and the latest versions are available in source form from 
-\fIhttps://launchpad.net/products/ltsp (link to URL https://launchpad.net/products/ltsp) \fR. 
+.PP
+\fBltsp-info\fR is part of the \fBltsp\fP package
+and the latest versions are available in source form from
+\fIhttps://github.com/MAButz/ltsp6\fR.
 .SH "AUTHOR"
-.PP 
+.PP
 Copyright 2006-2010 Vagrant Cascadian <vagrant@freegeek.org>, distributed under
 the terms of the GNU General Public License version 2 or any later version.
