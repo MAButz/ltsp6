@@ -563,6 +563,13 @@ forces nothing that --backports-packages does not name. This project's
 own ldm and ltsp-client-core come from the signed archive by way of
 --extra-mirror, never from backports.
 
+Eine Sache noch zu den Komponenten: die Zeile, die in die sources.list
+des Chroots geschrieben wird, bekommt die Komponenten aus --components.
+Ein Paket ausserhalb von main braucht seine Komponente also auch dort.
+firmware-linux liegt in Backports in non-free-firmware, genau wie im
+Release - mit --components main ist es unerreichbar, mit
+--components main,non-free-firmware nicht.
+
 Step 5b - The same image by hand
 ------------------------------------
 

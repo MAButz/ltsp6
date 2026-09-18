@@ -58,6 +58,11 @@ exactly that: it defaulted to forcing ltsp\-client, ltsp\-client\-core,
 ltspfsd, ltspfsd\-core and ldm out of backports, a list from the days when
 Debian shipped LTSP 5 and none of which has been in Debian for years. It now
 forces nothing unless you say so.
+.IP "" 10
+The components on the backports line are the ones \fB\-\-components\fR names,
+so a package outside \fBmain\fR needs its component there too: firmware lives
+in \fBnon\-free\-firmware\fR in backports as it does in the release, and is out
+of reach without \fB\-\-components main,non\-free\-firmware\fR.
 
 .IP "\fB\-\-base\fP \fIdir\fR" 10 
 Sets the default path for the ltsp chroots to be installed into. Defaults to
