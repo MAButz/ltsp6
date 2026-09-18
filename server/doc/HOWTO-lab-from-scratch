@@ -517,11 +517,51 @@ different thing from the one the config file appears to promise. On a
 segment with machines that are not yours, write the file.
 
 Worth knowing either way: --squashfs-image / --no-squashfs-image decide
-whether you get the image or just the chroot, --install-debs-dir takes a
-directory of local .debs (useful before the packages are published),
-and --backports-dist plus --backports-packages pull single packages from
-backports - which is how you would take a newer kernel for hardware the
-stable one does not cover yet, rather than importing a foreign one.
+whether you get the image or just the chroot, and --install-debs-dir
+takes a directory of local .debs (useful before the packages are
+published).
+
+Backports are a third one, and they have a trap in them. Three options
+belong together:
+
+    --backports-mirror http://deb.debian.org/debian
+    --backports-dist trixie-backports
+    --backports-packages linux-image-amd64,firmware-linux
+
+The first adds the suite as a package source, the second names it (it
+defaults to <dist>-backports, so with --dist trixie you can leave it
+out), and the third says what should actually come from there. That
+third one is the point: the suite is pinned at priority 101, below the
+release proper, so adding it alone changes nothing about what gets
+installed. It is how you take a newer kernel for hardware the stable one
+does not cover yet, rather than importing a foreign one.
+
+The trap is the error you get when a named package is not in backports.
+apt is asked for package/suite pairs and answers
+
+    E: Release 'trixie-backports' for 'ldm' was not found
+
+which reads as if it did not know the suite. It does; trixie-backports
+exists and the mirror answers. What it is saying is that ldm is not in
+it. Check before blaming the suite:
+
+    curl -s http://deb.debian.org/debian/dists/trixie-backports/main/binary-amd64/Packages.xz \
+        | unxz | grep -c '^Package: '
+    curl -s http://deb.debian.org/debian/dists/trixie-backports/Release | head -5
+
+Note Packages.xz, not Packages.gz - Debian stopped shipping the gzipped
+index, and a request for it returns a 404 page that is 300 bytes of HTML
+rather than an archive, which makes a careless check report an empty
+suite.
+
+Until 6.3.10-1 this bit anyone who passed --backports-mirror on its own:
+it defaulted to forcing ltsp-client, ltsp-client-core, ltspfsd,
+ltspfsd-core and ldm out of backports. That list is from the days when
+Debian shipped LTSP 5, and not one of those packages has been in Debian
+for years - so the plain option could not do anything but fail. It now
+forces nothing that --backports-packages does not name. This project's
+own ldm and ltsp-client-core come from the signed archive by way of
+--extra-mirror, never from backports.
 
 Step 5b - The same image by hand
 ------------------------------------

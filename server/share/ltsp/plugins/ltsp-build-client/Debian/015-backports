@@ -15,12 +15,17 @@ case "$MODE" in
                 PIN_DIST="${DIST}-backports"
             fi
         fi
-        if [ -z "$PIN_PACKAGES" ]; then
-            if [ -n "$option_backports_packages_value" ]; then
-                PIN_PACKAGES="$(echo $option_backports_packages_value | tr ',' ' ')"
-            elif [ -n "$BACKPORTS_MIRROR" ]; then
-                PIN_PACKAGES="ltsp-client ltsp-client-core ltspfsd ltspfsd-core ldm"
-            fi
+        # Only what --backports-packages names is forced to come from the
+        # backports suite. There used to be a default list here -
+        # ltsp-client, ltsp-client-core, ltspfsd, ltspfsd-core, ldm - from the
+        # days when Debian shipped LTSP 5. None of those packages have been in
+        # Debian for years, so the default turned a plain --backports-mirror
+        # into an apt-get install of package/suite pairs that cannot be
+        # satisfied, and apt answered "Release '<dist>-backports' for
+        # '<package>' was not found" - which reads as if the suite itself were
+        # unknown, when in fact it is the package that is not in it.
+        if [ -z "$PIN_PACKAGES" ] && [ -n "$option_backports_packages_value" ]; then
+            PIN_PACKAGES="$(echo $option_backports_packages_value | tr ',' ' ')"
         fi
         ;;
     before-install)
@@ -29,6 +34,9 @@ case "$MODE" in
                 echo "`eval_gettext "NOTE: adding default dist and components to backports mirror:"`"
                 BACKPORTS_MIRROR="$BACKPORTS_MIRROR $PIN_DIST $COMPONENTS"
                 echo "$BACKPORTS_MIRROR"
+            fi
+            if [ -z "$PIN_PACKAGES" ]; then
+                echo "`eval_gettext "NOTE: \$PIN_DIST is added as a package source, but no package is taken from it; name them with --backports-packages."`"
             fi
         fi
         ;;

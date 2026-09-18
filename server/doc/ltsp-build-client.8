@@ -26,6 +26,39 @@ Builds a chroot with the specified architecture. Must be a supported
 architecture of the distribution, and compatible with the host architecture.
 Defaults vary by distribution.
 
+.IP "\fB\-\-backports\-mirror\fP \fImirror_url\fR" 10
+Adds a backports repository to the chroot, as an extra package source. The
+value is a URL, optionally followed by a suite and components; with the URL
+alone, \fIdist\fR\-backports and the components of \fB\-\-components\fR are
+appended. Do not write a leading "deb", it is added for you.
+.IP "" 10
+Adding the source is all this does. Packages still come from the release
+proper, because the backports suite is pinned at priority 101 \(em name what
+should come from it with \fB\-\-backports\-packages\fR.
+
+.IP "\fB\-\-backports\-dist\fP \fIdist\fR" 10
+The suite to pull backports from. Defaults to \fIdist\fR\-backports for the
+distribution being built, which is what Debian calls it.
+
+.IP "\fB\-\-backports\-packages\fP \fIpackages\fR" 10
+Comma separated list of packages to take from the backports suite rather than
+from the release. This is how you take a newer kernel for hardware the stable
+one does not cover yet, rather than importing a foreign one:
+.br
+\fB\-\-backports\-packages linux\-image\-amd64,firmware\-linux\fR
+.IP "" 10
+Each name is handed to apt as \fIpackage\fR/\fIsuite\fR, and apt insists the
+package really is in that suite. Naming one that is not gives
+.br
+\fBE: Release 'trixie\-backports' for 'ldm' was not found\fR
+.br
+which reads as if the suite were unknown \(em it is not, the package is simply
+not in it. Until 6.3.10\-1 \fB\-\-backports\-mirror\fP on its own produced
+exactly that: it defaulted to forcing ltsp\-client, ltsp\-client\-core,
+ltspfsd, ltspfsd\-core and ldm out of backports, a list from the days when
+Debian shipped LTSP 5 and none of which has been in Debian for years. It now
+forces nothing unless you say so.
+
 .IP "\fB\-\-base\fP \fIdir\fR" 10 
 Sets the default path for the ltsp chroots to be installed into. Defaults to
 /opt/ltsp/.
