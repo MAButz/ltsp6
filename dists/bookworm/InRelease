@@ -5,35 +5,35 @@ Origin: ltsp6
 Label: ltsp6 Github
 Suite: stable
 Codename: bookworm
-Date: Fri, 18 Sep 2026 07:13:07 UTC
+Date: Fri, 18 Sep 2026 09:19:05 UTC
 Architectures: amd64
 Components: main
 Description: Debian ltsp6 x64 github repository
 MD5Sum:
- 20491fa7eeefa89180a86198bed50cf3 2804 main/binary-amd64/Packages
- 12d50b0affd5d4431e192000f1536e2a 1221 main/binary-amd64/Packages.gz
+ e5eae3f971aed95db471f453cc75256e 2806 main/binary-amd64/Packages
+ c0764f9f94ff6ee827e4a559e7123927 1221 main/binary-amd64/Packages.gz
  472e3c1dda04609222f52beb482e50a2 134 main/binary-amd64/Release
 SHA1:
- 61926db0aff11ad75b45838bb00ea6482f4f6a99 2804 main/binary-amd64/Packages
- 72265050c4561784249d2cc6ee7255d0e3576c9a 1221 main/binary-amd64/Packages.gz
+ 67fb519cbf21be45a5c6ad8c8e88d81425a30495 2806 main/binary-amd64/Packages
+ 40712718da82aef3745181b69ad18e5f697fcc4f 1221 main/binary-amd64/Packages.gz
  7153cc0318783f1a68c3bf02628b82832bbc05d0 134 main/binary-amd64/Release
 SHA256:
- d9cab57ee156206142ffacd7e4ad848bb3ff1c1e41fb2fbacc72f2a136ebf48a 2804 main/binary-amd64/Packages
- a74159fbafdf98ff317a50c4b6a60fe65631dd83dc63de68f11fc19f860368fe 1221 main/binary-amd64/Packages.gz
+ f5d6be9324ff040f7c4e1f5a9c2ac88ae9d976839dd078db9a86df70fbbf4335 2806 main/binary-amd64/Packages
+ b537634c70461527eedd4a8a643e5f3d9ca80009bd6a9467e502d0e4811dc667 1221 main/binary-amd64/Packages.gz
  393936667a61a6c4f5eae438f69f247ab96340de1568de836ff9c43652ab3646 134 main/binary-amd64/Release
 -----BEGIN PGP SIGNATURE-----
 
-iQIzBAEBCgAdFiEET/G5DE/MBWAVAAUTB2byPyDuP8QFAmqs5IMACgkQB2byPyDu
-P8SUyA//XBUlzu09GGJZtmEB313PHw/5dpk4ZcKpiHQX/B/V9Qn3LheQvNLed/9C
-4ymPo6xmJsrLFZ0Uj70sejZDjVN5gvw9z5tp0P5hbx6xjxbG6XH8+zcPuyugewyb
-CUH+FnhlBEuGLZXKwlNNiz3vESrz/aqHQSfLu74qWnkuZChVXld6PLGnM72YRZZ5
-XtdAh8f1h+1l1UQCKBi9g6XCV2x4q01HCuHk6s6NmUl8kxKJGy4ayK7R7uzF4qMp
-hGqOdoVLxf5QKofs4PhVUlmv+O+p4ZWJOdEtnt3SJPJhw+frNLyXB2Lw8of71hz3
-k4tTuIL6V5EYWzJx5LPnIV+JJOgAi1ejGNBAbYyFKFW5J6keMfvJMsGLKqaYUGK5
-HFyfeeL1AW3qNg/6cowtNwBenwoDp0s16E87PdxLVXdLL92D6ZX8xSQk/FqGi4dM
-BwHWj6SnbWFuuSMvPXmcDTwjw3WbueHmREcHz5nyE69BCT6AgpB/j5UqDHXlJqCf
-QbbWg/BriOvgyGjD9F/K/mnTEJNBKZ+iPfJfa9t+cJsI2F2ISPSJ2djowWZp1N5N
-68m/Y5Klsytzasto2crZxoKMUHBv1I/NBUdysOZf1pp3EeMFFjArw5XIeVS+R5T2
-DhViroJc446G/ConZKJ4feRUW4+Vu1yIpiieVudcbLdmyziTmMo=
-=UuIJ
+iQIzBAEBCgAdFiEET/G5DE/MBWAVAAUTB2byPyDuP8QFAmqtAgkACgkQB2byPyDu
+P8S8gw/+Nq3t1TKxjCC1VaA/Ns6IFYVp9wETrja91cS8P+y3j0ddNwY7FrbwGKfG
+bpktNywb+k6TDvXXNoTQNYTZGVa5N8K6OQOYzM1YenSyXiG1ZKT0yvD6maZ49jeV
+nmWgxzq2mhl8Z+01ZAkZ+t8aWUe7OqFTCRv1rcOxtXEvkl69kE+tHjI2t09bbK1g
+dlS9b16whmvwz8euCxg+0pDrnTeLhqIHYXl4l9FJ0F0QmfprnWWHWNGP4JhW0WVP
+TFeVmYlUOvJD4dgZeCNmrg2Oe+JA7/2UXK8uX5qtblRX6KXtD+42EbM95EKvlr/G
+vHQQIS729meubwPhTQg2cUwaX3MdM515jpCA6xQ25N2kmwf1Q3KqJprw2NYM3Gro
+GZMqtoAWBToSxJRWzJJSuK3S0EcEkOUr3mE//rGxW7Uhose2ShcAX5jM7yOlRW8J
+RPAv29FPy4kwFyReFFIJI2MSsHnnX9/ZU/RpKGDtkWs+Y/dAirSmV4rekk0h9tKN
+eB9szxF3Q0qodr8sPVW5WrT3tWM+UuhFsUxfxfXWQN89hIVGK/COww/ttLk6IQ6j
+yGR7wxzNhxnu4nXROYyx0rnZqETzv0zis0KTpbGC1kwoDVHQnWOIV4V7T0eCrpc2
+xl+PVqMLh2cOVRlPZOFSrRSBbVyLra8Lg/mnLhxNSTDSwt1rsyU=
+=RGOm
 -----END PGP SIGNATURE-----
