@@ -482,17 +482,38 @@ chroot, change it, then make the image.
     # /srv/ltsp/amd64 as in step 5b
     chroot /srv/ltsp/amd64 update-initramfs -u -k all
     ltsp-update-image --config-nbd -b /srv/ltsp amd64
-    systemctl restart nbd-server
 
     Note --cleanup is a flag, not a setting: "ltsp-update-image --cleanup n
     ..." reads n as the chroot name and answers "Chroot n does not exist."
 
-    The restart is not optional and ltsp-update-image says so itself, in a
-    line easy to read past: nbd-server holds the image open, so until it is
-    restarted every client keeps booting the previous one. A build that
-    changed nothing visible is the usual way this is discovered. It does
-    disconnect running clients, which is why the tool refuses to do it for
-    you.
+    No restart belongs here, and an earlier version of this document was
+    wrong to put one in. ltsp-update-image does not write over the image
+    that is being served. It builds beside it and then renames twice:
+
+        mv "$imgdir/$name.img"     "$imgdir/$name.img.old"
+        mv "$imgdir/$name.img.tmp" "$imgdir/$name.img"
+
+    A rename leaves the inode alone. nbd-server forks a serving process per
+    client (that is what "-d: do not fork" turns off), so a client that is
+    already connected holds a descriptor on the old inode and keeps reading
+    exactly the image it booted with - now reachable as .img.old - while a
+    client connecting afterwards opens the path anew and gets the new one.
+    Nothing has to be told anything.
+
+    The warning ltsp-update-image prints is about the export CONFIGURATION,
+    not the image: it appears only when ltsp-config actually wrote a
+    conf.d file, which it does not do when the file is already there. And
+    when an export really is new, SIGHUP is enough - nbd-server(1) says
+    reconfiguration "does not modify any existing export, it only appends
+    new ones", and the unit carries ExecReload=kill -HUP:
+
+        systemctl reload nbd-server     # appends new exports, disconnects nobody
+
+    A restart is only ever needed when the image file itself was rewritten
+    in place, as with "cat new.img > live.img" or an mksquashfs aimed
+    straight at the served path. That pulls the ground out from under every
+    connected client, which is why it is worth not doing: build beside the
+    live file and rename, as above.
 
 That is the same code the build would have run - 095-squashfs-image
 calls ltsp-update-image --config-nbd and nothing more - so nothing is
@@ -774,7 +795,7 @@ Then build and publish:
     cp "$B"/boot/initrd.img-* /srv/tftp/initrd.img
     umount "$B/dev" "$B/proc" "$B/sys"
     mksquashfs "$B" /srv/ltsp/images/amd64.img -noappend -comp xz
-    systemctl restart nbd-server
+    systemctl restart nbd-server    # here it IS needed: written in place
 
 Expect roughly 660 MB. Note that the image keeps a root password and can
 keep sshd for diagnostics; both are test scaffolding and must come out
@@ -828,7 +849,7 @@ kbd,console-setup,nbd-client,xterm \
     ltsp-update-kernels -b /srv/ltsp amd64-thin
     ltsp-update-kernels -b /srv/ltsp amd64-fat
     ltsp-update-image   -b /srv/ltsp amd64-fat
-    systemctl restart nbd-server
+    systemctl reload nbd-server     # amd64-fat is a new export; SIGHUP appends it
 
 No ldm-server here any more. It existed for ldminfod, the load-balancing
 daemon on port 9571, which ldm 3.4.0-1 removed: it could not run on a
