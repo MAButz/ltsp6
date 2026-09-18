@@ -193,7 +193,10 @@ Seconds the greeter waits with nothing typed before logging in automatically.
 Only useful together with a configured user; without one the timeout has
 nothing to do.
 .IP "\fBLDM_THEME\fP" 4
-The greeter's theme directory under \fI/usr/share/ldm/themes\fR.
+The greeter's theme directory under \fI/usr/share/ldm/themes\fR. See THE
+GREETER'S APPEARANCE.
+.IP "\fBLDM_USERNAME_PROMPT\fP, \fBLDM_PASSWORD_PROMPT\fP, \fBLDM_VERIFY_MESSAGE\fP" 4
+See THE GREETER'S APPEARANCE.
 .IP "\fBLDM_GREETER\fP" 4
 The greeter binary ldm starts. Replacing it is how a site writes its own.
 .IP "\fBLDM_WINMANAGER\fP" 4
@@ -534,6 +537,78 @@ Deliberately not \fB%x\fR, which is the locale's date format and therefore only
 as good as the locale the image happens to carry \(em a stock build is en_US,
 and \fB%x\fR then shows 09/17/2026 to a room in Germany. Worse than foreign, it
 is ambiguous: 09/10 is two different days depending on the reader.
+.SH "THE GREETER'S APPEARANCE"
+.PP
+What the login screen says, and what it looks like, are two separate things:
+the wording comes from these variables, everything visual from the theme's
+\fIgreeter.css\fR.
+.IP "\fBLDM_USERNAME_PROMPT\fP, \fBLDM_PASSWORD_PROMPT\fP" 4
+The two prompts beside the entry field. The value is Pango markup and reaches
+the screen unchanged, so it carries its own emphasis. The defaults are
+\fB<b>Username</b>\fR and \fB<b>Password</b>\fR, both translated, so an image
+built with a German locale already says Benutzername and Passwort without
+anything being set here.
+.IP "" 4
+\fBLDM_USERNAME_PROMPT="<b>Benutzerkennung</b>"\fR
+.IP "\fBLDM_VERIFY_MESSAGE\fP" 4
+The line shown while the password is being checked. Pango markup as well; the
+default is a bold, translated "Verifying password.  Please wait.".
+.IP "" 4
+Setting one of these replaces the translation for that one string \(em it is
+the same text on every client, whatever locale the image carries. Leave them
+unset unless the wording itself is the point.
+.IP "" 4
+Because the value is markup, it can also carry colour, which is the shortest
+way to make one line readable without writing a theme at all:
+.IP "" 4
+\fBLDM_PASSWORD_PROMPT="<span foreground='#ffffff'><b>Passwort</b></span>"\fR
+.IP "" 4
+Mind the quoting. lts.conf values containing spaces need the double quotes, so
+the ones inside the markup have to be single.
+.PP
+.SS "The theme, and its CSS"
+.IP "\fBLDM_THEME\fP" 4
+A directory under \fI/usr/share/ldm/themes\fR, or an absolute path. The lookup
+is per file: every file the theme does not carry is taken from the \fBltsp\fR
+theme instead. A theme can therefore consist of nothing but \fIbg.png\fR and
+\fIlogo.png\fR and still get its icons and its styling from the default one.
+.IP "" 4
+The other side of that rule catches people out. A theme that \fIdoes\fR carry a
+\fIgreeter.css\fR replaces the default one outright \(em the two are not
+merged. Copy what you want to keep out of
+\fI/usr/share/ldm/themes/ltsp/greeter.css\fR before adding to it.
+.PP
+The CSS is ordinary GTK3 CSS, loaded at
+\fBGTK_STYLE_PROVIDER_PRIORITY_APPLICATION\fR, which places it above the GTK
+theme the image happens to ship. Four labels carry a name of their own, so they
+can be addressed one at a time:
+.PP
+.RS 4
+.nf
+#ldm\-prompt    the Username / Password line beside the entry
+#ldm\-status    the status line under it
+#ldm\-host      host name and address
+#ldm\-clock     the clock
+.fi
+.RE
+.PP
+This matters on a dark background. Without the names the only handle is
+\fBlabel\fR, which also catches the text inside every button and menu item, so
+making the status line legible on a dark photograph used to mean making the
+buttons illegible on their light one. Available since ldm 3.4.2\-1; an older
+greeter ignores the names and falls back to whatever \fBlabel\fR says.
+.PP
+.RS 4
+.nf
+#ldm\-prompt, #ldm\-status, #ldm\-host, #ldm\-clock {
+    color: #f2f2f2;
+    text\-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+}
+.fi
+.RE
+.PP
+The shadow does more work than the colour. A photograph is light in some places
+and dark in others, and no single colour is right on both \(em an outline is.
 .SH "GRAPHICS"
 .PP
 .IP "\fBX_COLOR_DEPTH\fP, \fBX_SMART_COLOR_DEPTH\fP" 4

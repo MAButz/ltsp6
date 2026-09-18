@@ -1,3 +1,28 @@
+ltsp (6.3.12-1) unstable; urgency=medium
+
+  * lts.conf(5): a new section, THE GREETER'S APPEARANCE, for what the
+    login screen says and how it looks - the two being separate things.
+
+    The wording comes from LDM_USERNAME_PROMPT, LDM_PASSWORD_PROMPT and
+    LDM_VERIFY_MESSAGE, new in ldm 3.4.2-1. Each is Pango markup passed to
+    the greeter unchanged, as LDM_CLOCK_FORMAT already was, so a value can
+    carry emphasis or a colour of its own - which is the shortest way to
+    make one line readable on a dark background without writing a theme.
+    The defaults are the previous strings and still translated, so nothing
+    has to be set to keep a localised image localised.
+
+    Everything visual comes from the theme's greeter.css, and two things
+    about it were nowhere written down. First, LDM_THEME looks files up one
+    at a time and falls back to the ltsp theme per file - which is why a
+    theme can be two images and nothing else, and equally why a theme that
+    does carry a greeter.css replaces the default one outright instead of
+    adding to it. Second, the greeter now names four of its labels
+    (#ldm-prompt, #ldm-status, #ldm-host, #ldm-clock), so they can be
+    styled separately; before, the only selector that reached them was
+    "label", which also catches the text inside every button.
+
+ -- Marc-Andre Butz <butz@labor-heidrich.de>  Fri, 18 Sep 2026 15:36:44 +0200
+
 ltsp (6.3.11-1) unstable; urgency=medium
 
   * ltsp-info: name both places a client reads lts.conf from, for every
