@@ -21,6 +21,12 @@ ltsp (6.3.11-1) unstable; urgency=medium
     with <arch> in place of the name: a path to create is more use than
     silence.
 
+    A directory under the TFTP root counts as an architecture only when it
+    carries a kernel or an lts.conf. Anything can end up in such a tree - a
+    stray mkdir, a command's help text pasted at a shell - and listing each
+    one buries the real ones. Those directories are still reported, with no
+    boot file under them, so nothing is hidden by the filter.
+
   * ltsp-build-client(8) and the lab HOWTO: name the firmware package you
     want, never the firmware-linux metapackage. It reaches
     firmware-amd-graphics, 93 MB of firmware for AMD graphics chips, onto a

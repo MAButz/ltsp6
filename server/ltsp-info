@@ -60,16 +60,29 @@ tftp_roots() {
 }
 
 # Every architecture there is any evidence of: a chroot under BASE, or a
-# directory in a TFTP tree. The two need not agree - a chroot built under a
-# different base leaves only the TFTP side behind, and an image put in place
-# by hand leaves only that.
+# directory in a TFTP tree that holds something a client boots with. The two
+# need not agree - a chroot built under a different base leaves only the TFTP
+# side behind, and an image put in place by hand leaves only that.
+#
+# A directory under the TFTP root counts only when it carries a kernel or an
+# lts.conf. Anything can end up in there - a stray mkdir, a command whose help
+# text was pasted at a shell - and listing each one as an architecture buries
+# the real ones. Such a directory is still reported by find_tftp, with no boot
+# file under it, so nothing is hidden by this.
 find_arches() {
     {
         if [ -d "$BASE" ]; then
             find -L "$BASE/" -mindepth 1 -maxdepth 1 -type d ! -name images -printf '%f\n'
         fi
         for tftpboot in $(tftp_roots) ; do
-            find -L "$tftpboot/" -mindepth 1 -maxdepth 1 -type d -printf '%f\n'
+            for dir in $(find -L "$tftpboot/" -mindepth 1 -maxdepth 1 -type d) ; do
+                for f in "$dir"/lts.conf "$dir"/vmlinuz* ; do
+                    if [ -f "$f" ]; then
+                        basename "$dir"
+                        break
+                    fi
+                done
+            done
         done
     } | sort -u
 }
