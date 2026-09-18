@@ -526,7 +526,7 @@ belong together:
 
     --backports-mirror http://deb.debian.org/debian
     --backports-dist trixie-backports
-    --backports-packages linux-image-amd64,firmware-linux
+    --backports-packages linux-image-amd64,firmware-intel-graphics
 
 The first adds the suite as a package source, the second names it (it
 defaults to <dist>-backports, so with --dist trixie you can leave it
@@ -569,6 +569,60 @@ outside main needs its component named there as well. firmware-linux is
 in non-free-firmware in backports exactly as it is in the release - out
 of reach with --components main, reachable with
 --components main,non-free-firmware.
+
+Two things make a backports build heavier than the same build without
+it, and both are worth knowing before the image doubles in size.
+
+The first is avoidable: name the firmware package you actually want,
+never the firmware-linux metapackage. It reaches firmware-amd-graphics,
+93 MB of firmware for AMD graphics chips, and on a client with Intel
+graphics not one byte of it is ever read. The Intel counterpart is
+firmware-intel-graphics at 32 MB. Same for the rest: firmware-iwlwifi is
+111 MB, firmware-atheros 95 MB, firmware-qcom-soc 298 MB. On an image
+served over the network to every client at every boot, a metapackage is
+the wrong instrument.
+
+The second is not avoidable, only worth expecting: Debian split the
+kernel package after 6.12. In trixie the kernel is one package,
+
+    linux-image-6.12.107+deb13-amd64          106 MB
+
+holding kernel and modules together. In backports it is four:
+
+    linux-image-7.1.8+deb13-amd64               0 MB   (only a metapackage)
+    linux-base-7.1.8+deb13-amd64                2 MB
+    linux-binary-7.1.8+deb13-amd64             14 MB
+    linux-modules-7.1.8+deb13-amd64           153 MB
+                                              -------
+                                              169 MB
+
+62 MB more for the same one kernel - and a linux-modules- package going
+by in the build log that was never there before. That is what it is;
+there is no supported way to take a Debian kernel without its modules.
+
+One dependency changed with that split, and it matters more than the
+size. The trixie kernel depends on
+
+    initramfs-tools | linux-initramfs-tool
+
+while the backports kernel depends on
+
+    dracut | initramfs-tools | linux-initramfs-tool
+
+with dracut first. Backports packages are installed before
+--late-packages, so at that point nothing has pulled in initramfs-tools
+yet - ltsp-client-core, which depends on it, comes later - and apt takes
+the first alternative it is offered. LTSP's initramfs hooks, the ones
+that bring up the network and open the nbd root, are initramfs-tools
+hooks. Ask for it by name and the question never arises:
+
+    --early-packages ca-certificates,initramfs-tools
+
+To see where an image's size actually went, ask the chroot rather than
+guess:
+
+    ltsp-chroot -b /srv/ltsp -a amd64 \
+        dpkg-query -W -f='${Installed-Size}\t${Package}\n' | sort -n | tail -20
 
 Step 5b - The same image by hand
 ------------------------------------
