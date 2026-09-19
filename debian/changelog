@@ -1,3 +1,19 @@
+ltsp (6.3.13-1) unstable; urgency=medium
+
+  * lts.conf(5): the icons a theme may carry, which were nowhere listed -
+    preferences, host, session, language, reboot, shutdown and backend, 24x24
+    with an alpha channel, each falling back to the ltsp theme like every
+    other theme file.
+
+    With the reason they had not been visible: until ldm 3.4.3-1 none of them
+    were drawn, whatever the theme held. The greeter had always asked for
+    them and under GTK2 they appeared, but GTK 3.10 turned gtk-button-images
+    and gtk-menu-images off and the request was ignored without a word. No
+    lts.conf setting could have brought them back - it needed the GTK
+    setting, which ldm 3.4.3-1 sets.
+
+ -- Marc-Andre Butz <butz@labor-heidrich.de>  Sat, 19 Sep 2026 19:49:02 +0200
+
 ltsp (6.3.12-1) unstable; urgency=medium
 
   * lts.conf(5): a new section, THE GREETER'S APPEARANCE, for what the

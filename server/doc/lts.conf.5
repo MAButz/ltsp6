@@ -609,6 +609,36 @@ greeter ignores the names and falls back to whatever \fBlabel\fR says.
 .PP
 The shadow does more work than the colour. A photograph is light in some places
 and dark in others, and no single colour is right on both \(em an outline is.
+.SS "The theme's icons"
+.PP
+Beside the two pictures and the CSS, a theme may carry the icons the greeter
+puts on its buttons and menu entries. Each is looked up by name, with or
+without a \fI.png\fR or \fI.jpg\fR extension, and falls back to the \fBltsp\fR
+theme like everything else:
+.PP
+.RS 4
+.nf
+preferences    on the Preferences button
+host           Select Host ...
+session        the session chooser
+language       the language chooser
+reboot         Reboot
+shutdown       Shut down
+backend        any LDM_MENU_ITEM_n a site adds
+.fi
+.RE
+.PP
+24x24 pixels, with an alpha channel; the stock set is that size and GTK scales
+nothing.
+.PP
+Until ldm 3.4.3\-1 none of them were drawn, whatever the theme carried. The
+greeter had always asked for them, and under GTK2 they appeared; GTK 3.10
+turned the \fBgtk\-button\-images\fR and \fBgtk\-menu\-images\fR settings off,
+and from then on the request was ignored without a word. The icons were still
+read from the theme, still attached to the widgets, and never painted \(em a
+login screen carrying text and nothing else, next to a theme directory full of
+icons that look perfectly fine in an image viewer. Nothing in lts.conf could
+have brought them back; it needed the setting, which 3.4.3\-1 sets.
 .SH "GRAPHICS"
 .PP
 .IP "\fBX_COLOR_DEPTH\fP, \fBX_SMART_COLOR_DEPTH\fP" 4
