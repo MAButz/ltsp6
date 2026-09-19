@@ -609,6 +609,35 @@ greeter ignores the names and falls back to whatever \fBlabel\fR says.
 .PP
 The shadow does more work than the colour. A photograph is light in some places
 and dark in others, and no single colour is right on both \(em an outline is.
+.SS "What language it speaks"
+.PP
+The greeter calls \fBsetlocale\fP(3) with the empty string, so it speaks
+whatever \fBLANG\fR says, and \fBltsp_config\fR exports every lts.conf
+variable into the environment the screens are started in. One line is
+therefore enough \(em on the client's side:
+.PP
+.RS 4
+\fBLANG="de_DE.UTF-8"\fR
+.RE
+.PP
+provided the locale exists in the image. It does not by default: a stock build
+carries \fBC.UTF-8\fR and nothing else, and a \fBLANG\fR naming a locale that
+was never generated silently falls back to English. Generate it at build time,
+which also writes \fI/etc/default/locale\fR:
+.PP
+.RS 4
+\fBltsp\-build\-client \-\-locale de_DE.UTF\-8 ...\fR
+.RE
+.PP
+ldm itself is translated into some forty languages, German among them, and the
+catalogues ship in the \fIldm\fR package \(em nothing has to be installed for
+it. What a set \fBLANG\fR changes is the greeter's own words: Benutzername,
+Passwort, Einstellungen, Neustart, Ausschalten. It is separate from
+\fBLDM_LANGUAGE\fR, which preselects the language of the \fIsession\fR on the
+server and leaves the greeter alone, and from
+\fBLDM_USERNAME_PROMPT\fR and its two companions above, which replace one
+string outright and are then the same on every client whatever the locale.
+.PP
 .SS "The theme's icons"
 .PP
 Beside the two pictures and the CSS, a theme may carry the icons the greeter
