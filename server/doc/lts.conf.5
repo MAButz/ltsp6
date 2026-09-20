@@ -905,9 +905,43 @@ Without it the client displays UTC, which looks like a clock that is wrong
 rather than a clock in another zone \(em the greeter shows it, and so does
 every log line written on the client.
 .IP "\fBTIMESERVER\fP" 4
-An NTP server to set the clock from at boot, or \fBauto\fR for the boot
-server. Needs \fBntpdate\fR in the image; where systemd's time
-synchronisation already runs, this is unnecessary.
+Where the clock comes from. An address or a name, \fBauto\fR for the boot
+server, or \fBnone\fR to do without. It configures
+\fBsystemd\-timesyncd\fP(8), and \fBntpdate\fR as well where that is
+installed.
+.IP "" 4
+Prefer an address. A name has to be resolved, and the resolver on a client
+segment usually cannot: the glibc default is five seconds, twice, and
+\fBsystemd\-timesyncd\fR resolves in a worker thread that SIGTERM cannot
+interrupt. A lookup still running when the client is shut down therefore
+holds the stop job open for those ten seconds, in full view, at every
+shutdown \(em
+.IP "" 4
+\fBA stop job is running for Network Time Synchronization (10s / 1min 30s)\fR
+.IP "" 4
+which is not a timeout expiring; it is a name lookup finishing.
+.IP "" 4
+Left unset, the value DHCP offered is used \(em option 42, which the
+initramfs saves as \fBNTPSVR\fR. It was being captured and then ignored
+until 6.3.18\-1, so a site handing out a time server with its leases had to
+name it a second time here.
+.IP "" 4
+With nothing from either, a \fIthin\fR client masks
+\fBsystemd\-timesyncd\fR and says so on the console. What would be left is
+Debian's own fallback, \fB0.debian.pool.ntp.org\fR and its siblings, and a
+thin client belongs on a segment with no route off it: it can reach neither
+those names nor the hosts behind them, so the daemon would buy nothing and
+cost the ten seconds above every time. Naming a source keeps it; naming
+the pool asks for the pool deliberately. A \fIfat\fR client is left alone,
+since it runs its session locally and is an ordinary machine on an ordinary
+network.
+.IP "" 4
+Whatever is named, LTSP also empties \fBFallbackNTP\fR, so a time server
+that stops answering cannot land the client back on those names.
+.IP "" 4
+The clock is not decoration. A client whose time is far out fails the
+session server's checks, and the greeter has a message for exactly that:
+"This computer's clock differs too much from the server's".
 .IP "\fBHWCLOCK\fP" 4
 Whether the hardware clock is written back as \fButc\fR (the default) or
 \fBlocal\fR.

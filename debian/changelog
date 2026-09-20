@@ -1,3 +1,47 @@
+ltsp (6.3.18-1) unstable; urgency=medium
+
+  * The client no longer spends ten seconds of every shutdown on a name
+    lookup nobody asked for.
+
+        A stop job is running for Network Time Synchronization (10s / 1min 30s)
+
+    That is not a timeout expiring - the unit has none of its own, so the
+    limit is 90 seconds. It is systemd-timesyncd resolving an NTP server
+    name in a worker thread that SIGTERM cannot interrupt, and the glibc
+    resolver giving up after five seconds, twice. Three changes, each
+    closing one way into that:
+
+    - LTSP now empties FallbackNTP alongside NTP. Debian's fallback is
+      0.debian.pool.ntp.org and its siblings; a time server that stops
+      answering used to land the client on those names, and a client
+      segment resolves neither them nor anything else.
+
+    - The NTP server DHCP offers is used when lts.conf names none. Option
+      42 was already captured by the initramfs as NTPSVR and then ignored,
+      so a site handing out a time server with its leases had to name it a
+      second time in lts.conf.
+
+    - With no source from either, a thin client masks systemd-timesyncd and
+      says so on the console. What would be left is that internet pool, and
+      a thin client belongs on a segment with no route off it: the daemon
+      buys nothing there and costs those ten seconds every time. A fat
+      client is left alone - it runs its session locally and is an ordinary
+      machine on an ordinary network.
+
+    TIMESERVER=none forces it off, an address avoids the lookup altogether,
+    and naming the pool asks for the pool deliberately.
+
+  * 50-set-time also stops writing /etc/ntp.conf when no ntpd is installed,
+    and stops running sed over /etc/default/ntpdate when that file is not
+    there. Neither achieved anything in an image without those packages,
+    which the standard one is.
+
+  * lts.conf(5): TIMESERVER described as what it now is. The old text said
+    it needed ntpdate and was unnecessary where systemd already
+    synchronises, which had it backwards.
+
+ -- Marc-Andre Butz <butz@labor-heidrich.de>  Sun, 20 Sep 2026 14:27:02 +0200
+
 ltsp (6.3.17-1) unstable; urgency=medium
 
   * lts.conf(5): #ldm-preferences, the fifth name a theme's greeter.css can

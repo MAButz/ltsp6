@@ -4,25 +4,68 @@ if [ -n "$TIMEZONE" ] && [ -e "/usr/share/zoneinfo/$TIMEZONE" ]; then
     ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime 2>/dev/null
 fi
 
-if [ -n "$TIMESERVER" ]; then
-    # Set timeserver to $SERVER if set to autodetect
-    if [ "$TIMESERVER" = "auto" ]; then
-        TIMESERVER=${SERVER}
-    fi
+# Where the clock comes from, in order of preference:
+#
+#   TIMESERVER in lts.conf   - "auto" means $SERVER, "none" means nowhere
+#   whatever DHCP offered    - option 42, saved by the initramfs as NTPSVR
+#   nowhere
+#
+# The DHCP value was being captured and then ignored, which is why a site that
+# hands out a time server with its leases still had to name it a second time
+# in lts.conf.
+timeserver="$TIMESERVER"
+case "$timeserver" in
+    auto) timeserver="$SERVER" ;;
+    none) timeserver="" ;;
+    "")   timeserver="${NTPSVR:-$TIMESVR}" ;;
+esac
 
-    # Modify /etc/ntp.conf
+if [ -n "$timeserver" ]; then
+    # /etc/ntp.conf only if something installed ntpd; writing a config file
+    # for a daemon that is not there achieves nothing.
     if [ -f "/etc/ntp.conf" ]; then
         sed -i -e '/^server/d' -e '/^pool/d' /etc/ntp.conf
+        echo "server ${timeserver}" >>/etc/ntp.conf
     fi
-    echo "server ${TIMESERVER}" >>/etc/ntp.conf
 
-    # Configure timesyncd
+    # Configure timesyncd.
+    #
+    # FallbackNTP is emptied on purpose. Debian's default falls back to
+    # 0.debian.pool.ntp.org and its siblings, which are names - and on a
+    # client segment with no DNS and no route off it, resolving them costs
+    # the glibc resolver's timeout (5 seconds, twice) and achieves nothing.
+    # It is not only a boot-time cost: systemd-timesyncd resolves in a worker
+    # thread that SIGTERM cannot interrupt, so a lookup still running when
+    # the client is shut down holds the stop job open for those ten seconds,
+    # in full view, every time.
     timesyncd_conf_dir=/run/systemd/timesyncd.conf.d
     timesyncd_conf=${timesyncd_conf_dir}/50-ltsp.conf
     mkdir -p ${timesyncd_conf_dir}
-    echo '[Time]' > ${timesyncd_conf}
-    echo "NTP=${TIMESERVER}" >> ${timesyncd_conf}
+    {
+        echo '[Time]'
+        echo "NTP=${timeserver}"
+        echo 'FallbackNTP='
+    } >${timesyncd_conf}
 
-    # Modify /etc/default/ntpdate
-    sed -i -e 's/^NTPSERVERS=".*"/NTPSERVERS="'$TIMESERVER'"/' /etc/default/ntpdate
+    if [ -f /etc/default/ntpdate ]; then
+        sed -i -e 's/^NTPSERVERS=".*"/NTPSERVERS="'"$timeserver"'"/' \
+            /etc/default/ntpdate
+    fi
+elif ! boolean_is_true "$LTSP_FATCLIENT"; then
+    # Nothing named a time source - not lts.conf, not DHCP - and this is a
+    # thin client. What would be left is Debian's internet pool, and a thin
+    # client belongs on a segment with no route off it: it can reach neither
+    # those names nor the hosts behind them. The daemon would then buy
+    # nothing and cost the ten seconds described above at every shutdown, so
+    # mask it. That is what "systemctl mask" does; systemd is not running
+    # yet, so we do it by hand.
+    #
+    # To keep it, name a source. TIMESERVER=auto uses $SERVER, and an address
+    # avoids the lookup altogether; TIMESERVER=0.debian.pool.ntp.org asks for
+    # the pool deliberately. A fat client is left alone either way - it runs
+    # its session locally, is a normal machine on a normal network, and may
+    # well reach the pool.
+    mkdir -p /etc/systemd/system
+    ln -sf /dev/null /etc/systemd/system/systemd-timesyncd.service
+    echo "ltsp: no TIMESERVER and none from DHCP - time synchronisation is off"
 fi
