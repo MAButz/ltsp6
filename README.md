@@ -67,22 +67,30 @@ keyring file is missing. Do not answer that with `trusted=yes`.
 
 | Suite | Package | Version |
 |---|---|---|
-| `trixie` | `ltsp-client-core`, `ltsp-server` | 6.0.0-4 |
-| `trixie` | `ldm`, `ldm-server` | 3.0.2-1 |
+| `trixie` | `ltsp-client-core`, `ltsp-server` | 6.3.15-1 |
+| `trixie` | `ldm` | 3.4.4-1 |
 | `trixie` | `ltsp6-session-tuning` | 1.0.0 |
 | `bookworm` | `ltsp-client`, `ltsp-client-core` | 5.18.12-3 |
 
-The `trixie` packages here are newer than the assets on the older GitHub
-releases, and the difference is not cosmetic: `ltsp-client-core_6.0.0-1`
-shipped without `ltsp-client-common-functions` and `ldm` before 3.0.2-1 had
-a `ldm.service` that could not start an X server. Prefer this archive.
+`ltsp-server` is `Architecture: all` and runs on Debian 12 as well. `ldm` and
+`ltsp-client-core` are amd64, built against the glibc of Debian 13, and belong
+in the client image - which is a Debian 13 chroot. The suite is named after
+where the packages are built, not after where they may be installed.
+
+`ldm-server` was here until 3.3.0-1 and is gone. It existed for `ldminfod`,
+the load-balancing daemon on port 9571, which could not run on a current
+Debian and whose rating nothing ever sorted by; ldm 3.4.0-1 removed both.
+
+This archive is the current one. The assets attached to each GitHub release
+are the same files, release by release, and old releases stay as they were -
+so an older asset is an older package, not a different build of the same one.
 
 ## The signing key
 
 ```
-rsa4096  D11AA4D1 93392D7D 61560F54 CC5BC11C 9C111F44
-LTSP6 Repository Signing Key (apt archive on GitHub Pages) <ma@butz.online>
-expires 2029-09-09
+pub   rsa4096 2026-09-07 [SC] [expires: 2029-09-06]
+      4FF1 B90C 4FCC 0560 1500  0513 0766 F23F 20EE 3FC4
+uid   LTSP6 Repository Signing Key (apt archive on GitHub Pages) <ma@butz.online>
 ```
 
 Published here as `ltsp6-archive-keyring.asc` (armoured) and
