@@ -29,19 +29,19 @@ Description: LTSP display manager (GTK3 / xfreerdp fork)
 
 Package: ltsp-client-core
 Source: ltsp
-Version: 6.3.17-1
+Version: 6.3.18-1
 Architecture: amd64
 Maintainer: Marc-André Beckmann-Butz <ma@butz.online>
-Installed-Size: 410
+Installed-Size: 414
 Depends: libc6 (>= 2.38), libfl2 (>= 2.5.33), libpopt0 (>= 1.14), initramfs-tools, udev, nbd-client, iproute2, kbd, pciutils, xinit, x11-xserver-utils
 Homepage: https://github.com/MAButz/ltsp6
 Priority: optional
 Section: admin
-Filename: pool/main/l/ltsp/ltsp-client-core_6.3.17-1_amd64.deb
-Size: 106340
-SHA256: 7a21e206280e163a703093c5301bc3b5c34b7187e4ded9a9d3f6335a6da6ee7f
-SHA1: b712029edd918b139d1f06d965b087b04c0ada52
-MD5sum: a57ab75df8364729c60755cee88afb37
+Filename: pool/main/l/ltsp/ltsp-client-core_6.3.18-1_amd64.deb
+Size: 107860
+SHA256: d9eae87a87f83ce282f7197ef4cf67eb1accdd3cb782f92ed8cd2fd759dbb777
+SHA1: 3ee7bb61cee265b03a70c8605042b3d88e683309
+MD5sum: 819e9cf609ebd1548747e369e58af4a8
 Description: LTSP6 thin client core scripts and helpers
  Core client-side scripts, udev rules, initramfs-tools hooks and
  helper binaries (getltscfg, getltscfg-cluster, jetpipe, nbd-proxy,
@@ -52,20 +52,20 @@ Description: LTSP6 thin client core scripts and helpers
 
 Package: ltsp-server
 Source: ltsp
-Version: 6.3.17-1
+Version: 6.3.18-1
 Architecture: all
 Maintainer: Marc-André Beckmann-Butz <ma@butz.online>
-Installed-Size: 577
+Installed-Size: 579
 Depends: debootstrap, squashfs-tools, gettext-base, lsb-release, debconf-utils, openssh-client
 Recommends: nbd-server, tftpd-hpa, dnsmasq | isc-dhcp-server, nfs-kernel-server, xinetd
 Homepage: https://github.com/MAButz/ltsp6
 Priority: optional
 Section: admin
-Filename: pool/main/l/ltsp/ltsp-server_6.3.17-1_all.deb
-Size: 187976
-SHA256: 7648a12f247f18eb6624389a9a596d5c6a7b200e86273138f2c8790370df0fc3
-SHA1: 7ee285407efbf5247c4e9157ddf875406274380c
-MD5sum: ff2a4131548f54b7f278a7a2c2a7adc8
+Filename: pool/main/l/ltsp/ltsp-server_6.3.18-1_all.deb
+Size: 189412
+SHA256: 27a94e8291a91fc0cd3106a3c85c316bbea052a5b5fe711efdf0742d9ffe2763
+SHA1: e58111f20e0f844d049ccd999aa8b10006b1f78d
+MD5sum: 261d2634324c88efe4f0e4814c31e9cc
 Description: LTSP6 thin client server tools
  ltsp-build-client, ltsp-config, ltsp-chroot, ltsp-info and related
  server-side tools for building and managing LTSP (Linux Terminal
