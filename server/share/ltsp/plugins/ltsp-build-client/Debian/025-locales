@@ -23,14 +23,36 @@ case $MODE in
             fi
         done
         
+        # A comma separated list, so the image can carry more than one and
+        # lts.conf can pick between them with LANG at boot, instead of the
+        # choice being frozen here:
+        #
+        #     --locale de_DE.UTF-8,en_US.UTF-8
+        #
+        # Not cosmetic. glibc ignores LANGUAGE whenever the locale is C, and
+        # C.UTF-8 counts as C for that purpose - so a client whose image
+        # carries no real locale cannot be switched to another language by
+        # any means at all. Nor does the failure announce itself: a LANG
+        # naming a locale that was never generated makes setlocale() return
+        # NULL, and the program carries on in English. The first entry
+        # becomes the image's default.
         if [ -n "$LOCALE" ]; then
-            export LANG=$(echo "$LOCALE" | awk '{print $1}' | sed -e 's,.utf8,.UTF-8,g')
-            LOCALE_ENCODING=$(echo "$LOCALE" | awk '{print $2}') 
-            if [ -z "$LOCALE_ENCODING" ] && [ -f $ROOT/usr/share/i18n/SUPPORTED ]; then
-                grep ^"$LANG " $ROOT/usr/share/i18n/SUPPORTED >> $ROOT/etc/locale.gen
-            else
-            	echo "$LANG $LOCALE_ENCODING" >> $ROOT/etc/locale.gen
-            fi
+            export LANG=$(echo "$LOCALE" | awk -F, '{print $1}' |
+                awk '{print $1}' | sed -e 's,.utf8,.UTF-8,g')
+            echo "$LOCALE" | tr ',' '\n' | while read -r locale_entry; do
+                test -n "$locale_entry" || continue
+                locale_name=$(echo "$locale_entry" | awk '{print $1}' |
+                    sed -e 's,.utf8,.UTF-8,g')
+                locale_encoding=$(echo "$locale_entry" | awk '{print $2}')
+                if [ -z "$locale_encoding" ] &&
+                    [ -f $ROOT/usr/share/i18n/SUPPORTED ]
+                then
+                    grep ^"$locale_name " $ROOT/usr/share/i18n/SUPPORTED \
+                        >> $ROOT/etc/locale.gen
+                else
+                    echo "$locale_name $locale_encoding" >> $ROOT/etc/locale.gen
+                fi
+            done
             echo "LANG=$LANG" >> $ROOT/etc/default/locale
         fi
 

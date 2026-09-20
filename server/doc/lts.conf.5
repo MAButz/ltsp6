@@ -611,32 +611,56 @@ The shadow does more work than the colour. A photograph is light in some places
 and dark in others, and no single colour is right on both \(em an outline is.
 .SS "What language it speaks"
 .PP
-The greeter calls \fBsetlocale\fP(3) with the empty string, so it speaks
-whatever \fBLANG\fR says, and \fBltsp_config\fR exports every lts.conf
-variable into the environment the screens are started in. One line is
-therefore enough \(em on the client's side:
+ldm is translated into some forty languages, German among them, and the
+catalogues ship inside the \fIldm\fR package \(em nothing has to be installed.
+Which one the greeter uses is decided here, per client, not when the image is
+built:
 .PP
 .RS 4
 \fBLANG="de_DE.UTF-8"\fR
 .RE
 .PP
-provided the locale exists in the image. It does not by default: a stock build
-carries \fBC.UTF-8\fR and nothing else, and a \fBLANG\fR naming a locale that
-was never generated silently falls back to English. Generate it at build time,
-which also writes \fI/etc/default/locale\fR:
+The greeter calls \fBsetlocale\fP(3) with the empty string, so it follows
+\fBLANG\fR, and \fBltsp_config\fR exports every lts.conf variable into the
+environment the screens start in. One line switches Username, Password,
+Preferences, Reboot and Shut down to Benutzername, Passwort, Einstellungen,
+Neustart and Ausschalten, and another client on the same server can have
+\fBLANG="en_US.UTF-8"\fR and read English.
+.PP
+The one condition is that the image carries the locale. That is the part the
+build decides, and it is worth putting both in while you are there:
 .PP
 .RS 4
-\fBltsp\-build\-client \-\-locale de_DE.UTF\-8 ...\fR
+\fBltsp\-build\-client \-\-locale de_DE.UTF\-8,en_US.UTF\-8 ...\fR
 .RE
 .PP
-ldm itself is translated into some forty languages, German among them, and the
-catalogues ship in the \fIldm\fR package \(em nothing has to be installed for
-it. What a set \fBLANG\fR changes is the greeter's own words: Benutzername,
-Passwort, Einstellungen, Neustart, Ausschalten. It is separate from
-\fBLDM_LANGUAGE\fR, which preselects the language of the \fIsession\fR on the
-server and leaves the greeter alone, and from
-\fBLDM_USERNAME_PROMPT\fR and its two companions above, which replace one
-string outright and are then the same on every client whatever the locale.
+A stock image carries \fBC.UTF-8\fR and nothing else. \fBLANG\fR naming a
+locale that was never generated does not fail in any visible way: setlocale()
+returns NULL, the process stays in \fBC\fR, and the screen comes up in English
+exactly as if the line had not been there. Since ldm 3.4.4\-1 the greeter says
+so in its log:
+.IP "" 4
+\fBlocale "de_DE.UTF-8" is not generated in this image; staying in "C" and
+showing English.\fR
+.IP "" 4
+which is in \fI/var/log/ldm.log\fR on the client, or on the syslog host if
+\fBLDM_SYSLOG\fR is set \(em worth remembering, because on a thin client
+\fI/var/log\fR is RAM and dies with the session.
+.PP
+\fBLANGUAGE\fR works too, and takes a bare language name, but it needs a real
+locale to be in force first \(em glibc ignores it outright whenever the locale
+is \fBC\fR, and \fBC.UTF-8\fR counts as \fBC\fR for this. So with
+\fBen_US.UTF-8\fR in the image, \fBLANGUAGE="de"\fR gives a German greeter
+without \fBde_DE.UTF-8\fR being generated at all. With nothing but
+\fBC.UTF-8\fR, neither variable can do anything, which is the case the second
+log line covers.
+.PP
+Three neighbours that are easy to confuse with this one:
+\fBLDM_LANGUAGE\fR preselects the language of the \fIsession\fR on the server
+and leaves the greeter alone; \fBLDM_FORCE_LANGUAGE\fR removes the language
+chooser from the greeter along with the choice; and
+\fBLDM_USERNAME_PROMPT\fR and its companions above replace one string
+outright, which is then the same on every client whatever the locale says.
 .PP
 .SS "The theme's icons"
 .PP

@@ -1,3 +1,33 @@
+ltsp (6.3.14-1) unstable; urgency=medium
+
+  * ltsp-build-client --locale takes a comma separated list, so an image can
+    carry several locales and lts.conf can then choose between them per
+    client with LANG:
+
+        --locale de_DE.UTF-8,en_US.UTF-8
+
+    The first is still the image's default, and a single value behaves
+    exactly as before. Each entry may name its encoding after a space, as
+    before.
+
+    This is what makes the greeter's language an lts.conf setting rather
+    than a property of the image. glibc refuses to translate anything at
+    all in the C locale, and C.UTF-8 counts as C for that - so an image
+    built without this option carries no language but English, and no
+    setting in lts.conf can change it. Measured, not assumed: with
+    en_US.UTF-8 generated, LANGUAGE=de gives a German greeter; with only
+    C.UTF-8, neither LANG nor LANGUAGE does anything at all.
+
+  * lts.conf(5): the language section rewritten around that. LANG in
+    lts.conf switches the greeter per client; LANGUAGE does too and takes a
+    bare language name, but needs a real locale in force first; and since
+    ldm 3.4.4-1 the greeter logs the case where the locale is missing
+    instead of coming up in English without a word.
+
+  * ltsp-build-client(8): --locale documented at all, which it was not.
+
+ -- Marc-Andre Butz <butz@labor-heidrich.de>  Sun, 20 Sep 2026 08:44:26 +0200
+
 ltsp (6.3.13-1) unstable; urgency=medium
 
   * lts.conf(5): the icons a theme may carry, which were nowhere listed -

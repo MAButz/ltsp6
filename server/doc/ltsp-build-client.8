@@ -110,6 +110,27 @@ Displays all available commandline options.
 .IP "\fB\-\-help\fP" 10 
 Displays the ltsp\-build\-client help message.
 
+.IP "\fB\-\-locale\fP \fIlocale\fR[,\fIlocale\fR...]" 10
+Locales to generate in the image. A comma separated list; the first becomes
+the image's default in \fI/etc/default/locale\fR. An entry may name its
+encoding after a space, otherwise it is looked up in
+\fI/usr/share/i18n/SUPPORTED\fR.
+.IP "" 10
+Worth giving more than one. A stock image carries \fBC.UTF-8\fR and nothing
+else, and in the C locale glibc refuses to translate anything at all \(em so
+without this option no client can be switched to another language by any
+setting in \fBlts.conf\fP(5), and \fBLANG\fR there fails silently rather than
+complaining. Put the languages the fleet might want into the image once:
+.br
+\fB\-\-locale de_DE.UTF\-8,en_US.UTF\-8\fR
+.br
+and let each client choose with \fBLANG\fR. The list is accepted since
+6.3.14\-1; before that the option took a single locale.
+.IP "" 10
+Without the option at all, the chroot inherits the build server's own
+\fI/etc/locale.gen\fR \(em which is why an image sometimes has a usable
+locale that nobody asked for.
+
 .IP "\fB\-\-mirror\fP \fImirror_url\fR" 10 
 Select the mirror to download packages from. file:/// and http:// URLs are
 supported.
