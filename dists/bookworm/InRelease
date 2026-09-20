@@ -5,7 +5,7 @@ Origin: ltsp6
 Label: ltsp6 Github
 Suite: stable
 Codename: bookworm
-Date: Sun, 20 Sep 2026 07:38:17 UTC
+Date: Sun, 20 Sep 2026 08:54:21 UTC
 Architectures: amd64
 Components: main
 Description: Debian ltsp6 x64 github repository
@@ -23,17 +23,17 @@ SHA256:
  393936667a61a6c4f5eae438f69f247ab96340de1568de836ff9c43652ab3646 134 main/binary-amd64/Release
 -----BEGIN PGP SIGNATURE-----
 
-iQIzBAEBCgAdFiEET/G5DE/MBWAVAAUTB2byPyDuP8QFAmqvjWkACgkQB2byPyDu
-P8SGpA/7BYLDwYxrD2b2HDJ9h8YUARtgT1P5JwAj64plaLy023SIAf4dLtGu3pel
-G+cN+v8sTYrI3+c3sQ2cPt3wUEDVRAMa/nY/86eqO3cqB96ntMv6VHfDs5QgxWpZ
-C9PtnWfjNH/c9nMvm9M3ngCctAbmEt+lwOSBvPqwFePuygR71u8qNmMQgT8bRJV4
-ohses63JqoQVoVzJayeUMsq3yoeuLAAb9ZGgHOK2k+yqQiMjY8rrT5eu5Mz78VG0
-QVVrl9YuKZd+oV4I41ZcUDot+3jP+4bt2wVDUu6Sheoh7byFwZn3a+GPEtjcrlmH
-ys1EtD26O1SCm2OIjhoWvAvw5mZMjkXYfDp1Wg37Y7M6hqPWjrli4cWs/2AkjPJO
-DCJHfIa6nbnk4t7owoPwB88XEvlwnQubEb/5uRLcQ6Qgs1XOIytXMXiSD44czW9n
-pfdbgpshrJ+c0xU+HRYsi8Jmtefjh8fqpA8E1BUT11LQ2Rrqjwbd9DlnBb0gNebV
-l52ovyJp1F+VGGEGcAhce2/UJ724yw6XvkQ5z1CIkaLGnvxOY0kNQW7kqaVc0dfX
-3NGQzuqfQdapZ7WbNpxvuYK8YyRcN+LUH8A2AOYtWedI8L/xq40C72eRpJLxsx93
-lgScP6rRYI+0pOxYrIcdRZWM87skuPD2CBBhXGP2hZVqmWC9wUo=
-=Zwau
+iQIzBAEBCgAdFiEET/G5DE/MBWAVAAUTB2byPyDuP8QFAmqvnz4ACgkQB2byPyDu
+P8RaiRAApQGljqg61yiwbFoHSZC42frZlycYkw9jtHZrYGVNMGt8519sXmHrI3UY
+WWnCwefw8nwe9HzdHRip3rukArNPcMem4NnpLKK09D/2eg9Up3gHpL7KJa1x64xh
+nRsjHgGp+XTlY4LkpYlTAbQ7gdxpJzUIGiYWW66J1fijVtXAwCrV/VRGPcIeKmQL
+vm6miBWVi6SN/Z5653ueNvZfP7B1WroyMr+Vs0PCbMWkcRMwY2YeYODEbHmAaAb/
+itdYPx6ZlxXxXSU9YBdrjrRD8gf9YALoCvbd+NI5HiE+w/pw1zTyq6Kc9JCv9ySy
+u1z0nA++wa2zLPIKjQU785IG3y/YaDtzdpyLbC32HXrqkUu0nIgJngg6JMz3U5nu
+YUGvz8lym6Yj9OwAi04cDP4pCYVU9fE0ypa0vwPJwRBU2y/NkRlxihgfPjTd86Uj
+eE6rPqaVOxz/3qdXhThuvFf6Y+sqEw8nktIs9jRDF58iKaQ3jlkdpqvt5dUb8+m6
++TSxmiQ3timZTDAdcqDipnom4OsKfu0sigtyof5gMi3aHn8YAtvgRiwxLHWO/iwX
+UTG3hf9ZrycLWn7Wh0Hgxd2WLKsNjUd8DUirVPHPsc/4+/zgi63f3tslRYSknR5Q
+S4M4sGRC9a1S+EM+SeIpR2+LkD3FhJvn3LhQZsC3dGCRYbzgAj4=
+=mZ1T
 -----END PGP SIGNATURE-----
