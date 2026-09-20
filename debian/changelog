@@ -1,3 +1,15 @@
+ltsp (6.3.17-1) unstable; urgency=medium
+
+  * lts.conf(5): #ldm-preferences, the fifth name a theme's greeter.css can
+    address, new in ldm 3.4.5-1. It is a button rather than a label and is
+    in the list for the same reason the labels are: it is drawn with relief
+    NONE, so it has no ground of its own and sits straight on the
+    background image. A theme that lightens the labels for a dark
+    photograph and cannot reach this one leaves a single word in the
+    default near-black.
+
+ -- Marc-Andre Butz <butz@labor-heidrich.de>  Sun, 20 Sep 2026 13:47:46 +0200
+
 ltsp (6.3.16-1) unstable; urgency=medium
 
   * The documentation that had not been touched since LTSP 5 is rewritten.

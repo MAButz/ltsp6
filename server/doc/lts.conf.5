@@ -580,17 +580,24 @@ merged. Copy what you want to keep out of
 .PP
 The CSS is ordinary GTK3 CSS, loaded at
 \fBGTK_STYLE_PROVIDER_PRIORITY_APPLICATION\fR, which places it above the GTK
-theme the image happens to ship. Four labels carry a name of their own, so they
+theme the image happens to ship. Five widgets carry a name of their own, so they
 can be addressed one at a time:
 .PP
 .RS 4
 .nf
-#ldm\-prompt    the Username / Password line beside the entry
-#ldm\-status    the status line under it
-#ldm\-host      host name and address
-#ldm\-clock     the clock
+#ldm\-prompt        the Username / Password line beside the entry
+#ldm\-status        the status line under it
+#ldm\-host          host name and address
+#ldm\-clock         the clock
+#ldm\-preferences   the Preferences button
 .fi
 .RE
+.PP
+The last of those is a button rather than a label, and it is in the list
+because it is drawn with relief \fBNONE\fR \(em no ground of its own, sitting
+straight on the background image like the labels around it. A theme that
+lightens the labels and forgets it leaves one word in the default near\-black.
+Available since ldm 3.4.5\-1.
 .PP
 This matters on a dark background. Without the names the only handle is
 \fBlabel\fR, which also catches the text inside every button and menu item, so
@@ -600,7 +607,7 @@ greeter ignores the names and falls back to whatever \fBlabel\fR says.
 .PP
 .RS 4
 .nf
-#ldm\-prompt, #ldm\-status, #ldm\-host, #ldm\-clock {
+#ldm\-prompt, #ldm\-status, #ldm\-host, #ldm\-clock, #ldm\-preferences {
     color: #f2f2f2;
     text\-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
 }
