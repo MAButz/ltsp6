@@ -1,3 +1,40 @@
+ltsp (6.3.15-1) unstable; urgency=medium
+
+  * Without --locale, the image now gets the locale the build machine itself
+    uses, and only that one. A German build host therefore produces a German
+    image, default and all, with nothing to set in lts.conf - and the build
+    says which locale it took.
+
+    It used to copy the server's entire /etc/locale.gen, so a host with five
+    locales ticked produced an image carrying five that nobody had asked
+    for, and the one the image actually used was whatever the server's
+    /etc/default/locale happened to say.
+
+  * That file is no longer copied either, and this is the part worth
+    knowing. update-locale routinely writes
+
+        LANG=en_US.UTF-8
+        LC_ALL=en_US.UTF-8
+
+    and LC_ALL overrides everything, lts.conf included. An image built from
+    such a host could not be switched to another language by any means, and
+    nothing said why. What is written into the image now is LANG and
+    nothing else.
+
+  * If the build machine has no real locale of its own - only C.UTF-8, as a
+    minimal server often does - the build says so plainly rather than
+    leaving it to be found at a client:
+
+        NOTE: this machine has no locale of its own, so the image gets
+        none. Every client will speak English whatever lts.conf says;
+        pass --locale to change that.
+
+  * ltsp-build-client(8) and lts.conf(5) follow: the image's language comes
+    from the build machine unless --locale says otherwise, and LANG in
+    lts.conf is for choosing among what --locale put there.
+
+ -- Marc-Andre Butz <butz@labor-heidrich.de>  Sun, 20 Sep 2026 09:37:28 +0200
+
 ltsp (6.3.14-1) unstable; urgency=medium
 
   * ltsp-build-client --locale takes a comma separated list, so an image can

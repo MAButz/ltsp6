@@ -627,18 +627,22 @@ Preferences, Reboot and Shut down to Benutzername, Passwort, Einstellungen,
 Neustart and Ausschalten, and another client on the same server can have
 \fBLANG="en_US.UTF-8"\fR and read English.
 .PP
-The one condition is that the image carries the locale. That is the part the
-build decides, and it is worth putting both in while you are there:
+The one condition is that the image carries the locale. Since 6.3.15\-1 it
+carries the build machine's own by default, so a German server produces a
+German greeter with nothing set here at all. \fBLANG\fR in this file is for
+the second language onwards, and the build has to be told to include it:
 .PP
 .RS 4
 \fBltsp\-build\-client \-\-locale de_DE.UTF\-8,en_US.UTF\-8 ...\fR
 .RE
 .PP
-A stock image carries \fBC.UTF-8\fR and nothing else. \fBLANG\fR naming a
-locale that was never generated does not fail in any visible way: setlocale()
-returns NULL, the process stays in \fBC\fR, and the screen comes up in English
-exactly as if the line had not been there. Since ldm 3.4.4\-1 the greeter says
-so in its log:
+The first of those is the image's default \(em the one every client gets
+without a \fBLANG\fR line. The others are there to be selected.
+.PP
+\fBLANG\fR naming a locale that is not in the image does not fail in any
+visible way: setlocale() returns NULL, the process stays in \fBC\fR, and the
+screen comes up in English exactly as if the line had not been there. Since
+ldm 3.4.4\-1 the greeter says so in its log:
 .IP "" 4
 \fBlocale "de_DE.UTF-8" is not generated in this image; staying in "C" and
 showing English.\fR

@@ -116,20 +116,30 @@ the image's default in \fI/etc/default/locale\fR. An entry may name its
 encoding after a space, otherwise it is looked up in
 \fI/usr/share/i18n/SUPPORTED\fR.
 .IP "" 10
-Worth giving more than one. A stock image carries \fBC.UTF-8\fR and nothing
-else, and in the C locale glibc refuses to translate anything at all \(em so
-without this option no client can be switched to another language by any
-setting in \fBlts.conf\fP(5), and \fBLANG\fR there fails silently rather than
-complaining. Put the languages the fleet might want into the image once:
+Leave it out and the image gets the locale this machine itself uses, and only
+that one. A German build host therefore produces a German image, default and
+all, with nothing to set anywhere \(em which is usually what was wanted. The
+build says which one it took.
+.IP "" 10
+Give the option when the fleet needs a choice. Two locales in the image, and
+\fBLANG\fR in \fBlts.conf\fP(5) decides per client:
 .br
 \fB\-\-locale de_DE.UTF\-8,en_US.UTF\-8\fR
-.br
-and let each client choose with \fBLANG\fR. The list is accepted since
-6.3.14\-1; before that the option took a single locale.
 .IP "" 10
-Without the option at all, the chroot inherits the build server's own
-\fI/etc/locale.gen\fR \(em which is why an image sometimes has a usable
-locale that nobody asked for.
+It matters more than it sounds, because glibc refuses to translate anything at
+all in the C locale \(em and \fBC.UTF-8\fR counts as C. An image with no real
+locale speaks English and no setting in \fBlts.conf\fP(5) can change it, with
+\fBLANG\fR there failing silently rather than complaining. That is the one
+case this machine cannot supply from itself, and the build says so instead of
+leaving it to be discovered at a client.
+.IP "" 10
+Until 6.3.15\-1 the option took a single locale, and without it the chroot
+inherited the server's entire \fI/etc/locale.gen\fR \(em a build host with five
+locales ticked produced an image carrying five \(em along with its
+\fI/etc/default/locale\fR. That last one is worth knowing about if an older
+image will not change language: such a file routinely carries \fBLC_ALL\fR
+beside \fBLANG\fR, and \fBLC_ALL\fR overrides everything, \fBlts.conf\fP(5)
+included. Only \fBLANG\fR is written now.
 
 .IP "\fB\-\-mirror\fP \fImirror_url\fR" 10 
 Select the mirror to download packages from. file:/// and http:// URLs are

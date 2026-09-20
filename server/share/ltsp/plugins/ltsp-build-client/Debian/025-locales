@@ -16,13 +16,48 @@ case $MODE in
         fi
         ;;
     install)
-        for f in /etc/locale.gen /etc/default/locale \
-            /etc/default/console-setup /etc/default/keyboard; do
+        # Console and keyboard defaults still come from the server as they
+        # always did. The locale no longer does - see below.
+        for f in /etc/default/console-setup /etc/default/keyboard; do
             if [ -f "$f" ]; then
                 cp "$f" "$ROOT/$f"
             fi
         done
-        
+
+        # Without --locale, the image gets the locale this machine itself
+        # uses, and only that one. Not every line of the server's
+        # /etc/locale.gen, which is how it used to work: a build host with
+        # five locales ticked produced an image carrying five, none of which
+        # anyone had asked for.
+        #
+        # The server's /etc/default/locale is no longer copied either, and
+        # that matters more than it looks. It routinely carries
+        #
+        #     LC_ALL=en_US.UTF-8
+        #
+        # beside LANG, and LC_ALL overrides everything - including a LANG set
+        # in lts.conf(5). An image built from such a host could not be
+        # switched to another language at all, and nothing said why. What is
+        # written below is LANG and nothing else.
+        if [ -z "$LOCALE" ]; then
+            if [ -f /etc/default/locale ]; then
+                LOCALE=$(sed -n 's/^[[:space:]]*LANG=//p' /etc/default/locale |
+                    tr -d '"' | head -1)
+            fi
+            if [ -z "$LOCALE" ]; then
+                LOCALE="$LANG"
+            fi
+            case "$LOCALE" in
+                ""|C|C.*|POSIX)
+                    echo "`eval_gettext "NOTE: this machine has no locale of its own, so the image gets none. Every client will speak English whatever lts.conf says; pass --locale to change that."`"
+                    LOCALE=""
+                    ;;
+                *)
+                    echo "`eval_gettext "NOTE: no --locale given, using this machine's own:"` $LOCALE"
+                    ;;
+            esac
+        fi
+
         # A comma separated list, so the image can carry more than one and
         # lts.conf can pick between them with LANG at boot, instead of the
         # choice being frozen here:
@@ -53,7 +88,7 @@ case $MODE in
                     echo "$locale_name $locale_encoding" >> $ROOT/etc/locale.gen
                 fi
             done
-            echo "LANG=$LANG" >> $ROOT/etc/default/locale
+            echo "LANG=$LANG" > $ROOT/etc/default/locale
         fi
 
         if [ -f $ROOT/etc/locale.gen ] && [ -x $ROOT/usr/sbin/locale-gen ] ; then
