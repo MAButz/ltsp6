@@ -12,7 +12,7 @@ The pieces are a GTK3 port of `ldm` with an xfreerdp backend
 role in `server/tools`, and a signed apt archive for the packages this project
 publishes.
 
-## Einbinden auf Debian
+## Adding the archive on Debian
 
 Add the archive, then install from it:
 
@@ -30,7 +30,7 @@ Architectures: amd64
 Signed-By: /etc/apt/keyrings/ltsp6.asc
 SRC
 
-sudo apt-get update && sudo apt-get install ltsp6-session-tuning
+sudo apt-get update && sudo apt-get install ltsp-server
 ```
 
 `Suites:` is the Debian release you are on — `trixie` for Debian 13,
@@ -59,11 +59,16 @@ the keyring file is missing. Do not answer that with `trusted=yes`.
 
 | Suite | Package | Version |
 |---|---|---|
-| `trixie` | `ltsp-server` | 6.0.0-4 |
-| `trixie` | `ltsp-client-core` | 6.0.0-4 |
-| `trixie` | `ldm` | 3.0.2-1 |
+| `trixie` | `ltsp-server` | 6.3.15-1 |
+| `trixie` | `ltsp-client-core` | 6.3.15-1 |
+| `trixie` | `ldm` | 3.4.4-1 |
 | `trixie` | `ltsp6-session-tuning` | 1.0.0 |
 | `bookworm` | `ltsp-client`, `ltsp-client-core` | 5.18.12-3 |
+
+`ltsp-server` is `Architecture: all` and runs on Debian 12 as well; `ldm` and
+`ltsp-client-core` are amd64, built against the glibc of Debian 13, and belong
+in the client image, which is a Debian 13 chroot. The suite is named after
+where the packages are built, not after where they may be installed.
 
 `ltsp6-session-tuning` configures a host that carries many desktop sessions at
 once: it moves each session's cache off the network home directory, turns off
@@ -75,16 +80,54 @@ before adding more tuning.
 
 The archive lives on the `main` branch, which is an orphan branch holding only
 `dists/`, `pool/` and the public key, published by GitHub Pages.
-`server/tools/build-apt-repo` regenerates and signs it.
+`server/tools/build-apt-repo` regenerates and signs it. Every release is also
+tagged here and carries the same `.deb` files as assets.
+
+## Building a client image
+
+The image is built by `ltsp-build-client`, and that is the supported way —
+everything else in this repository assumes an image that came out of it:
+
+```sh
+ltsp-build-client \
+    --base /srv/ltsp --arch amd64 --dist trixie \
+    --components main,non-free-firmware \
+    --apt-keys /etc/apt/keyrings/ltsp6.asc \
+    --extra-mirror "https://mabutz.github.io/ltsp6 trixie main" \
+    --early-packages ca-certificates,initramfs-tools \
+    --late-packages console-setup,freerdp3-x11,kbd,ldm,linux-image-amd64,\
+locales,ltsp-client-core,nbd-client,tftp-hpa,x11-xserver-utils,xinit,\
+xserver-xorg-core,xserver-xorg-video-all \
+    --purge-chroot --no-squashfs-image
+```
+
+Building into `--base /srv/ltsp` leaves the running image in `/opt/ltsp` alone;
+`ltsp-update-image` then puts the result in place. `HOWTO-lab-from-scratch`
+has the second phase and the traps, `ltsp-build-client`(8) the options.
 
 ## Documentation
 
 | Document | Contents |
 |---|---|
 | [`server/doc/HOWTO-lab-from-scratch`](server/doc/HOWTO-lab-from-scratch) | The whole lab in nine steps, with the acceptance tests and the traps sorted by the symptom they present as |
+| [`server/doc/QuickInstall`](server/doc/QuickInstall) | One server, one client, nothing else — the short path |
+| [`server/doc/FAQ`](server/doc/FAQ) | Symptoms that have a known cause, and where each one is written up |
 | [`server/doc/RDP-loadbalancer-HA`](server/doc/RDP-loadbalancer-HA) | Load balancing and high availability for the RDP entry point, and why a stick-table rather than a source hash |
 | [`server/doc/PXE-network-boot-test`](server/doc/PXE-network-boot-test) | The boot chain, measured end to end |
 | [`server/doc/NBD-toram`](server/doc/NBD-toram) | Running the client image from RAM |
+
+The manual pages are the reference, and `lts.conf`(5) is the largest of them —
+every directive the client reads, what it does, and what it costs:
+
+| Page | Subject |
+|---|---|
+| `lts.conf`(5) | Every client setting: the session backend, the greeter's appearance and language, screens, SSH host keys, graphics, sound, swap, names |
+| `ltsp-build-client`(8) | Building the image: mirrors, backports, locales, package lists |
+| `ltsp-info`(1) | What a server has: chroots, TFTP directories, images, and both places a client reads `lts.conf` from |
+| `ltsp-update-image`(8), `ltsp-update-kernels`(8) | Putting an image and its kernels in place |
+| `ltsp-chroot`(8), `ltsp-config`(8), `ltsp-update-sshkeys`(8) | Working on a chroot, writing service configuration, host keys |
+| `build-apt-repo`(8) | The signed archive above |
+| `setup-*`(8), `provision-samba-ad-dc`(8), `build-autoinstall-iso`(8) | One page per provisioning tool |
 
 ## Provisioning tools
 

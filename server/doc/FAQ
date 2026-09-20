@@ -1,33 +1,122 @@
-taken from: http://wiki.debian.org/LTSP/FAQ
+FAQ - symptoms with a known cause
+=================================
 
-Can i use the ltsp-utils package with ltsp-server(-standalone)? (as of 11.04.2007 / Debian Etch)
-
-No, the ltsp-utils package is from LTSP version 4 and the ltsp-server(-standalone) is version 5.
-
-
-If I specify SCREEN_01 trhough 06 in lts.conf (/opt/ltsp/i386/etc/lts.conf) my keyboard doesn't work.
-
-SCREEN_01 trough 06 conflict with inittab. Comment out the 1 to 6 in inittab or do not use SCREEN_01 to SCREEN_06.
+Sorted by what you see, not by what is wrong, because at the point of
+asking the second one is not known yet. Each entry says where the full
+account lives.
 
 
-Where do i get more informations on LTSP 5 MueKow?
+The client boots to a text console instead of a login screen
+------------------------------------------------------------
 
-[WWW] http://wiki.ltsp.org/twiki/bin/view/Ltsp/MueKow - no deeper informations but only primary goals (as of 11.04.2007).
+SCREEN_07 is not set to ldm, or the greeter exited at once and is being
+respawned. A service that is "active" with NRestarts=0 while burning a
+full core is the second case: something in the ldm invocation went wrong
+in a way that exits immediately.
 
-note that the MueKow experiments evolved into LTSP5: [WWW] http://wiki.ltsp.org/twiki/bin/view/Ltsp/Ltsp5
+Look at /var/log/ldm.log on the client, and at the SCREENS section of
+lts.conf(5). HOWTO-lab-from-scratch, step 6, has the whole list of ways
+this happens.
 
 
-LOCAL_STORAGE in lts.conf doesn't work
+A wrong password lands the user in the RDP server's own login window
+--------------------------------------------------------------------
 
-In LTSP 5 it's called LOCALDEV. See also: LTSP/Upgrading_4.2 
+Pre-authentication is not running. It is meant to try the credentials over
+SSH first and keep a failure inside the greeter, with a message.
+
+RDP_PREAUTH=ssh turns it on, and it needs the server's SSH host key known
+under the name RDP_SERVER uses - usually an address, while the image carries
+the key under the name "server". RDP_PREAUTH_HOST=server is the quick way
+to reconcile that on an image you do not want to rebuild. See the SSH HOST
+KEYS section of lts.conf(5).
+
+Raise LDM_LOGLEVEL to 7 to see what pre-authentication asked and what it
+heard back.
 
 
-How do i configure boot prompt options [http://bugs.debian.org/428446 (debian bug 428446)]
+lts.conf has no effect
+----------------------
 
-create /opt/ltsp/i386/etc/update-kernels.conf with the following line(adapt to your needs):
+There are two of them, and the one you edited may not be the one being
+read. The client fetches lts.conf over TFTP from the directory its kernel
+came from and writes it over /etc/lts.conf in the running client - but only
+when the transfer returns a non-empty file. When it fails, and it fails
+silently, the client keeps the copy baked into the image.
 
-  export BOOTPROMPT_OPTS="root=/dev/nfs ip=dhcp nfsroot=/opt/ltsp/i386"
+    ltsp-info
 
-and create a symlink for backwards compatibility:
+names both paths, says whether each is there, and which of the two wins.
+-v prints their contents so they can be compared.
 
-  ln -s /opt/ltsp/i386/etc/update-kernels.conf /etc/ltsp/ltsp-update-kernels.conf
+
+The greeter is in English although LANG says otherwise
+------------------------------------------------------
+
+The image does not carry that locale. glibc refuses to translate anything
+in the C locale, C.UTF-8 included, and setlocale() failing is not visible
+from the outside.
+
+Since ldm 3.4.4-1 the greeter says so in /var/log/ldm.log. Since ltsp
+6.3.15-1 an image built without --locale carries the build machine's own
+locale, so a German build host gives a German greeter with nothing set.
+For a choice between languages, build with
+
+    --locale de_DE.UTF-8,en_US.UTF-8
+
+and let LANG in lts.conf pick. See lts.conf(5), "What language it speaks".
+
+
+Boot messages show little boxes instead of letters
+--------------------------------------------------
+
+The console font is loaded too late, after systemd has started printing.
+Fixed in ltsp-client-core 6.3.6-1, which loads it from init-ltsp before
+systemd is exec'd; CONSOLE_FONT in lts.conf(5) chooses which one.
+
+
+The client shuts services down and then stays on
+------------------------------------------------
+
+Two different faults with the same appearance. The one in LTSP was
+poweroff racing a dead NBD root, fixed in 6.3.4-1 by going through
+/proc/sysrq-trigger, which needs no filesystem.
+
+The other is not LTSP's: a virtual machine with no ACPI power-off handler
+halts instead of powering down, and says so on the console -
+"reboot: Power off not available: System halted instead". Enable ACPI in
+the VM.
+
+
+The image grew by hundreds of megabytes after adding backports
+--------------------------------------------------------------
+
+Two causes, and the larger one is avoidable. Debian split the kernel
+package after 6.12: what was one 106 MB package is now linux-base plus
+linux-binary plus a 153 MB linux-modules, 62 MB more for the same kernel.
+That one is the price of the newer kernel.
+
+The other is a firmware metapackage. firmware-linux reaches
+firmware-amd-graphics - 93 MB of firmware for AMD graphics chips, on a
+client that may have none. Name the package you want:
+firmware-intel-graphics is 32 MB. See ltsp-build-client(8).
+
+
+apt refuses the archive as unsigned
+-----------------------------------
+
+The keyring file is missing or the Signed-By line does not point at it.
+Do not answer this with [trusted=yes]: that switches verification off for
+every package from the source, on machines that install software as root.
+The README has the two commands.
+
+
+Where the rest is
+-----------------
+
+    HOWTO-lab-from-scratch    the whole lab, with the traps by symptom
+    QuickInstall              one server, one client
+    PXE-network-boot-test     the boot chain, step by step
+    NBD-toram                 running the image from RAM
+    RDP-loadbalancer-HA       the load-balanced RDP entry point
+    lts.conf(5)               every client setting there is

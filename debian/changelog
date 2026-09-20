@@ -1,3 +1,33 @@
+ltsp (6.3.16-1) unstable; urgency=medium
+
+  * The documentation that had not been touched since LTSP 5 is rewritten.
+
+    QuickInstall described installing ltsp-server-standalone on Ubuntu and
+    running ltsp-build-client with no arguments - a package that does not
+    exist here and an invocation that would not produce a usable image. It
+    is now one server and one client on Debian 13, in six steps, each of
+    which has been checked against what the tools actually do. Among other
+    things it no longer tells the reader to run "ltsp-config dhcpd", which
+    ltsp-config has never accepted: the argument is isc-dhcp-server.
+
+    The FAQ answered questions about LTSP 4 versus 5, i386 chroot paths,
+    inittab conflicts and a MueKow wiki that has not existed for fifteen
+    years. It is now sorted by symptom - what you see, since at the point
+    of asking the cause is what you do not know - and each entry says where
+    the full account lives.
+
+    TODO was the upstream wishlist from 2007. What it holds now is the one
+    thing this project has genuinely left open: choosing a session server
+    by what it has free, rather than by connection count.
+
+  * README.md and README.de.md: the package table said 6.0.0-4 and 3.0.2-1,
+    which is eleven releases ago. Both now also list the manual pages, which
+    are the reference and were not mentioned at all, and show the
+    ltsp-build-client invocation that produces a working image. The English
+    README had a German section heading.
+
+ -- Marc-Andre Butz <butz@labor-heidrich.de>  Sun, 20 Sep 2026 10:52:30 +0200
+
 ltsp (6.3.15-1) unstable; urgency=medium
 
   * Without --locale, the image now gets the locale the build machine itself

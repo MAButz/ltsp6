@@ -1,13 +1,38 @@
-- Sort out SCREEN_xx stuff
-  - Respawn
-- Server autoconfiguration
-  - dhcp3-server
-  - nbd-server?
-- installer hooks
-  - choose ltsp-server vs. ltsp-server-standalone based on DHCP result?
-- nbd swap testing
-- Bandwidth consumption
-  - Throttle screensaver
-  - Logout fade?
-  - Background image?
-- Support for setting the time on thin clients via NTP with the server
+TODO
+====
+
+Open, and deliberately so.
+
+
+Choosing a session server by what it has free
+---------------------------------------------
+
+A session should land on the application server that has the resources for
+it, and today nothing measures that. HAProxy distributes the RDP entry
+point by connection count, which is not the same thing: ten idle sessions
+and ten compiling ones weigh alike.
+
+LTSP 5 had an answer of sorts, and it is instructive that it never worked.
+ldminfod listened on port 9571 and reported a figure computed from RAM,
+swap and load; the greeter collected it from every server in LDM_SERVER
+and then never sorted by it. By the time Debian dropped Python 2 the daemon
+could not start at all, and nobody noticed - which says how much the
+ranking had been doing. It was removed in ldm 3.4.0-1.
+
+Whatever replaces it belongs in front of the session servers rather than in
+the greeter. A client that must reach a second service to learn which
+service to reach is the shape that already failed once, silently. Feeding
+HAProxy real load data - an agent-check on each application server - keeps
+the decision where the sessions are.
+
+
+Done, kept here because the reasoning still applies
+---------------------------------------------------
+
+The list this file used to hold was the upstream one from 2007: SCREEN_xx
+respawning, server autoconfiguration for dhcp3-server, installer hooks
+choosing between ltsp-server and ltsp-server-standalone, NBD swap, and
+bandwidth ideas like throttling the screensaver. None of it describes this
+project. Respawning screens, DHCP and NBD configuration all work and are
+documented in lts.conf(5) and ltsp-config(8); the packages named no longer
+exist.

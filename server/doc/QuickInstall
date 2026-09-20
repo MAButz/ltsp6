@@ -1,25 +1,133 @@
-This document aims to describe the quickest way to get a ltsp server 
-running on an existing ubuntu or kubuntu (xubuntu comes with a ltsp 
-option in the installer, edubuntu even sets up ltsp in its default 
-install).
+QuickInstall - one server, one client
+=====================================
 
-You need to set up one static interface where you will attach the 
-thin clients, install two packages and run one command.
+The short path: a single machine that serves the image and carries the
+session, and one thin client that boots off it. No domain, no load
+balancer, no second server. HOWTO-lab-from-scratch builds the full thing;
+this is what to do when you want to see a client boot today.
 
-Configure your spare interface for the thin clients to have the 
-IP 192.168.67.1, then run command below:
+Debian 13 (trixie) on the server. Two network interfaces: one to the house
+network, one for the clients. Everything below runs as root.
 
-sudo apt-get install ltsp-server-standalone openssh-server
 
-Now create your Thin Client environment on the server by running:
+1. The archive
+--------------
 
-sudo ltsp-build-client
+    install -d -m 755 /etc/apt/keyrings
+    curl -fsSL -o /etc/apt/keyrings/ltsp6.asc \
+        https://mabutz.github.io/ltsp6/ltsp6-archive-keyring.asc
 
-After that, you will be able to boot your first thin client. 
-Note that if you want to use another IP than the above, you need to 
-edit the /etc/ltsp/dhcpd.conf file to match the IP values and 
-restart the dhcp server.
+    cat > /etc/apt/sources.list.d/ltsp6.sources <<'SRC'
+    Types: deb
+    URIs: https://mabutz.github.io/ltsp6
+    Suites: trixie
+    Components: main
+    Architectures: amd64
+    Signed-By: /etc/apt/keyrings/ltsp6.asc
+    SRC
 
-If you change the IP data after you have done the initial setup, 
-please run the command sudo ltsp-update-sshkeys to make the ssh 
-server aware of the change.
+    apt-get update && apt-get install ltsp-server
+
+Do not reach for [trusted=yes] if apt complains. It disables verification
+for every package from the source, and the thing it is complaining about is
+a missing keyring file.
+
+
+2. The client-side interface
+----------------------------
+
+Give it a static address. The examples here use 192.168.67.1/24, which is
+what the shipped dhcpd.conf and the iPXE script expect:
+
+    ip addr add 192.168.67.1/24 dev eth1
+    ip link set eth1 up
+
+Make it permanent in /etc/network/interfaces or wherever this machine keeps
+its addressing. A client cannot boot off an interface that comes up without
+an address.
+
+
+3. The image
+------------
+
+    ltsp-build-client \
+        --base /srv/ltsp --arch amd64 --dist trixie \
+        --components main,non-free-firmware \
+        --apt-keys /etc/apt/keyrings/ltsp6.asc \
+        --extra-mirror "https://mabutz.github.io/ltsp6 trixie main" \
+        --early-packages ca-certificates,initramfs-tools \
+        --late-packages console-setup,freerdp3-x11,kbd,ldm,linux-image-amd64,\
+locales,ltsp-client-core,nbd-client,tftp-hpa,x11-xserver-utils,xinit,\
+xserver-xorg-core,xserver-xorg-video-all \
+        --purge-chroot --no-squashfs-image
+
+Twenty minutes or so, most of it downloading. Three of those options repay
+reading about in ltsp-build-client(8): --apt-keys and --extra-mirror are
+what let the chroot install this project's own packages, and
+initramfs-tools in --early-packages keeps dracut out of an image that needs
+LTSP's initramfs hooks.
+
+Then put it in place and tell nbd-server about it:
+
+    ltsp-update-image --config-nbd -b /srv/ltsp amd64
+
+No restart of nbd-server belongs here. It builds beside the live file and
+renames, so a client already connected keeps reading the image it booted
+with while the next one to connect gets the new one.
+
+
+4. The services
+---------------
+
+    ltsp-config isc-dhcp-server     # or: ltsp-config dnsmasq
+    ltsp-config nbd-server
+    ltsp-config lts.conf            # a commented sample to start from
+
+The first points the client at the boot file, the second writes the NBD
+export. Both refuse to overwrite a file that is already there, which is
+deliberate - pass --overwrite when you mean it. ltsp-config(8) lists what
+else it can write: dnsmasq, kea, nfs.
+
+Start them, and check that TFTP is being served out of the directory
+ltsp-update-kernels wrote into:
+
+    ltsp-info
+
+That lists the chroots, the TFTP directories, the images, and both places a
+client reads lts.conf from, saying which of the two wins.
+
+
+5. The client's configuration
+-----------------------------
+
+The client reads lts.conf over TFTP from the directory its kernel came
+from, so /var/lib/tftpboot/ltsp/amd64/lts.conf. The smallest useful one:
+
+    [default]
+        SERVER=192.168.67.1
+        RDP_SERVER=192.168.67.1
+        SCREEN_07=ldm
+        LDM_SESSION=xfreerdp
+        RDP_PREAUTH=ssh
+
+RDP_PREAUTH=ssh is what makes a wrong password fail in the greeter, with a
+message, instead of handing the client to the RDP server's own login
+window. It needs the server's SSH host key to be known under the name in
+RDP_SERVER - ltsp-update-sshkeys(8), and the SSH HOST KEYS section of
+lts.conf(5).
+
+Every other directive is in lts.conf(5). The ones most often wanted next:
+LDM_THEME for the greeter's look, LANG for its language, SCREEN_02 for a
+text console to debug from.
+
+
+6. Boot the client
+------------------
+
+PXE, netboot enabled in its firmware, on the client-side segment. What you
+should see: iPXE gets an address, fetches vmlinuz and initrd.img over TFTP,
+the kernel mounts the NBD root, systemd starts, and ldm appears.
+
+When it does not, PXE-network-boot-test walks the chain step by step and
+says what each step looks like when it works. FAQ lists the symptoms that
+have a known cause.
