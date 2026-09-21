@@ -57,7 +57,7 @@ an address.
         --extra-mirror "https://mabutz.github.io/ltsp6 trixie main" \
         --early-packages ca-certificates,initramfs-tools \
         --late-packages console-setup,freerdp3-x11,kbd,ldm,linux-image-amd64,\
-locales,ltsp-client-core,nbd-client,tftp-hpa,x11-xserver-utils,xinit,\
+locales,ltsp-client-core,nbd-client,numlockx,tftp-hpa,x11-xserver-utils,xinit,\
 xserver-xorg-core,xserver-xorg-video-all \
         --purge-chroot --no-squashfs-image
 

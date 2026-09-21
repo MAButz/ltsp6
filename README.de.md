@@ -61,11 +61,16 @@ Steht dort stattdessen `The repository ... is not signed`, fehlt die Zeile
 
 | Suite | Paket | Version |
 |---|---|---|
-| `trixie` | `ltsp-server` | 6.3.15-1 |
-| `trixie` | `ltsp-client-core` | 6.3.15-1 |
-| `trixie` | `ldm` | 3.4.4-1 |
+| `trixie` | `ltsp-server` | 6.3.19-1 |
+| `trixie` | `ltsp-client-core` | 6.3.19-1 |
+| `trixie` | `ldm` | 3.4.5-1 |
 | `trixie` | `ltsp6-session-tuning` | 1.0.0 |
 | `bookworm` | `ltsp-client`, `ltsp-client-core` | 5.18.12-3 |
+
+Diese Zahlen wandern. Was im Archiv wirklich liegt, steht in dessen eigener
+`Packages`-Datei, und die Release-Seite führt jede Fassung mit ihren
+Anmerkungen — widersprechen sich diese Tabelle und das Archiv, hat das
+Archiv recht.
 
 `ltsp-server` ist `Architecture: all` und läuft auch auf Debian 12. `ldm` und
 `ltsp-client-core` sind amd64, gegen die glibc von Debian 13 gebaut, und
@@ -100,7 +105,7 @@ ltsp-build-client \
     --extra-mirror "https://mabutz.github.io/ltsp6 trixie main" \
     --early-packages ca-certificates,initramfs-tools \
     --late-packages console-setup,freerdp3-x11,kbd,ldm,linux-image-amd64,\
-locales,ltsp-client-core,nbd-client,tftp-hpa,x11-xserver-utils,xinit,\
+locales,ltsp-client-core,nbd-client,numlockx,tftp-hpa,x11-xserver-utils,xinit,\
 xserver-xorg-core,xserver-xorg-video-all \
     --purge-chroot --no-squashfs-image
 ```

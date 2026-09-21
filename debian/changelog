@@ -1,3 +1,45 @@
+ltsp (6.3.19-1) unstable; urgency=medium
+
+  * lts.conf(5): a new section, LOCK KEYS OVER RDP, for the Caps Lock and
+    Num Lock state showing one thing on the keyboard and doing another in
+    the session. Read in xrdp's own source rather than guessed at:
+
+    - xrdp does implement the client's Synchronize event. xrdp_wm_key_sync()
+      is commented "happens when client gets focus and sends key modifier
+      info", resets all three lock states and applies what arrived;
+      afterwards xrdp tracks them by watching for scancodes 58, 69 and 70.
+
+    - Which means the synchronisation happens at focus, and ldm starts
+      xfreerdp full screen: focus is taken once and never lost, so there is
+      no second synchronisation for the rest of the session. Whatever is
+      wrong at the start stays wrong.
+
+    - And there is no way back. The protocol's Set Keyboard Indicators PDU,
+      with which a server updates a client's LEDs, is not implemented -
+      "indicator" appears in xrdp's sources only in ISO length fields. Still
+      true in the current release, 0.10.6.1; everything its notes say about
+      keyboards between 0.10.1 and 0.10.6.1 concerns layouts.
+
+    So the starting state is what can be fixed, and X_NUMLOCK is how: it
+    sets the client's state before the session begins and the focus
+    synchronisation carries it across. That is the intended mechanism, not a
+    workaround. If they still drift, RDP_OPTIONS="/kbd:unicode:on" sends the
+    character instead of the scancode - xrdp accepts those, RDP_INPUT_UNICODE
+    reaches xrdp_wm_key_unicode() - at the price of applying to character
+    keys only, and needing FreeRDP 3, which is what Debian 13 has. FreeRDP 2
+    has no such option and is no longer in the distribution at all.
+
+  * numlockx joins the recommended package list in README, README.de and
+    QuickInstall. X_NUMLOCK has always said it needs numlockx in the image,
+    while the list this project recommends left it out - and without it the
+    directive does nothing, silently.
+
+  * The README package tables say what is current again, with a line saying
+    they will not stay that way: the archive's own Packages file and the
+    releases page are the authority.
+
+ -- Marc-Andre Butz <butz@labor-heidrich.de>  Mon, 21 Sep 2026 09:16:30 +0200
+
 ltsp (6.3.18-1) unstable; urgency=medium
 
   * The client no longer spends ten seconds of every shutdown on a name

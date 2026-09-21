@@ -703,6 +703,69 @@ read from the theme, still attached to the widgets, and never painted \(em a
 login screen carrying text and nothing else, next to a theme directory full of
 icons that look perfectly fine in an image viewer. Nothing in lts.conf could
 have brought them back; it needed the setting, which 3.4.3\-1 sets.
+.SH "LOCK KEYS OVER RDP"
+.PP
+Caps Lock and Num Lock can end up showing one thing on the keyboard and
+doing another in the session. It is not a fault in either program; it
+follows from there being two keyboards' worth of state where an X11
+forwarded session had one.
+.PP
+With \fBssh \-X\fR there is a single X server, the client's: one lock state,
+one LED, no way for them to disagree. RDP transmits \fIscancodes\fR, not
+characters, so the session decides for itself what a scancode becomes \(em
+and it keeps its own Caps and Num state to decide with. The client keeps
+another, which is what the LED shows.
+.PP
+The protocol has a mechanism for this and xrdp implements it. When the RDP
+window takes focus the client sends a Synchronize event carrying its three
+lock states, and xrdp adopts them \(em \fIxrdp_wm_key_sync()\fR, commented
+in the source as "happens when client gets focus and sends key modifier
+info", resets all three and applies what arrived. Afterwards xrdp tracks
+them by watching for scancodes 58, 69 and 70 and flipping its own flags.
+.PP
+Two consequences follow, and between them they account for the whole
+symptom:
+.IP "" 4
+The synchronisation happens at \fIfocus\fR. ldm starts xfreerdp full
+screen, so focus is taken once and never lost \(em there is no second
+synchronisation for the rest of the session. Whatever is wrong at the start
+stays wrong.
+.IP "" 4
+There is no way back. The protocol also has a Set Keyboard Indicators PDU,
+with which a server tells a client to update its LEDs; xrdp does not send
+it. Searched for in the current release, 0.10.6.1, the word "indicator"
+appears in its sources only in ISO length fields. The session can therefore
+never correct the keyboard in front of the user. That is a property of the
+pair, not a setting either of them offers, and upgrading xrdp does not
+change it: everything its release notes have to say about keyboards between
+0.10.1 and 0.10.6.1 concerns layouts \(em Brazilian, Slovenian, Latvian,
+Hungarian, Czech, Spanish AltGr, US Dvorak.
+.PP
+What follows from that is that the \fIstarting\fR state is what can be
+fixed, and \fBX_NUMLOCK\fR is how. It sets the state on the client before
+the session begins, and the focus synchronisation then carries it across;
+both sides start in step, and with focus never changing they stay that way.
+This is the intended mechanism rather than a workaround, and it needs
+\fBnumlockx\fR in the image \(em well under 50 kB.
+.PP
+If they still drift, the second lever removes the remote state from the
+question altogether:
+.PP
+.RS 4
+\fBRDP_OPTIONS="/kbd:unicode:on"\fR
+.RE
+.PP
+With Unicode input the client sends the \fIcharacter\fR its own keyboard
+produced instead of a scancode, so what xrdp believes about Caps Lock stops
+deciding what arrives. xrdp accepts those events \(em \fBRDP_INPUT_UNICODE\fR
+is handled, and reaches \fIxrdp_wm_key_unicode()\fR. Two limits: it applies
+to character keys only, shortcuts and function keys still travelling as
+scancodes, and it needs FreeRDP 3. FreeRDP 2 has no such option at all, and
+Debian 13 no longer carries it.
+.PP
+Neither \fIxrdp.ini\fR nor \fIsesman.ini\fR offers anything here. What they
+have \(em \fBoverride_keyboard_type\fR, \fBoverride_keylayout\fR \(em sets
+the layout, not the state.
 .SH "GRAPHICS"
 .PP
 .IP "\fBX_COLOR_DEPTH\fP, \fBX_SMART_COLOR_DEPTH\fP" 4
@@ -757,6 +820,9 @@ Its report and untouch delays.
 .IP "\fBX_NUMLOCK\fP" 4
 Whether Num Lock is on when the session starts. Needs \fBnumlockx\fR in the
 image; without it the directive does nothing, silently.
+.IP "" 4
+On an RDP session it is worth more than the convenience suggests \(em see
+LOCK KEYS OVER RDP below.
 .IP "\fBX_BLANKING\fP" 4
 Minutes before the screen blanks, or \fB0\fR to disable blanking and DPMS
 together.

@@ -59,11 +59,15 @@ the keyring file is missing. Do not answer that with `trusted=yes`.
 
 | Suite | Package | Version |
 |---|---|---|
-| `trixie` | `ltsp-server` | 6.3.15-1 |
-| `trixie` | `ltsp-client-core` | 6.3.15-1 |
-| `trixie` | `ldm` | 3.4.4-1 |
+| `trixie` | `ltsp-server` | 6.3.19-1 |
+| `trixie` | `ltsp-client-core` | 6.3.19-1 |
+| `trixie` | `ldm` | 3.4.5-1 |
 | `trixie` | `ltsp6-session-tuning` | 1.0.0 |
 | `bookworm` | `ltsp-client`, `ltsp-client-core` | 5.18.12-3 |
+
+Those numbers move. What the archive actually holds at any moment is its
+own `Packages` file, and the releases page lists every version with its
+notes — if this table and the archive disagree, the archive is right.
 
 `ltsp-server` is `Architecture: all` and runs on Debian 12 as well; `ldm` and
 `ltsp-client-core` are amd64, built against the glibc of Debian 13, and belong
@@ -96,7 +100,7 @@ ltsp-build-client \
     --extra-mirror "https://mabutz.github.io/ltsp6 trixie main" \
     --early-packages ca-certificates,initramfs-tools \
     --late-packages console-setup,freerdp3-x11,kbd,ldm,linux-image-amd64,\
-locales,ltsp-client-core,nbd-client,tftp-hpa,x11-xserver-utils,xinit,\
+locales,ltsp-client-core,nbd-client,numlockx,tftp-hpa,x11-xserver-utils,xinit,\
 xserver-xorg-core,xserver-xorg-video-all \
     --purge-chroot --no-squashfs-image
 ```
