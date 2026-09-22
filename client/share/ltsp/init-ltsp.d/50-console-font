@@ -25,8 +25,26 @@
 # Failure here is never worth stopping a boot for: a client with the wrong font
 # is a client that works and looks odd.
 
+# Load it the way console-setup's own cached script does: once per virtual
+# terminal, with that terminal on stdin and stdout. setfont with no
+# redirection acts on the first console it can open - stdin, then /dev/tty,
+# then /dev/tty0 - and in init-ltsp stdin is whatever init handed us, which
+# need not be the terminal the boot messages are about to appear on. The
+# fallback below covers a client with no /dev/vcs* at all.
 if [ -n "$CONSOLE_FONT" ] && [ -x /usr/bin/setfont ]; then
-    setfont "$CONSOLE_FONT" 2>/dev/null || true
+    ltsp_loaded=""
+    for ltsp_vcs in /dev/vcs[0-9]*; do
+        test -e "$ltsp_vcs" || continue
+        ltsp_tty="/dev/tty${ltsp_vcs#/dev/vcs}"
+        test -c "$ltsp_tty" || continue
+        if setfont "$CONSOLE_FONT" <"$ltsp_tty" >"$ltsp_tty" 2>/dev/null; then
+            ltsp_loaded="1"
+        fi
+    done
+    if [ -z "$ltsp_loaded" ]; then
+        setfont "$CONSOLE_FONT" 2>/dev/null || true
+    fi
+    unset ltsp_loaded ltsp_tty ltsp_vcs
 elif [ -x /etc/console-setup/cached_setup_font.sh ]; then
     /etc/console-setup/cached_setup_font.sh 2>/dev/null || true
 else

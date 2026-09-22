@@ -190,6 +190,24 @@ issue - see below):
     used by ltsp5-uefi, is specifically for booting a 32-bit OS on a
     UEFI client, which iPXE itself can't do).
 
+Harmless: "could not open autoexec.ipxe"
+-------------------------------------------------------
+iPXE prints this once, early, on every network boot, and carries on:
+
+    strings /usr/lib/ipxe/ipxe.efi | grep autoexec
+    file:autoexec.ipxe
+    file:/autoexec.ipxe
+
+It is iPXE's own autoexec feature, compiled into Debian's binaries since
+1.21.1: at startup it looks for a script called autoexec.ipxe on the
+filesystem it was loaded from. A network boot has no such filesystem, so
+the attempt fails and iPXE goes on to do what DHCP told it to.
+
+Putting a file in the TFTP root does not silence it - the URI scheme is
+file:, not tftp:, so it is not looking there. The only way to remove the
+message is to build iPXE without the feature, which is not worth carrying
+a private binary for. Expect it, and do not go looking for a missing file.
+
 In both cases, dnsmasq's logs showed the complete expected sequence
 (DHCPDISCOVER/OFFER/REQUEST/ACK, each boot file served over TFTP in
 order, then a second DHCP round from inside the kernel's own ip=dhcp

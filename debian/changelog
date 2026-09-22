@@ -1,3 +1,20 @@
+ltsp (6.3.20-1) unstable; urgency=medium
+
+  * init-ltsp.d/50-console-font loads CONSOLE_FONT once per virtual
+    terminal, the way console-setup's own cached script does, instead of
+    once on whatever console setfont happens to open. In init-ltsp that
+    is whatever init handed us for stdin, which need not be the terminal
+    the boot messages appear on - so the font could be loaded somewhere
+    nobody was looking. The fallback path already did it per terminal;
+    only the CONSOLE_FONT branch did not.
+  * doc/PXE-network-boot-test records iPXE's "could not open
+    autoexec.ipxe" message as harmless. It is iPXE's own autoexec
+    feature looking on the filesystem it booted from, which a network
+    boot does not have; a file in the TFTP root does not silence it,
+    because the URI scheme is file: and not tftp:.
+
+ -- Marc-Andre Butz <butz@labor-heidrich.de>  Tue, 22 Sep 2026 10:43:10 +0200
+
 ltsp (6.3.19-1) unstable; urgency=medium
 
   * lts.conf(5): a new section, LOCK KEYS OVER RDP, for the Caps Lock and
