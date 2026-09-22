@@ -50,24 +50,6 @@ Description: LTSP6 thin client core scripts and helpers
  chroot image built by ltsp-build-client, not on a regular desktop or
  server system.
 
-Package: ltsp-client-core-dbgsym
-Source: ltsp
-Version: 6.3.20-1
-Auto-Built-Package: debug-symbols
-Architecture: amd64
-Maintainer: Marc-André Beckmann-Butz <ma@butz.online>
-Installed-Size: 111
-Depends: ltsp-client-core (= 6.3.20-1)
-Priority: optional
-Section: debug
-Filename: pool/main/l/ltsp/ltsp-client-core-dbgsym_6.3.20-1_amd64.deb
-Size: 67092
-SHA256: a5ea63b5b370666a456f05b02d4c63f294f5d38855d71de19b2afca987d40700
-SHA1: 3cb55ffccce406a9ba6068049581802e26fb6a06
-MD5sum: 0e22afb6b748c0e7cd6416c5d76e9ba5
-Description: debug symbols for ltsp-client-core
-Build-Ids: 707bd2652a1f925eb0551a6046e8ab428d61d950 eb89f19842789b037cc32fc285b56c160afeeeea
-
 Package: ltsp-server
 Source: ltsp
 Version: 6.3.20-1
