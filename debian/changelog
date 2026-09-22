@@ -13,7 +13,7 @@ ltsp (6.3.20-1) unstable; urgency=medium
     boot does not have; a file in the TFTP root does not silence it,
     because the URI scheme is file: and not tftp:.
 
- -- Marc-Andre Butz <butz@labor-heidrich.de>  Tue, 22 Sep 2026 10:43:10 +0200
+ -- Marc-Andre Butz <ma@butz.online>  Tue, 22 Sep 2026 10:43:10 +0200
 
 ltsp (6.3.19-1) unstable; urgency=medium
 
@@ -55,7 +55,7 @@ ltsp (6.3.19-1) unstable; urgency=medium
     they will not stay that way: the archive's own Packages file and the
     releases page are the authority.
 
- -- Marc-Andre Butz <butz@labor-heidrich.de>  Mon, 21 Sep 2026 09:16:30 +0200
+ -- Marc-Andre Butz <ma@butz.online>  Mon, 21 Sep 2026 09:16:30 +0200
 
 ltsp (6.3.18-1) unstable; urgency=medium
 
@@ -99,7 +99,7 @@ ltsp (6.3.18-1) unstable; urgency=medium
     it needed ntpdate and was unnecessary where systemd already
     synchronises, which had it backwards.
 
- -- Marc-Andre Butz <butz@labor-heidrich.de>  Sun, 20 Sep 2026 14:27:02 +0200
+ -- Marc-Andre Butz <ma@butz.online>  Sun, 20 Sep 2026 14:27:02 +0200
 
 ltsp (6.3.17-1) unstable; urgency=medium
 
@@ -111,7 +111,7 @@ ltsp (6.3.17-1) unstable; urgency=medium
     photograph and cannot reach this one leaves a single word in the
     default near-black.
 
- -- Marc-Andre Butz <butz@labor-heidrich.de>  Sun, 20 Sep 2026 13:47:46 +0200
+ -- Marc-Andre Butz <ma@butz.online>  Sun, 20 Sep 2026 13:47:46 +0200
 
 ltsp (6.3.16-1) unstable; urgency=medium
 
@@ -141,7 +141,7 @@ ltsp (6.3.16-1) unstable; urgency=medium
     ltsp-build-client invocation that produces a working image. The English
     README had a German section heading.
 
- -- Marc-Andre Butz <butz@labor-heidrich.de>  Sun, 20 Sep 2026 10:52:30 +0200
+ -- Marc-Andre Butz <ma@butz.online>  Sun, 20 Sep 2026 10:52:30 +0200
 
 ltsp (6.3.15-1) unstable; urgency=medium
 
@@ -178,7 +178,7 @@ ltsp (6.3.15-1) unstable; urgency=medium
     from the build machine unless --locale says otherwise, and LANG in
     lts.conf is for choosing among what --locale put there.
 
- -- Marc-Andre Butz <butz@labor-heidrich.de>  Sun, 20 Sep 2026 09:37:28 +0200
+ -- Marc-Andre Butz <ma@butz.online>  Sun, 20 Sep 2026 09:37:28 +0200
 
 ltsp (6.3.14-1) unstable; urgency=medium
 
@@ -208,7 +208,7 @@ ltsp (6.3.14-1) unstable; urgency=medium
 
   * ltsp-build-client(8): --locale documented at all, which it was not.
 
- -- Marc-Andre Butz <butz@labor-heidrich.de>  Sun, 20 Sep 2026 08:44:26 +0200
+ -- Marc-Andre Butz <ma@butz.online>  Sun, 20 Sep 2026 08:44:26 +0200
 
 ltsp (6.3.13-1) unstable; urgency=medium
 
@@ -224,7 +224,7 @@ ltsp (6.3.13-1) unstable; urgency=medium
     lts.conf setting could have brought them back - it needed the GTK
     setting, which ldm 3.4.3-1 sets.
 
- -- Marc-Andre Butz <butz@labor-heidrich.de>  Sat, 19 Sep 2026 19:49:02 +0200
+ -- Marc-Andre Butz <ma@butz.online>  Sat, 19 Sep 2026 19:49:02 +0200
 
 ltsp (6.3.12-1) unstable; urgency=medium
 
@@ -249,7 +249,7 @@ ltsp (6.3.12-1) unstable; urgency=medium
     styled separately; before, the only selector that reached them was
     "label", which also catches the text inside every button.
 
- -- Marc-Andre Butz <butz@labor-heidrich.de>  Fri, 18 Sep 2026 15:36:44 +0200
+ -- Marc-Andre Butz <ma@butz.online>  Fri, 18 Sep 2026 15:36:44 +0200
 
 ltsp (6.3.11-1) unstable; urgency=medium
 
@@ -303,7 +303,7 @@ ltsp (6.3.11-1) unstable; urgency=medium
     from --components, so a package outside main needs its component named
     there as well.
 
- -- Marc-Andre Butz <butz@labor-heidrich.de>  Fri, 18 Sep 2026 11:47:14 +0200
+ -- Marc-Andre Butz <ma@butz.online>  Fri, 18 Sep 2026 11:47:14 +0200
 
 ltsp (6.3.10-1) unstable; urgency=medium
 
@@ -343,7 +343,7 @@ ltsp (6.3.10-1) unstable; urgency=medium
     that comes back is 300 bytes of HTML that a careless check reads as an
     empty suite).
 
- -- Marc-Andre Butz <butz@labor-heidrich.de>  Fri, 18 Sep 2026 11:08:42 +0200
+ -- Marc-Andre Butz <ma@butz.online>  Fri, 18 Sep 2026 11:08:42 +0200
 
 ltsp (6.3.9-1) unstable; urgency=medium
 
@@ -358,7 +358,7 @@ ltsp (6.3.9-1) unstable; urgency=medium
     true before as well - the ranking was collected and never applied - but
     the page said otherwise.
 
- -- Marc-Andre Butz <butz@labor-heidrich.de>  Thu, 17 Sep 2026 18:39:12 +0200
+ -- Marc-Andre Butz <ma@butz.online>  Thu, 17 Sep 2026 18:39:12 +0200
 
 ltsp (6.3.8-1) unstable; urgency=medium
 
@@ -386,7 +386,7 @@ ltsp (6.3.8-1) unstable; urgency=medium
     RDP_PREAUTH_HOST=server is the way to get the same result on an image
     built before this fix.
 
- -- Marc-Andre Butz <butz@labor-heidrich.de>  Thu, 17 Sep 2026 18:01:54 +0200
+ -- Marc-Andre Butz <ma@butz.online>  Thu, 17 Sep 2026 18:01:54 +0200
 
 ltsp (6.3.7-1) unstable; urgency=medium
 
@@ -413,7 +413,7 @@ ltsp (6.3.7-1) unstable; urgency=medium
     on a German client whose image locale is de_DE.UTF-8. Not specific to
     German: an English one quotes with U+2018 and U+2019 and fares no better.
 
- -- Marc-Andre Butz <butz@labor-heidrich.de>  Thu, 17 Sep 2026 17:51:03 +0200
+ -- Marc-Andre Butz <ma@butz.online>  Thu, 17 Sep 2026 17:51:03 +0200
 
 ltsp (6.3.6-1) unstable; urgency=medium
 
@@ -430,7 +430,7 @@ ltsp (6.3.6-1) unstable; urgency=medium
     the entry says what to check afterwards: that the initrd the clients
     fetch still comes from the same chroot as the image they mount.
 
- -- Marc-Andre Butz <butz@labor-heidrich.de>  Thu, 17 Sep 2026 17:38:11 +0200
+ -- Marc-Andre Butz <ma@butz.online>  Thu, 17 Sep 2026 17:38:11 +0200
 
 ltsp (6.3.5-1) unstable; urgency=medium
 
@@ -462,7 +462,7 @@ ltsp (6.3.5-1) unstable; urgency=medium
   * HOWTO: the same trap under "Traps, and how each one announces itself",
     with what it looks like in the build log.
 
- -- Marc-Andre Butz <butz@labor-heidrich.de>  Thu, 17 Sep 2026 17:27:51 +0200
+ -- Marc-Andre Butz <ma@butz.online>  Thu, 17 Sep 2026 17:27:51 +0200
 
 ltsp (6.3.4-1) unstable; urgency=medium
 
@@ -493,7 +493,7 @@ ltsp (6.3.4-1) unstable; urgency=medium
     instances of a documented series, and the settings that belong to
     ltsp-update-kernels(8).
 
- -- Marc-Andre Butz <butz@labor-heidrich.de>  Thu, 17 Sep 2026 17:08:42 +0200
+ -- Marc-Andre Butz <ma@butz.online>  Thu, 17 Sep 2026 17:08:42 +0200
 
 ltsp (6.3.3-1) unstable; urgency=medium
 
@@ -523,7 +523,7 @@ ltsp (6.3.3-1) unstable; urgency=medium
     knobs that decide what a client calls itself - and LDM_CLOCK_FORMAT.
     None of them were written down anywhere.
 
- -- Marc-Andre Butz <butz@labor-heidrich.de>  Thu, 17 Sep 2026 16:50:20 +0200
+ -- Marc-Andre Butz <ma@butz.online>  Thu, 17 Sep 2026 16:50:20 +0200
 
 ltsp (6.3.2-1) unstable; urgency=medium
 
@@ -554,7 +554,7 @@ ltsp (6.3.2-1) unstable; urgency=medium
     even waiting costs no disk access. Verified on a thin client in all
     four combinations: toram and no toram, poweroff and reboot.
 
- -- Marc-Andre Butz <butz@labor-heidrich.de>  Thu, 17 Sep 2026 14:56:04 +0200
+ -- Marc-Andre Butz <ma@butz.online>  Thu, 17 Sep 2026 14:56:04 +0200
 
 ltsp (6.3.1-1) unstable; urgency=medium
 
