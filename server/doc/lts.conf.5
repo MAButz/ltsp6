@@ -375,6 +375,69 @@ wants them.
 .IP "\fBUSE_XFS\fP, \fBXFS_SERVER\fP" 4
 Whether to fetch fonts from a font server, and which. A relic: current X
 clients carry their own fonts.
+.SH "REMOTE SUPPORT"
+.PP
+Support can watch a client's screen and use its keyboard and mouse, with the
+user's consent, through \fB/usr/share/ltsp/ltsp\-shadow\fR on the client. The
+machine doing the support runs:
+.IP "" 4
+.nf
+ssh \-i key \-L 3390:127.0.0.1:3390 root@client \\
+    /usr/share/ltsp/ltsp\-shadow
+.fi
+.IP "" 4
+and then points an RDP client at \fB127.0.0.1:3390\fR.
+.IP "" 4
+The shadow server binds to \fB127.0.0.1\fR and nothing else, so it is reachable
+only through the ssh connection that started it. There is no port on the client
+for anyone to find; the encryption and the authentication are ssh's, which means
+a key from \fBSSH_AUTHORIZED_KEY_\fP\fIn\fP and no password; access is withdrawn
+by editing this file; every connection is in the client's sshd log; and the
+server dies when the ssh session ends. Its own authentication is therefore off
+\(em it would be a second password to manage, guarding a socket only localhost
+can reach.
+.IP "" 4
+What it does not guard against is another process on the client itself. On a
+thin client that is root and the session user, and the session user is the
+person whose screen it is.
+.IP "" 4
+Needs \fByad\fR and \fBfreerdp3\-shadow\-x11\fR in the image.
+.IP "\fBREMOTE_SUPPORT\fP" 4
+Set to \fBFalse\fR to refuse outright. On by default where the shadow server is
+installed \(em installing it is the decision, and nothing happens without the
+user agreeing.
+.IP "\fBREMOTE_SUPPORT_CONSENT\fP" 4
+Set to \fBFalse\fR to skip the question, for a machine with nobody in front of
+it. It does not skip the marker: something is on screen for as long as anyone is
+watching, whatever this is set to.
+.IP "" 4
+Watching someone's screen at work is not a technical question, and in most
+places it is not the administrator's to answer alone. A support tool that can
+watch silently is the wrong tool, whatever its transport looks like, which is
+why the marker cannot be turned off here.
+.IP "\fBREMOTE_SUPPORT_TIMEOUT\fP" 4
+Seconds to wait for an answer before giving up. 60 by default. Running out is a
+refusal: an unattended screen is not consent.
+.IP "\fBREMOTE_SUPPORT_PORT\fP" 4
+The port the shadow server listens on, on \fB127.0.0.1\fR only. 3390 by default.
+.IP "\fBREMOTE_SUPPORT_MONITOR\fP" 4
+Which monitor to share, counting from 0. Empty, the default, shares all of them
+\(em on a two\-screen client that is one wide picture, which is a lot to send for
+a support session. \fBfreerdp\-shadow\-cli3 /monitors:\fR lists what a client has.
+.IP "\fBREMOTE_SUPPORT_ALLOW\fP, \fBREMOTE_SUPPORT_REFUSE\fP" 4
+The wording of the two buttons. \fB"Allow"\fR and \fB"Refuse"\fR by
+default, which is the wrong language wherever the question itself is.
+.IP "\fBREMOTE_SUPPORT_PROMPT\fP, \fBREMOTE_SUPPORT_NOTICE\fP" 4
+The wording of the question and of the marker, in the language of the people
+using the client. \fB%s\fR is the address support is connecting from \(em both
+defaults use it, and a tool that says "someone" is one nobody accepts:
+.IP "" 4
+.nf
+REMOTE_SUPPORT_PROMPT="Der Support von %s moechte Ihren Bildschirm
+sehen und Tastatur und Maus benutzen.\\n\\nEs wird nichts uebertragen,
+bevor Sie zustimmen."
+REMOTE_SUPPORT_NOTICE="Fernwartung sieht diesen Bildschirm (%s)"
+.fi
 .SH "SSH HOST KEYS"
 .PP
 .IP "\fBSSH_HOST_KEYS\fP" 4

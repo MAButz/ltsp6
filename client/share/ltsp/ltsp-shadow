@@ -1,0 +1,196 @@
+#!/bin/sh
+# Let support watch a client's screen, with the user's consent.
+#
+# Run this on the client, over ssh, from the machine doing the support:
+#
+#     ssh -i key -L 3390:127.0.0.1:3390 root@client /usr/share/ltsp/ltsp-shadow
+#
+# then point an RDP client at 127.0.0.1:3390. What appears is the screen the
+# user is looking at, with keyboard and mouse.
+#
+# Why it is built this way
+# ------------------------
+# The shadow server binds to 127.0.0.1 and nothing else. It is reachable only
+# through the ssh connection that started it, so:
+#
+#   - there is no port on the client for anyone to find,
+#   - the encryption and the authentication are ssh's, which means a key from
+#     SSH_AUTHORIZED_KEY_n in lts.conf and no password,
+#   - access is withdrawn by editing lts.conf, without rebuilding an image,
+#   - every connection is in the client's sshd log,
+#   - and the server dies when the ssh session ends. Not by signal: sshd does
+#     not reliably deliver one to a command started without a terminal, and
+#     the first version of this script sat waiting while the shadow server
+#     kept running behind it. The wait loop at the end watches for this
+#     script being handed to init instead, which is what actually happens.
+#
+# The shadow server's own authentication is therefore switched off: it would
+# add a second password to manage and would protect a socket that only
+# localhost can reach. What it does not protect against is another process on
+# the client itself. On a thin client that is root and the session user, and
+# the session user is the person whose screen it is.
+#
+# Consent
+# -------
+# Watching someone's screen at work is not a technical question. The user is
+# asked first, in their own session, and a marker stays on screen for as long
+# as anyone is watching. Neither is decoration: a support tool that can watch
+# silently is the wrong tool, whatever its transport looks like.
+#
+# REMOTE_SUPPORT_CONSENT=False turns the question off, for a machine with
+# nobody in front of it. It does not turn off the marker.
+#
+# Settings, all from lts.conf:
+#
+#     REMOTE_SUPPORT=False            refuse to run at all
+#     REMOTE_SUPPORT_CONSENT=False    do not ask, only announce
+#     REMOTE_SUPPORT_TIMEOUT=60       seconds to wait for an answer
+#     REMOTE_SUPPORT_PORT=3390        localhost port for the shadow server
+#     REMOTE_SUPPORT_MONITOR=0        which monitor, empty for all of them
+#     REMOTE_SUPPORT_PROMPT="..."     the question, %s is who is asking
+#     REMOTE_SUPPORT_NOTICE="..."     the marker, %s is who is watching
+#     REMOTE_SUPPORT_ALLOW="..."      wording of the button that agrees
+#     REMOTE_SUPPORT_REFUSE="..."     wording of the button that does not
+#     REMOTE_SUPPORT_NOTICE_GEOMETRY="330x26+0+0"  size and place of the marker
+
+set -e
+
+# Not /etc/lts.conf: that file has sections, and sourcing it both fails on
+# every [section] line and then applies values from sections this client is
+# not in. init-ltsp leaves the parsed result behind, which is what this
+# client actually booted with; getltscfg recomputes the same thing if it is
+# missing.
+if [ -r /run/ltsp/ltsp_config_env ]; then
+    . /run/ltsp/ltsp_config_env
+elif command -v getltscfg >/dev/null 2>&1; then
+    eval "$(getltscfg -a 2>/dev/null)" || true
+fi
+
+SHADOW_BIN=$(command -v freerdp-shadow-cli3 || command -v freerdp-shadow-cli || true)
+YAD_BIN=$(command -v yad || true)
+
+die() {
+    echo "ltsp-shadow: $1" >&2
+    exit 1
+}
+
+case "$REMOTE_SUPPORT" in
+    [Ff]alse|[Nn]o|0)
+        die "refused: REMOTE_SUPPORT is off in lts.conf"
+        ;;
+esac
+
+test -n "$SHADOW_BIN" || die "freerdp-shadow-cli3 is not installed on this client"
+
+# Who is asking. SSH_CLIENT is set by sshd for the connection this runs over;
+# it is the honest answer to "who wants to look", and it is what the user is
+# shown. A support tool that says "someone" is a support tool nobody accepts.
+who_asks=${LTSP_SHADOW_WHO:-${SSH_CLIENT%% *}}
+test -n "$who_asks" || who_asks="local"
+
+# The display the user is actually looking at: the X server on the active
+# virtual terminal, not simply :0, which on an LTSP client does not exist.
+vt=$(fgconsole 2>/dev/null || echo 7)
+xline=$(ps -eo args= | grep "^/usr/lib/xorg/Xorg \|^Xorg " | grep " vt$vt " | head -1)
+test -n "$xline" || xline=$(ps -eo args= | grep "^/usr/lib/xorg/Xorg \|^Xorg " | head -1)
+test -n "$xline" || die "no X server running on this client"
+
+display=$(echo "$xline" | awk '{for (i = 1; i <= NF; i++) if ($i ~ /^:[0-9]+$/) {print $i; exit}}')
+xauth=$(echo "$xline" | awk '{for (i = 1; i < NF; i++) if ($i == "-auth") {print $(i + 1); exit}}')
+test -n "$display" || die "could not work out which X display to shadow"
+
+export DISPLAY="$display"
+test -n "$xauth" && export XAUTHORITY="$xauth"
+
+port=${REMOTE_SUPPORT_PORT:-3390}
+timeout=${REMOTE_SUPPORT_TIMEOUT:-60}
+
+prompt=${REMOTE_SUPPORT_PROMPT:-"Support at %s would like to see this screen and use the keyboard and mouse.\n\nNothing is shown or shared until you allow it."}
+notice=${REMOTE_SUPPORT_NOTICE:-"Remote support is watching this screen (%s)"}
+allow=${REMOTE_SUPPORT_ALLOW:-"Allow"}
+refuse=${REMOTE_SUPPORT_REFUSE:-"Refuse"}
+geometry=${REMOTE_SUPPORT_NOTICE_GEOMETRY:-"330x26+0+0"}
+
+# printf, not echo, so a site can put newlines in its own wording.
+prompt_text=$(printf "$prompt" "$who_asks")
+notice_text=$(printf "$notice" "$who_asks")
+
+ask_consent() {
+    case "$REMOTE_SUPPORT_CONSENT" in
+        [Ff]alse|[Nn]o|0)
+            echo "ltsp-shadow: consent not asked for, REMOTE_SUPPORT_CONSENT is off" >&2
+            return 0
+            ;;
+    esac
+
+    test -n "$YAD_BIN" || die "yad is not installed, so the user cannot be asked"
+
+    "$YAD_BIN" --title="Remote support" --window-icon=dialog-question \
+        --image=dialog-question --text="$prompt_text" \
+        --button="$refuse:1" --button="$allow:0" \
+        --timeout="$timeout" --timeout-indicator=bottom \
+        --center --on-top --skip-taskbar >/dev/null 2>&1
+}
+
+shadow_pid=""
+notice_pid=""
+
+# Who started us, so we can tell when they are gone. See the wait loop at the
+# end for why that is not something a signal can be relied on for.
+start_ppid=$(ps -o ppid= -p $$ 2>/dev/null | tr -d ' ')
+
+cleanup() {
+    test -n "$notice_pid" && kill "$notice_pid" 2>/dev/null || true
+    test -n "$shadow_pid" && kill "$shadow_pid" 2>/dev/null || true
+    wait 2>/dev/null || true
+}
+trap cleanup EXIT HUP INT TERM
+
+if ! ask_consent; then
+    echo "ltsp-shadow: the user did not allow it" >&2
+    exit 2
+fi
+
+# The marker. Undecorated, on top, out of the way at the top of the screen,
+# and it stays until this script exits.
+#
+# Small on purpose: it has to be impossible to miss and easy to ignore, and it
+# sits on top of the work the person is trying to get help with. The text is
+# Pango markup, the same as the greeter's prompts, so a site can set its own
+# size or colour in REMOTE_SUPPORT_NOTICE.
+if [ -n "$YAD_BIN" ]; then
+    "$YAD_BIN" --title="Remote support" \
+        --text="<span size=\"small\">$notice_text</span>" \
+        --text-align=center --no-buttons --undecorated --on-top --sticky \
+        --skip-taskbar --geometry="$geometry" --no-escape \
+        >/dev/null 2>&1 &
+    notice_pid=$!
+fi
+
+set -- "$SHADOW_BIN" "/bind-address:127.0.0.1" "/port:$port" "/sec:rdp" "-auth"
+if [ -n "$REMOTE_SUPPORT_MONITOR" ]; then
+    set -- "$@" "/monitors:$REMOTE_SUPPORT_MONITOR"
+fi
+
+echo "ltsp-shadow: $display, port $port on 127.0.0.1, for $who_asks" >&2
+"$@" &
+shadow_pid=$!
+
+# Not plain wait. When the ssh connection drops, sshd does not necessarily
+# signal a command it started without a terminal: this script is simply handed
+# to init and carries on waiting, and the shadow server keeps running with a
+# marker on a screen nobody is watching any more. Measured, not assumed - the
+# leftover process showed PPID 1 while the port was still open.
+#
+# Being reparented is the reliable sign. The starting parent is remembered
+# rather than compared against 1 outright, because a script started from a
+# local shell that has already exited would otherwise stop immediately.
+while kill -0 "$shadow_pid" 2>/dev/null; do
+    now_ppid=$(ps -o ppid= -p $$ 2>/dev/null | tr -d ' ')
+    if [ -n "$start_ppid" ] && [ "$now_ppid" = "1" ] &&
+       [ "$now_ppid" != "$start_ppid" ]; then
+        echo "ltsp-shadow: the session that started this has gone, stopping" >&2
+        break
+    fi
+    sleep 2
+done

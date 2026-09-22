@@ -1,3 +1,25 @@
+ltsp (6.3.22-1) unstable; urgency=medium
+
+  * ltsp-shadow lets support watch a client's screen and use its
+    keyboard and mouse, with the user's consent. It runs over the ssh
+    access added in 6.3.21-1: the shadow server binds to 127.0.0.1 and
+    nothing else, so it is reachable only through the ssh connection
+    that started it, the authentication is a key from lts.conf rather
+    than a second password, access is withdrawn by editing one file, and
+    the server dies with the ssh session.
+  * The user is asked first, in their own session, and a marker stays on
+    screen for as long as anyone is watching. REMOTE_SUPPORT_CONSENT
+    turns off the question for an unattended machine; nothing turns off
+    the marker. Watching someone's screen at work is not a technical
+    question, and a tool that can watch silently is the wrong tool.
+  * REMOTE_SUPPORT_MONITOR picks one screen of a multi-monitor client,
+    so a support session need not carry 5120x1440.
+  * Needs yad and freerdp3-shadow-x11 in the image: six packages, since
+    GTK3 is already there for the greeter. zenity would have brought
+    thirty-nine, GTK4 among them.
+
+ -- Marc-Andre Butz <ma@butz.online>  Tue, 22 Sep 2026 15:03:09 +0200
+
 ltsp (6.3.21-1) unstable; urgency=medium
 
   * Two new init-ltsp.d hooks make ssh on a client something a site can
