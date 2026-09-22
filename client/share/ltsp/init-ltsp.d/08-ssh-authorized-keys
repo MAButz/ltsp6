@@ -1,0 +1,81 @@
+# Authorise ssh keys for root on the client, from lts.conf.
+#
+# Why this exists. A client that carries openssh-server still cannot be logged
+# into: sshd_config is at Debian's default of PermitRootLogin prohibit-password,
+# and a thin client image has no other account. Prohibit-password does allow a
+# key, but the image has nowhere to put one that a site can change - short of
+# rebuilding it.
+#
+# This is the counterpart of 06-ssh-known-hosts. That one tells the client which
+# servers to trust; this one says who may log in to the client. Both live in
+# lts.conf, so a key can be added or withdrawn by editing one file on the boot
+# server, and lts.conf has per-client sections, so a technician's key can be
+# valid on one room and not on another.
+#
+#     SSH_AUTHORIZED_KEY_0="ssh-ed25519 AAAAC3... admin@server"
+#     SSH_AUTHORIZED_KEY_1="ssh-ed25519 AAAAC3... someone-else"
+#
+# Numbered from 0 and stopping at the first gap, the same way the known-hosts
+# entries are read, so a mistyped index shows up as a key that does not work
+# rather than silently skipping the ones after it.
+#
+# What it is worth, honestly. lts.conf arrives over TFTP, unauthenticated, so
+# whoever can interfere with that transfer can add their own key here. That is
+# the same exposure the client already runs: the kernel, the initrd and the
+# whole root filesystem come the same way, and anyone who can alter those owns
+# the client without needing an ssh key at all. This adds no weakness that the
+# boot chain does not already have - but it does mean the boot network has to be
+# treated as trusted, and it stops being true the moment the image is served
+# over something authenticated and lts.conf is not.
+#
+# Root login stays key-only: nothing here touches PermitRootLogin, so a password
+# is still refused.
+
+ltsp_add_authorized_key() {
+    # $1: one authorized_keys line
+    local entry keytype keydata
+
+    entry=$1
+    [ -n "$entry" ] || return 0
+
+    keytype=$(echo "$entry" | awk '{print $1}')
+    keydata=$(echo "$entry" | awk '{print $2}')
+    if [ -z "$keytype" ] || [ -z "$keydata" ]; then
+        echo "ltsp: authorized_keys: ignoring malformed entry" >&2
+        return 0
+    fi
+    case "$keytype" in
+        ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp256|ecdsa-sha2-nistp384|\
+        ecdsa-sha2-nistp521|sk-ssh-ed25519@openssh.com|\
+        sk-ecdsa-sha2-nistp256@openssh.com) ;;
+        *)
+            echo "ltsp: authorized_keys: ignoring unknown key type '$keytype'" >&2
+            return 0
+            ;;
+    esac
+
+    if [ -f /root/.ssh/authorized_keys ] &&
+       grep -qsF "$keytype $keydata" /root/.ssh/authorized_keys; then
+        return 0
+    fi
+
+    mkdir -p /root/.ssh
+    chmod 700 /root/.ssh
+    echo "$entry" >> /root/.ssh/authorized_keys
+    chmod 600 /root/.ssh/authorized_keys
+}
+
+if [ -n "$SSH_AUTHORIZED_KEY" ]; then
+    ltsp_add_authorized_key "$SSH_AUTHORIZED_KEY"
+fi
+
+ltsp_aki=0
+while :; do
+    eval ltsp_ak=\"\$SSH_AUTHORIZED_KEY_$ltsp_aki\"
+    [ -n "$ltsp_ak" ] || break
+    ltsp_add_authorized_key "$ltsp_ak"
+    ltsp_aki=$((ltsp_aki + 1))
+done
+unset ltsp_ak ltsp_aki
+
+unset -f ltsp_add_authorized_key 2>/dev/null || true

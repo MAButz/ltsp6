@@ -1,3 +1,24 @@
+ltsp (6.3.21-1) unstable; urgency=medium
+
+  * Two new init-ltsp.d hooks make ssh on a client something a site can
+    actually use, rather than something that is installed and then
+    deleted at boot.
+  * 07-ssh-host-keys generates fresh host keys per client. The image
+    carries one set, so every client presented the same fingerprint and
+    the private halves reached all of them over NBD. SSH_HOST_KEYS=image
+    keeps the old behaviour. Runs only when sshd is installed and
+    KEEP_SYSTEM_SERVICES names ssh.
+  * 08-ssh-authorized-keys authorises keys for root from lts.conf, as
+    SSH_AUTHORIZED_KEY_0 and so on. Without it a client with
+    openssh-server still cannot be logged into: sshd_config is at
+    Debian's PermitRootLogin prohibit-password and the image has no other
+    account. Root login stays key-only.
+  * lts.conf.5 documents both, and says plainly what they are worth: both
+    are read from a file fetched over unauthenticated TFTP, which is the
+    exposure the boot chain already has and no more.
+
+ -- Marc-Andre Butz <ma@butz.online>  Tue, 22 Sep 2026 14:12:35 +0200
+
 ltsp (6.3.20-1) unstable; urgency=medium
 
   * init-ltsp.d/50-console-font loads CONSOLE_FONT once per virtual

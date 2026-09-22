@@ -377,6 +377,61 @@ Whether to fetch fonts from a font server, and which. A relic: current X
 clients carry their own fonts.
 .SH "SSH HOST KEYS"
 .PP
+.IP "\fBSSH_HOST_KEYS\fP" 4
+Set to \fB"image"\fR to keep the ssh host keys that were baked into the image.
+The default is to generate a fresh set when the client boots.
+.IP "" 4
+Why the default is what it is. A host key is generated once, when
+\fBopenssh\-server\fR is installed into the image, so every client booting that
+image presents the same fingerprint. \fIknown_hosts\fR then cannot tell two
+clients apart, and the private halves travel to every client over NBD in a file
+any of them can read \(em a key that leaks from one client is the key for the
+whole fleet, and rotating it means rebuilding and redeploying the image.
+.IP "" 4
+Fresh keys cost a fraction of a second at boot and are thrown away with the
+session. The price is that a client's fingerprint changes on every boot, so
+whatever connects to one has to be told not to remember it:
+.IP "" 4
+.nf
+ssh \-o StrictHostKeyChecking=no \-o UserKnownHostsFile=/dev/null root@client
+.fi
+.IP "" 4
+That is not a step down. Pinning a fingerprint that every client shares was
+never worth anything, and a client that reloads its whole root filesystem over
+unauthenticated TFTP and NBD is trusted on the strength of that boot chain, not
+on the strength of a host key.
+.IP "" 4
+Nothing happens unless \fBsshd\fR is installed \fIand\fR
+\fBKEEP_SYSTEM_SERVICES\fR names \fB"ssh"\fR, so an image without a server
+pays nothing for this.
+.IP "\fBSSH_AUTHORIZED_KEY\fP, \fBSSH_AUTHORIZED_KEY_\fP\fIn\fP" 4
+Public keys that may log in to the client as root. Each value is one complete
+\fIauthorized_keys\fR line, and the numbered form takes as many as needed:
+.IP "" 4
+.nf
+SSH_AUTHORIZED_KEY_0="ssh\-ed25519 AAAAC3Nza... admin@server"
+.fi
+.IP "" 4
+Without this a client carrying \fBopenssh\-server\fR still cannot be logged
+into: \fIsshd_config\fR is at Debian's default of
+\fBPermitRootLogin prohibit\-password\fR and a thin client image has no other
+account. Prohibit\-password does allow a key; this is where a site puts one
+without rebuilding the image. Root login stays key\-only \(em nothing here
+touches \fBPermitRootLogin\fR, so a password is still refused.
+.IP "" 4
+This is the counterpart of \fBSSH_KNOWN_HOSTS\fR below: that one says which
+servers the client trusts, this one says who may log in to the client. Both are
+read from \fIlts.conf\fR, which has per\-client sections, so a technician's key
+can be valid in one room and not in another.
+.IP "" 4
+What it is worth, honestly. \fIlts.conf\fR arrives over TFTP, unauthenticated,
+so whoever can interfere with that transfer can add a key of their own here.
+That is the exposure the client already runs \(em kernel, initrd and root
+filesystem come the same way, and anyone who can alter those owns the client
+without needing an ssh key at all. It adds no weakness the boot chain does not
+already have, but it does mean the boot network has to be treated as trusted,
+and that stops being true the moment the image is served over something
+authenticated and \fIlts.conf\fR is not.
 .IP "\fBSSH_KNOWN_HOSTS\fP, \fBSSH_KNOWN_HOSTS_\fP\fIn\fP" 4
 Host keys to add to \fI/etc/ssh/ssh_known_hosts\fR when the client boots.
 Each value is one complete known_hosts line \(em host, key type, key \(em and
@@ -869,8 +924,14 @@ Defaults to 400.
 .PP
 .IP "\fBKEEP_SYSTEM_SERVICES\fP" 4
 Services the thin\-client cleanup would otherwise remove from the running
-client, space separated. \fB"ssh"\fR is useful while building an image and has
-no place in a production one.
+client, space separated.
+.IP "" 4
+\fB"ssh"\fR is the common one. A client keeps no state and is reloaded from the
+network every boot, so a shell on one is a diagnostic tool rather than a way in
+\(em but it is still a shell on every machine in the room, reachable from
+anywhere the boot network reaches. Pair it with \fBSSH_AUTHORIZED_KEY_\fP\fIn\fP
+so that login needs a key, and with the default \fBSSH_HOST_KEYS\fR so that the
+clients do not all answer with the same fingerprint.
 .IP "" 4
 Note that \fBsystemd\-logind\fR is no longer removed at all, whatever this is
 set to. Xorg 21 needs a logind session to obtain its DRM and input file
