@@ -1,0 +1,94 @@
+# Write /etc/krb5.conf on the client, from lts.conf.
+#
+# Why this exists. RDP_PREAUTH=True asks a KDC whether the credentials are
+# right before starting the session, and it finds the KDC the way MIT Kerberos
+# always does: the realm from krb5.conf, the servers from DNS SRV records. A
+# thin client image has no krb5.conf at all unless something put one there, so
+# the check finds no realm, skips itself and says so in the log - which looks
+# exactly like it is working.
+#
+# The DNS half is worse. In an Active Directory the SRV records live on the
+# domain controllers, so a client whose only nameserver is the DC that just
+# died cannot look up the DC that is still alive. Naming the controllers here
+# takes DNS out of that path:
+#
+#     KRB5_REALM="EXAMPLE.INTERNAL"
+#     KRB5_KDC_0="dc1.example.internal"
+#     KRB5_KDC_1="dc2.example.internal"
+#
+# Numbered from 0 and stopping at the first gap, as the ssh keys are, so a
+# mistyped index shows up as a controller that is not used rather than
+# silently dropping the ones after it. Order matters: an unreachable one is
+# tried first and costs real time before the next is asked - measured at about
+# 18 seconds per silent server, which is spent in front of the greeter with
+# the user watching. Put the nearest controller first.
+#
+# With controllers named, the SRV lookup is switched off, because it would
+# add that cost again for a question already answered. KRB5_DNS_LOOKUP=True
+# keeps it on as a fallback for realms that are not listed here.
+#
+# Without KRB5_REALM nothing happens at all, and whatever the image carries
+# is left alone. With it, this file is written on every boot: the client's
+# root filesystem is reloaded from the network anyway, so lts.conf is the only
+# place where the answer can be changed without rebuilding an image.
+
+if [ -n "$KRB5_REALM" ]; then
+    ltsp_krb5_lower=$(echo "$KRB5_REALM" | tr 'A-Z' 'a-z')
+    ltsp_krb5_kdcs=""
+
+    if [ -n "$KRB5_KDC" ]; then
+        ltsp_krb5_kdcs="        kdc = $KRB5_KDC
+"
+    fi
+
+    ltsp_krb5_i=0
+    while :; do
+        eval ltsp_krb5_one=\"\$KRB5_KDC_$ltsp_krb5_i\"
+        [ -n "$ltsp_krb5_one" ] || break
+        ltsp_krb5_kdcs="$ltsp_krb5_kdcs        kdc = $ltsp_krb5_one
+"
+        ltsp_krb5_i=$((ltsp_krb5_i + 1))
+    done
+
+    # An explicit list answers the question without DNS, so the lookup is off
+    # unless a site asks for both.
+    if [ -n "$ltsp_krb5_kdcs" ]; then
+        ltsp_krb5_dns="false"
+    else
+        ltsp_krb5_dns="true"
+    fi
+    case "$KRB5_DNS_LOOKUP" in
+        [Tt]rue|[Yy]es|1) ltsp_krb5_dns="true" ;;
+        [Ff]alse|[Nn]o|0) ltsp_krb5_dns="false" ;;
+    esac
+
+    if [ -n "$KRB5_ADMIN_SERVER" ]; then
+        ltsp_krb5_kdcs="$ltsp_krb5_kdcs        admin_server = $KRB5_ADMIN_SERVER
+"
+    fi
+
+    {
+        echo "# Written by ltsp at boot from lts.conf. Edit it there."
+        echo "[libdefaults]"
+        echo "    default_realm = $KRB5_REALM"
+        echo "    dns_lookup_realm = false"
+        echo "    dns_lookup_kdc = $ltsp_krb5_dns"
+        # The client has no machine account and no reverse DNS worth trusting;
+        # rdns on turns a working name into a lookup that can fail.
+        echo "    rdns = false"
+        echo "    kdc_timesync = 1"
+        echo ""
+        echo "[realms]"
+        echo "    $KRB5_REALM = {"
+        printf '%s' "$ltsp_krb5_kdcs"
+        echo "    }"
+        echo ""
+        echo "[domain_realm]"
+        echo "    .$ltsp_krb5_lower = $KRB5_REALM"
+        echo "    $ltsp_krb5_lower = $KRB5_REALM"
+    } > /etc/krb5.conf 2>/dev/null ||
+        echo "ltsp: could not write /etc/krb5.conf" >&2
+
+    unset ltsp_krb5_lower ltsp_krb5_kdcs ltsp_krb5_i ltsp_krb5_one \
+          ltsp_krb5_dns
+fi

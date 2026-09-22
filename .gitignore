@@ -2,3 +2,7 @@
 # working copy. Local to whoever is working here, of no use to anyone else,
 # and it was committed by accident once already.
 resume.txt
+
+# Bytecode from running the python helpers straight out of the tree.
+__pycache__/
+*.pyc

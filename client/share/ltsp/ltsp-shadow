@@ -47,10 +47,14 @@
 #     REMOTE_SUPPORT_TIMEOUT=60       seconds to wait for an answer
 #     REMOTE_SUPPORT_PORT=3390        localhost port for the shadow server
 #     REMOTE_SUPPORT_MONITOR=0        which monitor, empty for all of them
+#     REMOTE_SUPPORT_DISPLAY=:7       which X display, if a client has several
+#                                     (an argument does the same: ltsp-shadow :8)
+#     REMOTE_SUPPORT_HEADING="..."    first line of the question
 #     REMOTE_SUPPORT_PROMPT="..."     the question, %s is who is asking
 #     REMOTE_SUPPORT_NOTICE="..."     the marker, %s is who is watching
 #     REMOTE_SUPPORT_ALLOW="..."      wording of the button that agrees
 #     REMOTE_SUPPORT_REFUSE="..."     wording of the button that does not
+#     REMOTE_SUPPORT_COUNTDOWN="..."  the countdown, %d is seconds left
 #     REMOTE_SUPPORT_NOTICE_GEOMETRY="330x26+0+0"  size and place of the marker
 
 set -e
@@ -67,7 +71,12 @@ elif command -v getltscfg >/dev/null 2>&1; then
 fi
 
 SHADOW_BIN=$(command -v freerdp-shadow-cli3 || command -v freerdp-shadow-cli || true)
-YAD_BIN=$(command -v yad || true)
+
+# The windows are a program of their own, next to this one: ltsp-shadow-ui(1).
+# Looked up beside this script rather than by name, so it works from the source
+# tree and from /usr/share/ltsp without a PATH entry.
+UI_BIN=$(dirname "$0")/ltsp-shadow-ui
+test -x "$UI_BIN" || UI_BIN=$(command -v ltsp-shadow-ui || true)
 
 die() {
     echo "ltsp-shadow: $1" >&2
@@ -90,10 +99,39 @@ test -n "$who_asks" || who_asks="local"
 
 # The display the user is actually looking at: the X server on the active
 # virtual terminal, not simply :0, which on an LTSP client does not exist.
-vt=$(fgconsole 2>/dev/null || echo 7)
-xline=$(ps -eo args= | grep "^/usr/lib/xorg/Xorg \|^Xorg " | grep " vt$vt " | head -1)
-test -n "$xline" || xline=$(ps -eo args= | grep "^/usr/lib/xorg/Xorg \|^Xorg " | head -1)
-test -n "$xline" || die "no X server running on this client"
+#
+# A client normally runs exactly one, so there is nothing to choose. Where a
+# site starts more than one screen, name the one to watch - as an argument or
+# in REMOTE_SUPPORT_DISPLAY - and this looks up that X server instead of the
+# one on the active terminal:
+#
+#     ltsp-shadow :8
+#
+# Which displays exist is visible in /tmp/.X11-unix, one socket per display.
+want_display=${1:-$REMOTE_SUPPORT_DISPLAY}
+
+if [ -n "$want_display" ]; then
+    # Checked, not trusted: this arrives over ssh, and it goes into a pattern
+    # below. :7, or 7, and nothing else.
+    case "$want_display" in
+        :[0-9] | :[0-9][0-9]) ;;
+        [0-9] | [0-9][0-9]) want_display=":$want_display" ;;
+        *) die "'$want_display' is not a display; use :7" ;;
+    esac
+    xline=$(ps -eo args= | grep "^/usr/lib/xorg/Xorg \|^Xorg " |
+            grep -- " $want_display " | head -1)
+    test -n "$xline" || xline=$(ps -eo args= |
+            grep "^/usr/lib/xorg/Xorg \|^Xorg " | grep -- "$want_display" | head -1)
+    if [ -z "$xline" ]; then
+        have=$(ls /tmp/.X11-unix 2>/dev/null | sed 's/^X/:/' | paste -sd' ' -)
+        die "no X server on display $want_display; this client has: ${have:-none}"
+    fi
+else
+    vt=$(fgconsole 2>/dev/null || echo 7)
+    xline=$(ps -eo args= | grep "^/usr/lib/xorg/Xorg \|^Xorg " | grep " vt$vt " | head -1)
+    test -n "$xline" || xline=$(ps -eo args= | grep "^/usr/lib/xorg/Xorg \|^Xorg " | head -1)
+    test -n "$xline" || die "no X server running on this client"
+fi
 
 display=$(echo "$xline" | awk '{for (i = 1; i <= NF; i++) if ($i ~ /^:[0-9]+$/) {print $i; exit}}')
 xauth=$(echo "$xline" | awk '{for (i = 1; i < NF; i++) if ($i == "-auth") {print $(i + 1); exit}}')
@@ -105,13 +143,16 @@ test -n "$xauth" && export XAUTHORITY="$xauth"
 port=${REMOTE_SUPPORT_PORT:-3390}
 timeout=${REMOTE_SUPPORT_TIMEOUT:-60}
 
+heading=${REMOTE_SUPPORT_HEADING:-"May support look at this screen?"}
 prompt=${REMOTE_SUPPORT_PROMPT:-"Support at %s would like to see this screen and use the keyboard and mouse.\n\nNothing is shown or shared until you allow it."}
 notice=${REMOTE_SUPPORT_NOTICE:-"Remote support is watching this screen (%s)"}
 allow=${REMOTE_SUPPORT_ALLOW:-"Allow"}
 refuse=${REMOTE_SUPPORT_REFUSE:-"Refuse"}
+countdown=${REMOTE_SUPPORT_COUNTDOWN:-"No answer in %d s counts as no."}
 geometry=${REMOTE_SUPPORT_NOTICE_GEOMETRY:-"330x26+0+0"}
 
 # printf, not echo, so a site can put newlines in its own wording.
+heading_text=$(printf "$heading" "$who_asks")
 prompt_text=$(printf "$prompt" "$who_asks")
 notice_text=$(printf "$notice" "$who_asks")
 
@@ -123,13 +164,24 @@ ask_consent() {
             ;;
     esac
 
-    test -n "$YAD_BIN" || die "yad is not installed, so the user cannot be asked"
+    test -n "$UI_BIN" || die "ltsp-shadow-ui is missing, so the user cannot be asked"
 
-    "$YAD_BIN" --title="Remote support" --window-icon=dialog-question \
-        --image=dialog-question --text="$prompt_text" \
-        --button="$refuse:1" --button="$allow:0" \
-        --timeout="$timeout" --timeout-indicator=bottom \
-        --center --on-top --skip-taskbar >/dev/null 2>&1
+    # Not a bare call: set -e would take a refusal for a failure and abort
+    # here instead of letting the caller say so.
+    rc=0
+    "$UI_BIN" --consent --text "$prompt_text" --heading "$heading_text" \
+        --allow "$allow" --refuse "$refuse" --countdown "$countdown" \
+        --timeout "$timeout" || rc=$?
+    case $rc in
+        0) return 0 ;;
+        # 2 is the program saying it cannot ask; 126 and 127 are the shell
+        # saying it could not run it at all, which means the same thing here
+        # and must not be mistaken for a refusal.
+        2|126|127)
+            die "cannot put the question on screen (python3, python3-gi and gir1.2-gtk-3.0 in the image?)"
+            ;;
+        *) return 1 ;;
+    esac
 }
 
 shadow_pid=""
@@ -155,17 +207,22 @@ fi
 # and it stays until this script exits.
 #
 # Small on purpose: it has to be impossible to miss and easy to ignore, and it
-# sits on top of the work the person is trying to get help with. The text is
-# Pango markup, the same as the greeter's prompts, so a site can set its own
-# size or colour in REMOTE_SUPPORT_NOTICE.
-if [ -n "$YAD_BIN" ]; then
-    "$YAD_BIN" --title="Remote support" \
-        --text="<span size=\"small\">$notice_text</span>" \
-        --text-align=center --no-buttons --undecorated --on-top --sticky \
-        --skip-taskbar --geometry="$geometry" --no-escape \
-        >/dev/null 2>&1 &
-    notice_pid=$!
-fi
+# sits on top of the work the person is trying to get help with. It never takes
+# the keyboard, and the dot on it blinks, because a steady strip becomes
+# furniture within a minute. The text may be Pango markup, the same as the
+# greeter's prompts, so a site can set its own size or colour in
+# REMOTE_SUPPORT_NOTICE.
+test -n "$UI_BIN" || die "ltsp-shadow-ui is missing, so nothing would show on screen"
+
+"$UI_BIN" --notice --text "$notice_text" --geometry "$geometry" >/dev/null 2>&1 &
+notice_pid=$!
+
+# Checked, not assumed. With the question turned off there is nothing else
+# that proves the windows can be drawn at all, and a shadow server running
+# behind a marker that never appeared is the one outcome this must not have.
+sleep 1
+kill -0 "$notice_pid" 2>/dev/null ||
+    die "the marker did not start, so nothing is being shared"
 
 set -- "$SHADOW_BIN" "/bind-address:127.0.0.1" "/port:$port" "/sec:rdp" "-auth"
 if [ -n "$REMOTE_SUPPORT_MONITOR" ]; then

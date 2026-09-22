@@ -1,4 +1,4 @@
-.TH "lts.conf" "5" "2026-09-17" "ltsp6"
+.TH "lts.conf" "5" "2026-09-22" "ltsp6"
 .SH "NAME"
 lts.conf \(em Per\-client configuration for LTSP clients
 .SH "DESCRIPTION"
@@ -285,6 +285,54 @@ One caveat for \fBRDP_PREAUTH=ssh\fR behind a load balancer: see
 \fBRDP_PREAUTH_HOST\fR. If the probe reaches the balancer rather than a
 session server, the failed passwords are logged against the balancer, and a
 jail there would ban it for everyone at once.
+.SH "KERBEROS"
+.PP
+\fBRDP_PREAUTH\fR asks a KDC, and finds it the way MIT Kerberos always does:
+the realm from \fIkrb5.conf\fR, the servers from DNS. A thin client image has
+no \fIkrb5.conf\fR unless something puts one there, so the check finds no
+realm, skips itself and says so in the log \(em which from the outside looks
+exactly like a check that is working. These settings write the file at boot,
+so the domain can be named, moved or corrected without rebuilding an image.
+.IP "" 4
+.nf
+KRB5_REALM="EXAMPLE.INTERNAL"
+KRB5_KDC_0="dc1.example.internal"
+KRB5_KDC_1="dc2.example.internal"
+.fi
+.IP "\fBKRB5_REALM\fP" 4
+The realm, in capitals as Kerberos writes it. Nothing here happens without it,
+and whatever \fIkrb5.conf\fR the image carries is then left alone.
+.IP "\fBKRB5_KDC_\fP\fIn\fP" 4
+The domain controllers, numbered from 0 and stopping at the first gap, as the
+ssh keys are. \fBKRB5_KDC\fR without a number works too, for the single one.
+.IP "" 4
+Order matters more than it looks. A controller that is down is not skipped
+instantly: it is tried, and a server that drops packets rather than refusing
+them costs about 18 seconds before the next one is asked \(em measured against
+MIT Kerberos on trixie, and spent in front of the greeter with the user
+watching. \fBkdc_timeout\fR does not shorten it. Name the nearest controller
+first.
+.IP "" 4
+Naming them at all is what keeps a second controller useful. In an Active
+Directory the SRV records live on the controllers themselves, so a client
+whose only nameserver is the controller that just died cannot look up the one
+that is still running \(em the redundancy is there and unreachable. An
+explicit list takes DNS out of that path.
+.IP "\fBKRB5_DNS_LOOKUP\fP" 4
+Whether to look the controllers up in DNS as well. Off by default once
+\fBKRB5_KDC_\fP\fIn\fP names any, because the lookup would cost the same wait
+again for a question already answered; on when none are named. \fBTrue\fR
+keeps both, for a site whose DNS is not on the controllers.
+.IP "\fBKRB5_ADMIN_SERVER\fP" 4
+The \fBadmin_server\fR line, for sites that change passwords through
+\fBkadmin\fR. Optional, and unrelated to signing in.
+.PP
+What a second controller does and does not cover, with Samba: replication is
+multi\-master and any controller answers an AS\-REQ, so signing in survives the
+loss of one. Changing a password does not \(em that goes to the PDC emulator.
+And \fBbadPwdCount\fR is counted per controller and replicated afterwards, so
+a lockout policy reacts later than it looks on paper, which is what
+\fBRDP_PREAUTH_MAXFAIL\fR on the client is for.
 .SH "SCREENS"
 .PP
 .IP "\fBSCREEN_\fP\fInn\fP" 4
@@ -378,15 +426,26 @@ clients carry their own fonts.
 .SH "REMOTE SUPPORT"
 .PP
 Support can watch a client's screen and use its keyboard and mouse, with the
-user's consent, through \fB/usr/share/ltsp/ltsp\-shadow\fR on the client. The
-machine doing the support runs:
+user's consent. On the server, run \fBltsp\-support\fR, or pick
+\fBLTSP remote support\fR from the desktop menu: it lists the clients that have
+booted, asks the one chosen, waits for the user to agree, and opens the picture.
+A client can also be named outright, with the display to watch after it:
+.IP "" 4
+.nf
+ltsp\-support ltsp29
+ltsp\-support ltsp29 :8
+.fi
+.IP "" 4
+Underneath, that is an ssh connection to
+\fB/usr/share/ltsp/ltsp\-shadow\fR on the client with a port forward, which is
+also how to do it by hand from a machine without \fBltsp\-support\fR on it:
 .IP "" 4
 .nf
 ssh \-i key \-L 3390:127.0.0.1:3390 root@client \\
     /usr/share/ltsp/ltsp\-shadow
 .fi
 .IP "" 4
-and then points an RDP client at \fB127.0.0.1:3390\fR.
+and then point an RDP client at \fB127.0.0.1:3390\fR.
 .IP "" 4
 The shadow server binds to \fB127.0.0.1\fR and nothing else, so it is reachable
 only through the ssh connection that started it. There is no port on the client
@@ -401,7 +460,11 @@ What it does not guard against is another process on the client itself. On a
 thin client that is root and the session user, and the session user is the
 person whose screen it is.
 .IP "" 4
-Needs \fByad\fR and \fBfreerdp3\-shadow\-x11\fR in the image.
+Needs \fBfreerdp3\-shadow\-x11\fR, \fBpython3\-gi\fR and \fBgir1.2\-gtk\-3.0\fR
+in the image. The two windows the user sees \(em the question and the marker
+\(em are \fBltsp\-shadow\-ui\fR, a GTK3 program next to the script, so they
+look like the greeter that is already on that screen rather than like a
+dialog tool.
 .IP "\fBREMOTE_SUPPORT\fP" 4
 Set to \fBFalse\fR to refuse outright. On by default where the shadow server is
 installed \(em installing it is the decision, and nothing happens without the
@@ -424,9 +487,21 @@ The port the shadow server listens on, on \fB127.0.0.1\fR only. 3390 by default.
 Which monitor to share, counting from 0. Empty, the default, shares all of them
 \(em on a two\-screen client that is one wide picture, which is a lot to send for
 a support session. \fBfreerdp\-shadow\-cli3 /monitors:\fR lists what a client has.
+.IP "\fBREMOTE_SUPPORT_DISPLAY\fP" 4
+Which X display to watch, \fB:7\fR for instance. Empty, the default, takes the
+one on the active virtual terminal, which is the screen the user is looking at
+and on a normal client the only one there is. Set this only where a site starts
+more than one X server on a client; \fBltsp\-support\fR\fI client display\fR
+overrides it for a single session. The sockets in \fB/tmp/.X11\-unix\fR are the
+list of displays a client actually has, and \fBltsp\-shadow\fR prints that list
+when the one asked for is not among them.
 .IP "\fBREMOTE_SUPPORT_ALLOW\fP, \fBREMOTE_SUPPORT_REFUSE\fP" 4
 The wording of the two buttons. \fB"Allow"\fR and \fB"Refuse"\fR by
 default, which is the wrong language wherever the question itself is.
+.IP "\fBREMOTE_SUPPORT_HEADING\fP, \fBREMOTE_SUPPORT_COUNTDOWN\fP" 4
+The first line of the question, and the line that counts the seconds away.
+\fB%d\fR in the countdown is how many are left. The default says that running
+out means no, because that is what it means.
 .IP "\fBREMOTE_SUPPORT_PROMPT\fP, \fBREMOTE_SUPPORT_NOTICE\fP" 4
 The wording of the question and of the marker, in the language of the people
 using the client. \fB%s\fR is the address support is connecting from \(em both
@@ -438,6 +513,23 @@ sehen und Tastatur und Maus benutzen.\\n\\nEs wird nichts uebertragen,
 bevor Sie zustimmen."
 REMOTE_SUPPORT_NOTICE="Fernwartung sieht diesen Bildschirm (%s)"
 .fi
+.IP "" 4
+The marker's text is Pango markup, the same as the greeter's prompts, so a site
+can set its own size or colour there.
+.IP "\fBREMOTE_SUPPORT_NOTICE_GEOMETRY\fP" 4
+Size and place of the marker, \fB330x26+0+0\fR by default \(em a strip in the top
+left corner. It has to be impossible to miss and easy to ignore, and it sits on
+top of the work the person is trying to get help with. Widen it for longer
+wording of your own.
+.PP
+The server side reads \fB/etc/ltsp/ltsp\-server.conf\fR rather than this file:
+\fB\%SUPPORT_KEY\fR is the ssh key to log in with,
+\fB/root/.ssh/ltsp\-clients\fR by default, whose public half belongs in
+\fBSSH_AUTHORIZED_KEY_\fP\fIn\fP here; \fB\%SUPPORT_PORT\fR is the local port
+for the forward; \fB\%SUPPORT_RDP_CLIENT\fR is what to watch with, the first of
+\fBxfreerdp3\fR, \fBxfreerdp\fR, \fBwlfreerdp\fR or \fBremmina\fR that is
+installed; and \fB\%SUPPORT_LEASES\fR is the lease file the client list is read
+from, \fB/var/lib/misc/dnsmasq.leases\fR by default.
 .SH "SSH HOST KEYS"
 .PP
 .IP "\fBSSH_HOST_KEYS\fP" 4

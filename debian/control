@@ -22,17 +22,27 @@ Depends: ${misc:Depends},
          gettext-base,
          lsb-release,
          debconf-utils,
-         openssh-client
+         openssh-client,
+         python3
 Recommends: nbd-server,
             tftpd-hpa,
             dnsmasq | isc-dhcp-server,
             nfs-kernel-server,
             xinetd
+Suggests: python3-gi,
+          gir1.2-gtk-3.0,
+          freerdp3-x11 | remmina
 Description: LTSP6 thin client server tools
  ltsp-build-client, ltsp-config, ltsp-chroot, ltsp-info and related
  server-side tools for building and managing LTSP (Linux Terminal
  Server Project) thin-client chroot images, plus the NBD root/swap
  servers used to serve them over the network.
+ .
+ ltsp-support opens a support session on a client: it lists the
+ clients that have booted, asks the user there for consent, and shows
+ that screen over an ssh port forward. It is a GTK3 program, so it
+ needs python3-gi and an RDP client to watch with, which is why both
+ are suggested.
  .
  This package also ships example configs and documentation for
  running an HAProxy + keepalived high-availability RDP load balancer
@@ -51,6 +61,10 @@ Depends: ${shlibs:Depends},
          pciutils,
          xinit,
          x11-xserver-utils
+Suggests: openssh-server,
+          freerdp3-shadow-x11,
+          python3-gi,
+          gir1.2-gtk-3.0
 Description: LTSP6 thin client core scripts and helpers
  Core client-side scripts, udev rules, initramfs-tools hooks and
  helper binaries (getltscfg, getltscfg-cluster, jetpipe, nbd-proxy,

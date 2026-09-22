@@ -1,0 +1,14 @@
+# Two optional helpers are python3 scripts, and neither is worth a hard
+# dependency on the interpreter in a thin client image.
+#
+# jetpipe is a printer daemon for clients with a printer attached, and
+# ltsp-shadow-ui draws the two windows ltsp-shadow shows the user - the
+# question before anyone may watch, and the marker while they do. Sites that
+# want either install the packages this one suggests; sites that do not would
+# otherwise carry python3 and its standard library over NBD on every boot for
+# a file they never run.
+#
+# Both say what is missing when they are started without it, rather than
+# failing in a way that has to be guessed at.
+ltsp-client-core: python3-script-but-no-python3-dep * [usr/sbin/jetpipe]
+ltsp-client-core: python3-script-but-no-python3-dep * [usr/share/ltsp/ltsp-shadow-ui]

@@ -12,11 +12,38 @@ ltsp (6.3.22-1) unstable; urgency=medium
     turns off the question for an unattended machine; nothing turns off
     the marker. Watching someone's screen at work is not a technical
     question, and a tool that can watch silently is the wrong tool.
+  * ltsp-support is the server side of it, and a desktop menu entry, so
+    starting a support session is not a line of ssh with a port forward
+    typed correctly under pressure. It lists the clients that have
+    booted, asks the one chosen, waits for the user to agree, and opens
+    the picture. SUPPORT_KEY, SUPPORT_PORT, SUPPORT_RDP_CLIENT and
+    SUPPORT_LEASES in /etc/ltsp/ltsp-server.conf where a site differs.
+    It is a GTK3 program too, and says what is missing rather than
+    failing quietly.
   * REMOTE_SUPPORT_MONITOR picks one screen of a multi-monitor client,
     so a support session need not carry 5120x1440.
-  * Needs yad and freerdp3-shadow-x11 in the image: six packages, since
-    GTK3 is already there for the greeter. zenity would have brought
-    thirty-nine, GTK4 among them.
+  * REMOTE_SUPPORT_DISPLAY, or an argument, picks the X display where a
+    client runs more than one. Without it the screen on the active
+    virtual terminal is taken, which is the one the user is looking at.
+  * The two windows the user sees are ltsp-shadow-ui, a GTK3 program of
+    its own rather than a dialog tool: the greeter on that client is
+    GTK3 already, so they match what the user has been looking at, and
+    it buys a marker that never takes the keyboard, a countdown that
+    says how long is left, and a refusal on Escape and on the window
+    being closed. Needs python3-gi, gir1.2-gtk-3.0 and
+    freerdp3-shadow-x11 in the image; suggested, not depended on, so an
+    image that does not want remote support pays nothing.
+  * 09-krb5-conf writes /etc/krb5.conf on the client from lts.conf:
+    KRB5_REALM, KRB5_KDC_n, KRB5_DNS_LOOKUP, KRB5_ADMIN_SERVER. Without
+    it RDP_PREAUTH=True finds no realm on a thin client, skips itself
+    and says so in the log - which from the outside looks exactly like a
+    check that is working. Naming the controllers also takes DNS out of
+    the failover path: in an Active Directory the SRV records live on
+    the controllers, so a client whose only nameserver is the one that
+    just died cannot look up the one that is still running. Order
+    matters - a controller that drops packets costs about 18 seconds
+    before the next is asked, measured, and kdc_timeout does not shorten
+    it.
 
  -- Marc-Andre Butz <ma@butz.online>  Tue, 22 Sep 2026 15:03:09 +0200
 

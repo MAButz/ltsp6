@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=LTSP remote support
+Name[de]=LTSP-Fernwartung
+Comment=Watch a client's screen, with the user's consent
+Comment[de]=Den Bildschirm eines Clients ansehen, nach Zustimmung des Anwenders
+Exec=ltsp-support
+Icon=preferences-desktop-remote-desktop
+Terminal=false
+Categories=System;RemoteAccess;
+Keywords=LTSP;support;remote;shadow;

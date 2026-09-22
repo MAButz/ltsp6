@@ -27,8 +27,12 @@ override_dh_auto_install:
 		server/ltsp-swapfile-delete server/ltsp-update-image server/ltsp-update-kernels \
 		server/ltsp-update-sshkeys server/nbdrootd server/nbdswapd \
 		debian/ltsp-server/usr/sbin/
-	install -d debian/ltsp-server/usr/bin debian/ltsp-server/usr/sbin
-	install -m0755 server/ltsp-info debian/ltsp-server/usr/bin/
+	install -d debian/ltsp-server/usr/bin
+	install -m0755 server/ltsp-info server/ltsp-support \
+		debian/ltsp-server/usr/bin/
+	install -d debian/ltsp-server/usr/share/applications
+	install -m0644 server/configs/ltsp-support.desktop \
+		debian/ltsp-server/usr/share/applications/
 	install -d debian/ltsp-server/usr/share/ltsp
 	cp -a server/share/ltsp/. debian/ltsp-server/usr/share/ltsp/
 	cp -a server/Debian/share/ltsp/. debian/ltsp-server/usr/share/ltsp/

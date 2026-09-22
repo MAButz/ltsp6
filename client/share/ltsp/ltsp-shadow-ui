@@ -1,0 +1,298 @@
+#!/usr/bin/env python3
+#
+# The two windows ltsp-shadow(8) puts on the user's screen: the question it
+# asks before anyone may watch, and the marker that stays up for as long as
+# somebody is.
+#
+#     ltsp-shadow-ui --consent --text "..." --timeout 60
+#     ltsp-shadow-ui --notice  --text "..." --geometry 330x26+0+0
+#
+# Exit codes for --consent: 0 allowed, 1 refused, 2 could not ask at all.
+# The third is a separate case on purpose: "nobody said no" and "nobody was
+# asked" must not end the same way.
+#
+# --notice runs until it is killed. SIGTERM takes it down cleanly, which is
+# what ltsp-shadow's cleanup sends.
+#
+# Why GTK here rather than a dialog tool: the greeter on this client is GTK3
+# already, so the libraries are in the image and the windows match what the
+# user has been looking at. It also buys the things a generic dialog cannot
+# do - a marker that never takes focus, a countdown that says how long is
+# left, and a refusal on Escape and on the window being closed.
+
+import argparse
+import os
+import re
+import signal
+import sys
+
+try:
+    import gi
+
+    gi.require_version("Gtk", "3.0")
+    gi.require_version("Gdk", "3.0")
+    from gi.repository import Gdk, GLib, Gtk, Pango
+except (ImportError, ValueError) as err:  # no python3-gi, or no GTK3 typelib
+    sys.stderr.write("ltsp-shadow-ui: %s\n" % err)
+    sys.stderr.write("ltsp-shadow-ui: needs python3-gi and gir1.2-gtk-3.0\n")
+    sys.exit(2)
+
+ALLOWED = 0
+REFUSED = 1
+UNASKABLE = 2
+
+CSS = b"""
+.ltsp-shadow-prompt {
+    padding: 18px;
+}
+.ltsp-shadow-heading {
+    font-weight: bold;
+    font-size: 1.1em;
+}
+.ltsp-shadow-countdown {
+    opacity: 0.7;
+    font-size: 0.9em;
+}
+.ltsp-shadow-notice {
+    background-color: #8a1c11;
+    color: #ffffff;
+}
+.ltsp-shadow-notice label {
+    color: #ffffff;
+}
+.ltsp-shadow-dot {
+    color: #ffd7d2;
+}
+.ltsp-shadow-dot-off {
+    opacity: 0.15;
+}
+"""
+
+
+def load_css():
+    provider = Gtk.CssProvider()
+    provider.load_from_data(CSS)
+    Gtk.StyleContext.add_provider_for_screen(
+        Gdk.Screen.get_default(), provider,
+        Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+
+def set_text(label, text):
+    """Pango markup where it parses, plain text where it does not.
+
+    The wording comes from lts.conf, where a site may well have written an
+    ampersand or a bare angle bracket. set_markup() on that produces a
+    warning and an empty label - a marker nobody can read is worse than one
+    without emphasis, so it is checked first rather than hoped for.
+    """
+    try:
+        Pango.parse_markup(text, -1, "\0")
+    except GLib.Error:
+        label.set_text(text)
+    else:
+        label.set_markup(text)
+
+
+def countdown_text(template, seconds):
+    """Fill the one placeholder, whichever spelling the template uses."""
+    if "{}" in template:
+        return template.replace("{}", str(seconds))
+    if re.search(r"%[0-9]*d", template):
+        return template % seconds
+    if "%s" in template:
+        return template % seconds
+    return template
+
+
+def consent(args):
+    win = Gtk.Window(title=args.title)
+    win.set_position(Gtk.WindowPosition.CENTER_ALWAYS)
+    win.set_keep_above(True)
+    win.set_skip_taskbar_hint(True)
+    win.set_skip_pager_hint(True)
+    win.set_urgency_hint(True)
+    win.set_resizable(False)
+    win.set_border_width(0)
+    win.set_default_size(460, -1)
+
+    outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+    outer.get_style_context().add_class("ltsp-shadow-prompt")
+    win.add(outer)
+
+    top = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
+    icon = Gtk.Image.new_from_icon_name("dialog-question", Gtk.IconSize.DIALOG)
+    icon.set_valign(Gtk.Align.START)
+    top.pack_start(icon, False, False, 0)
+
+    texts = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+    if args.heading:
+        heading = Gtk.Label(xalign=0)
+        heading.get_style_context().add_class("ltsp-shadow-heading")
+        set_text(heading, args.heading)
+        texts.pack_start(heading, False, False, 0)
+
+    body = Gtk.Label(xalign=0)
+    body.set_line_wrap(True)
+    body.set_max_width_chars(52)
+    set_text(body, args.text)
+    texts.pack_start(body, False, False, 0)
+
+    left = Gtk.Label(xalign=0)
+    left.get_style_context().add_class("ltsp-shadow-countdown")
+    if args.timeout > 0:
+        texts.pack_start(left, False, False, 0)
+    top.pack_start(texts, True, True, 0)
+    outer.pack_start(top, True, True, 0)
+
+    buttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+    buttons.set_halign(Gtk.Align.END)
+    buttons.set_margin_top(18)
+    refuse = Gtk.Button(label=args.refuse)
+    allow = Gtk.Button(label=args.allow)
+    buttons.pack_start(refuse, False, False, 0)
+    buttons.pack_start(allow, False, False, 0)
+    outer.pack_start(buttons, False, False, 0)
+
+    # The verdict starts at "no" and only the Allow button changes it, so
+    # every other way out of this window - Escape, the close button, the
+    # timeout, the X server going away - is a refusal without a line of code
+    # per case.
+    state = {"verdict": REFUSED, "left": args.timeout}
+
+    def finish(verdict):
+        state["verdict"] = verdict
+        Gtk.main_quit()
+
+    refuse.connect("clicked", lambda _b: finish(REFUSED))
+    allow.connect("clicked", lambda _b: finish(ALLOWED))
+    win.connect("delete-event", lambda *_a: finish(REFUSED))
+    win.connect("key-press-event", lambda _w, ev: (
+        finish(REFUSED) if ev.keyval == Gdk.KEY_Escape else None))
+
+    def tick():
+        state["left"] -= 1
+        if state["left"] <= 0:
+            finish(REFUSED)
+            return False
+        left.set_text(countdown_text(args.countdown, state["left"]))
+        return True
+
+    if args.timeout > 0:
+        left.set_text(countdown_text(args.countdown, state["left"]))
+        GLib.timeout_add_seconds(1, tick)
+
+    win.show_all()
+    # Refuse has the focus, so a stray Return does not agree to anything.
+    refuse.grab_focus()
+    win.present()
+    Gtk.main()
+    return state["verdict"]
+
+
+def parse_geometry(spec):
+    """WxH+X+Y, as X has spelled it forever. Returns (w, h, x, y)."""
+    m = re.match(r"^(\d+)x(\d+)([+-]\d+)([+-]\d+)$", spec.strip())
+    if not m:
+        return (330, 26, 0, 0)
+    return (int(m.group(1)), int(m.group(2)),
+            int(m.group(3)), int(m.group(4)))
+
+
+def notice(args):
+    width, height, x, y = parse_geometry(args.geometry)
+
+    win = Gtk.Window(title=args.title)
+    win.set_type_hint(Gdk.WindowTypeHint.NOTIFICATION)
+    win.set_decorated(False)
+    win.set_keep_above(True)
+    win.set_skip_taskbar_hint(True)
+    win.set_skip_pager_hint(True)
+    win.set_resizable(False)
+    # Never takes the keyboard: it sits on top of the work the person is
+    # trying to get help with, and a marker that eats a keystroke would be a
+    # reason to want it gone.
+    win.set_accept_focus(False)
+    win.set_focus_on_map(False)
+    win.stick()
+    win.set_default_size(width, height)
+    win.set_size_request(width, height)
+
+    box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+    box.set_border_width(3)
+    box.get_style_context().add_class("ltsp-shadow-notice")
+    win.get_style_context().add_class("ltsp-shadow-notice")
+
+    dot = Gtk.Label(label="●")
+    dot.get_style_context().add_class("ltsp-shadow-dot")
+    box.pack_start(dot, False, False, 4)
+
+    label = Gtk.Label(xalign=0)
+    label.set_ellipsize(Pango.EllipsizeMode.END)
+    # With ellipsis and a minimum of one character, the label can shrink, so
+    # the window really is the width that was asked for. Without this it grows
+    # to whatever the wording needs and the marker is never the size a site
+    # configured.
+    label.set_max_width_chars(1)
+    set_text(label, args.text)
+    box.pack_start(label, True, True, 0)
+    win.add(box)
+
+    def blink():
+        ctx = dot.get_style_context()
+        if ctx.has_class("ltsp-shadow-dot-off"):
+            ctx.remove_class("ltsp-shadow-dot-off")
+        else:
+            ctx.add_class("ltsp-shadow-dot-off")
+        return True
+
+    # A steady red strip becomes furniture within a minute. A slow blink does
+    # not, and one redraw a second costs a thin client nothing.
+    GLib.timeout_add_seconds(1, blink)
+
+    win.show_all()
+    # After show, because a window manager may place it somewhere of its own
+    # choosing first. Negative offsets count from the far edge, as in X.
+    screen = win.get_screen()
+    if x < 0 or y < 0:
+        mon = screen.get_monitor_geometry(screen.get_primary_monitor())
+        if x < 0:
+            x = mon.x + mon.width - width + x
+        if y < 0:
+            y = mon.y + mon.height - height + y
+    win.move(x, y)
+
+    for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, sig, Gtk.main_quit)
+
+    Gtk.main()
+    return ALLOWED
+
+
+def main():
+    ap = argparse.ArgumentParser(add_help=True)
+    mode = ap.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--consent", action="store_true")
+    mode.add_argument("--notice", action="store_true")
+    ap.add_argument("--title", default="Remote support")
+    ap.add_argument("--heading", default="")
+    ap.add_argument("--text", default="")
+    ap.add_argument("--allow", default="Allow")
+    ap.add_argument("--refuse", default="Refuse")
+    ap.add_argument("--countdown", default="Refused automatically in %d s")
+    ap.add_argument("--timeout", type=int, default=0)
+    ap.add_argument("--geometry", default="330x26+0+0")
+    args = ap.parse_args()
+
+    if not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
+        sys.stderr.write("ltsp-shadow-ui: no display to show anything on\n")
+        return UNASKABLE
+    if not Gtk.init_check([])[0]:
+        sys.stderr.write("ltsp-shadow-ui: cannot open the display\n")
+        return UNASKABLE
+
+    load_css()
+    return consent(args) if args.consent else notice(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
