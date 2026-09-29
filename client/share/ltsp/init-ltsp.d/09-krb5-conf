@@ -16,6 +16,15 @@
 #     KRB5_KDC_0="dc1.example.internal"
 #     KRB5_KDC_1="dc2.example.internal"
 #
+# Each controller is written as a password server too, which is not a detail:
+# a KDC answers sign-ins, the password service on port 464 answers changes,
+# and they are separate entries. With controllers named here the DNS lookup is
+# switched off, so nothing else can find that service - signing in works,
+# changing an expired password fails with "Cannot find KDC for realm". Found
+# on a real client, at a real greeter, after it had already worked from a
+# machine whose krb5.conf happened to name one. KRB5_KPASSWD_SERVER overrides
+# it where the password service is somewhere else.
+#
 # Numbered from 0 and stopping at the first gap, as the ssh keys are, so a
 # mistyped index shows up as a controller that is not used rather than
 # silently dropping the ones after it. Order matters: an unreachable one is
@@ -36,9 +45,12 @@ if [ -n "$KRB5_REALM" ]; then
     ltsp_krb5_lower=$(echo "$KRB5_REALM" | tr 'A-Z' 'a-z')
     ltsp_krb5_kdcs=""
 
+    ltsp_krb5_first=""
+
     if [ -n "$KRB5_KDC" ]; then
         ltsp_krb5_kdcs="        kdc = $KRB5_KDC
 "
+        ltsp_krb5_first=$KRB5_KDC
     fi
 
     ltsp_krb5_i=0
@@ -47,6 +59,7 @@ if [ -n "$KRB5_REALM" ]; then
         [ -n "$ltsp_krb5_one" ] || break
         ltsp_krb5_kdcs="$ltsp_krb5_kdcs        kdc = $ltsp_krb5_one
 "
+        [ -n "$ltsp_krb5_first" ] || ltsp_krb5_first=$ltsp_krb5_one
         ltsp_krb5_i=$((ltsp_krb5_i + 1))
     done
 
@@ -61,6 +74,17 @@ if [ -n "$KRB5_REALM" ]; then
         [Tt]rue|[Yy]es|1) ltsp_krb5_dns="true" ;;
         [Ff]alse|[Nn]o|0) ltsp_krb5_dns="false" ;;
     esac
+
+    # The password service, and it defaults to the first controller rather
+    # than being left out: an expired password is changed on port 464, which
+    # is a different entry from the KDC, and with the DNS lookup off there is
+    # nothing else to find it by. A site whose password service lives
+    # elsewhere names it in KRB5_KPASSWD_SERVER.
+    ltsp_krb5_kpasswd=${KRB5_KPASSWD_SERVER:-${KRB5_ADMIN_SERVER:-$ltsp_krb5_first}}
+    if [ -n "$ltsp_krb5_kpasswd" ]; then
+        ltsp_krb5_kdcs="$ltsp_krb5_kdcs        kpasswd_server = $ltsp_krb5_kpasswd
+"
+    fi
 
     if [ -n "$KRB5_ADMIN_SERVER" ]; then
         ltsp_krb5_kdcs="$ltsp_krb5_kdcs        admin_server = $KRB5_ADMIN_SERVER
@@ -90,5 +114,5 @@ if [ -n "$KRB5_REALM" ]; then
         echo "ltsp: could not write /etc/krb5.conf" >&2
 
     unset ltsp_krb5_lower ltsp_krb5_kdcs ltsp_krb5_i ltsp_krb5_one \
-          ltsp_krb5_dns
+          ltsp_krb5_dns ltsp_krb5_first ltsp_krb5_kpasswd
 fi

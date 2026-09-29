@@ -358,6 +358,16 @@ Whether to look the controllers up in DNS as well. Off by default once
 \fBKRB5_KDC_\fP\fIn\fP names any, because the lookup would cost the same wait
 again for a question already answered; on when none are named. \fBTrue\fR
 keeps both, for a site whose DNS is not on the controllers.
+.IP "\fBKRB5_KPASSWD_SERVER\fP" 4
+Where password changes go. Defaults to the first controller named above,
+which is almost always right and is written out rather than left to be
+guessed: a KDC answers sign\-ins on port 88, the password service answers
+changes on 464, and they are separate entries in \fIkrb5.conf\fR. With
+controllers named here the DNS lookup is off, so nothing else can find that
+service \(em signing in works and changing an expired password fails with
+"Cannot find KDC for realm", which reads like the controller is down when it
+is answering perfectly well. Set this where the password service is somewhere
+else.
 .IP "\fBKRB5_ADMIN_SERVER\fP" 4
 The \fBadmin_server\fR line, for sites that change passwords through
 \fBkadmin\fR. Optional, and unrelated to signing in.

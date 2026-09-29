@@ -15,6 +15,14 @@ ltsp (6.3.24-1) unstable; urgency=medium
     console instead of a greeter. Measured on a Hyper-V client with
     hyperv_drm; the same shape of failure is reachable on any machine
     where more than one driver claims the card.
+  * 09-krb5-conf writes a kpasswd_server as well, defaulting to the first
+    controller. A KDC answers sign-ins on port 88 and the password service
+    answers changes on 464, and they are separate entries; with controllers
+    named in lts.conf the DNS lookup is off, so nothing else could find that
+    service. Signing in worked and changing an expired password failed with
+    "Cannot find KDC for realm" - found at a real greeter against a real
+    Samba AD, after the same code had worked from a machine whose krb5.conf
+    happened to name one. KRB5_KPASSWD_SERVER overrides it.
   * A ServerFlags section with AutoAddGPU and AutoBindGPU off goes with it,
     written only when a driver was asked for. Without it the automatically
     added GPU screen wins over the configured one even with Screen and
