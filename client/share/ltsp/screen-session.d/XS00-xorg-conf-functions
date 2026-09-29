@@ -1,7 +1,8 @@
 write_screen() {
     num=${1:-0}
     #eval screen_hacks=\$screen_hacks_$num
-    [ -z "$screen_hacks" ] && [ -z "$monitor_hacks" ] && [ -z "$display_hacks" ] && return 0
+    [ -z "$screen_hacks" ] && [ -z "$monitor_hacks" ] && [ -z "$display_hacks" ] &&
+        [ -z "$device_hacks" ] && return 0
     echo "Section \"Screen\""
     echo "    Identifier \"Screen${num}\""
     if [ -n "$monitor_hacks" ]; then
@@ -9,6 +10,17 @@ write_screen() {
         # desired, otherwise X.org may just use built-in defaults for monitor
         # settings
         echo "    Monitor \"Monitor${num}\""
+    fi
+    if [ -n "$device_hacks" ]; then
+        # And the device, for the same reason and a worse failure. A Device
+        # section nothing refers to is not a hint to X.org: it keeps its own
+        # automatic layout, the configured device is dropped with "Screen 0
+        # deleted because of no matching config section", and on hardware
+        # where more than one driver claims the card - a Hyper-V client has
+        # modesetting, fbdev and vesa all willing - it picks one of the others
+        # and dies with "Cannot run in framebuffer mode". XSERVER then looks
+        # like it does nothing, which is the opposite of what it did.
+        echo "    Device \"Device${num}\""
     fi
 
     write_display || true
@@ -68,12 +80,52 @@ write_display() {
     echo '    EndSubSection'
 }
 
+write_serverflags() {
+    # Only when a driver was actually asked for.
+    [ -z "$device_hacks" ] && return 0
+
+    # The other half of naming a driver. X.Org probes the platform for GPUs
+    # and adds what it finds as screens of its own, and those win: the
+    # configured screen is dropped with "Screen 0 deleted because of no
+    # matching config section", and X.Org carries on with a driver nobody
+    # asked for. A Device section without a BusID cannot be matched against a
+    # probed device, and on a virtual machine there is no stable BusID worth
+    # writing down anyway.
+    #
+    # Measured on a Hyper-V client, where the kernel provides hyperv_drm and
+    # /dev/dri/card0: with Screen and ServerLayout written and AutoAddGPU
+    # left alone, X.Org still fell back to its own probe and died with
+    # "Cannot run in framebuffer mode. Please specify busIDs". Adding a
+    # BusID did not help and neither did no configuration at all; switching
+    # the automatic addition off did, on the first try.
+    echo "Section \"ServerFlags\""
+    echo "    Option \"AutoAddGPU\" \"false\""
+    echo "    Option \"AutoBindGPU\" \"false\""
+    echo "EndSection"
+}
+
+write_layout() {
+    num=${1:-0}
+
+    # A ServerLayout, so the screen above is the one X.org uses rather than
+    # one it invents. Written whenever there is a screen to name; without it
+    # the automatic layout wins and everything above is decoration.
+    [ -z "$screen_hacks" ] && [ -z "$monitor_hacks" ] && [ -z "$display_hacks" ] &&
+        [ -z "$device_hacks" ] && return 0
+    echo "Section \"ServerLayout\""
+    echo "    Identifier \"Layout${num}\""
+    echo "    Screen \"Screen${num}\""
+    echo "EndSection"
+}
+
 write_xorg_conf(){
     # For now, we will only do one screen, monitor, and device
     # under the assumption that multiple-head issues should
     # be handled exclusively by xrandr
+    write_serverflags
     write_screen 0
     write_monitor 0
     write_device 0
     write_module
+    write_layout 0
 }

@@ -1,3 +1,30 @@
+ltsp (6.3.24-1) unstable; urgency=medium
+
+  * The xorg.conf the client assembles is now one X.Org will use. It wrote
+    a Device section and nothing else: no Screen referring to it, no
+    ServerLayout at all. X.Org does not take that as a hint - it keeps its
+    own automatic layout, drops the configured screen with "Screen 0
+    deleted because of no matching config section", and carries on with
+    whatever driver its probe liked. So XSERVER appeared to do nothing.
+  * Where it did more than nothing it was worse. On a client whose kernel
+    provides a DRM device and whose image carries the whole
+    xserver-xorg-video-all set, the automatic probe reached fbdev and vesa
+    as well and the server died with "Cannot run in framebuffer mode.
+    Please specify busIDs for all framebuffer devices" - every time, so
+    screen_session restarted it for ever and the client showed a text
+    console instead of a greeter. Measured on a Hyper-V client with
+    hyperv_drm; the same shape of failure is reachable on any machine
+    where more than one driver claims the card.
+  * A ServerFlags section with AutoAddGPU and AutoBindGPU off goes with it,
+    written only when a driver was asked for. Without it the automatically
+    added GPU screen wins over the configured one even with Screen and
+    ServerLayout present - tried on the client: Screen and ServerLayout
+    alone still failed, a BusID did not help, no configuration at all did
+    not either, and switching the automatic addition off worked on the
+    first try.
+
+ -- Marc-Andre Butz <ma@butz.online>  Tue, 29 Sep 2026 21:02:23 +0200
+
 ltsp (6.3.23-1) unstable; urgency=medium
 
   * The client stops deleting unit files to turn services off. It now
