@@ -26,7 +26,7 @@
 # over unauthenticated TFTP and NBD is trusted on the strength of that boot
 # chain, not on the strength of a host key.
 #
-# Only runs when sshd is going to run at all - 50-rm-system-services deletes
+# Only runs when sshd is going to run at all - 50-system-services turns off
 # the ssh unit unless KEEP_SYSTEM_SERVICES names it - so an image without a
 # server pays nothing.
 #

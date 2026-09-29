@@ -1,0 +1,304 @@
+# Turn off system services that make no sense in a live session.
+#
+# This used to delete unit files:
+#
+#     rm -f /etc/rc?.d/???$s /etc/init.d/$s /etc/init/$s.conf \
+#           /lib/systemd/system/$s.* /etc/systemd/system/$s.*
+#
+# Three of those five paths were SysV and Upstart, and Upstart left Debian
+# with jessie. The systemd one was the wrong operation: a unit file carries
+# more than the service, and deleting it takes the aliases with it. That is
+# the logind story in this project's history - the file went, its
+# dbus-org.freedesktop.login1.service alias went with it, D-Bus activation
+# failed, Xorg could not get a session and screen_session restarted it several
+# times a second, forever. systemd's own answer is disable and mask, which
+# leave the file where the packaging put it and are undone by one command.
+#
+# What runs here runs before systemd does - init-ltsp ends with
+# "exec /sbin/init" - so there is no manager to talk to. Both operations are
+# file operations underneath, and systemctl does them offline with --root=/;
+# --no-reload because there is nothing yet to reload. This is also what the
+# LTSP successor does upstream, which is worth knowing when comparing notes.
+#
+# Measured on trixie, because it decides the design:
+#
+#   - disable removes enablement symlinks under /etc, which is where Debian's
+#     packaging puts them. A symlink shipped in /usr/lib/systemd/system/*.wants
+#     it leaves alone: those units are enabled by their vendor, and disable is
+#     not the tool. Hence the escalation below.
+#   - mask masks exactly the unit named. cups.socket is not covered by masking
+#     cups.service, so every name is expanded to the units that exist for it.
+#   - disable on a unit that does not exist prints six lines of explanation
+#     and still returns 0, so the list is filtered first. Boot messages that
+#     mean nothing are how real ones get missed.
+#   - a service that exists only as /etc/init.d/x is redirected by systemctl
+#     to systemd-sysv-install, which calls update-rc.d. That is the supported
+#     path, and it is why this hook no longer touches /etc/rc?.d itself.
+#
+# Settings in lts.conf, all space separated:
+#
+#     RM_SYSTEM_SERVICES, DISABLE_SYSTEM_SERVICES   add to the list
+#     RM_THIN_SYSTEM_SERVICES                       thin clients only
+#     RM_LOW_RAM_SERVICES                           below RM_RAM_THRESHOLD
+#     MASK_SYSTEM_SERVICES                          make starting impossible
+#     KEEP_SYSTEM_SERVICES                          take off every list
+#
+# RM_* are the older spellings and keep working: a site's lts.conf is not
+# rewritten because this hook was. DISABLE_* and MASK_* are the names the
+# successor uses, for anyone moving between the two.
+#
+# Disabling is weaker than deleting was, and the difference is worth knowing:
+# a disabled service still starts when something activates it over a socket,
+# over D-Bus or as a dependency. That is what MASK_SYSTEM_SERVICES is for, and
+# why cups, avahi-daemon and bluetooth are masked by default - all three are
+# started on demand and would otherwise be back on a thin client.
+#
+# NOTE: systemd-logind used to be on the removal list, back when Xorg was
+# setuid root and did its own VT switching and input device opening. Modern
+# Xorg asks logind over D-Bus for a session and for the DRM and input file
+# descriptors, and exits at once if it cannot get them. logind stays.
+
+ltsp_service_filter() {
+    # ${@}: lines of "name  # comment"
+    # stdout: one name per line, minus anything in KEEP_SYSTEM_SERVICES
+    local service
+
+    echo "$@" | sed 's/#.*//' | tr ' ' '\n' | while read -r service; do
+        test -n "$service" || continue
+        case " $KEEP_SYSTEM_SERVICES " in
+            *" $service "*) ;;
+            *) echo "$service" ;;
+        esac
+    done
+}
+
+ltsp_service_units() {
+    # $1: a name as written in the lists
+    # stdout: the unit files that actually exist for it, or nothing
+    local name dir suffix found
+
+    name=$1
+    found=""
+    case "$name" in
+        *@)
+            # A template. It cannot be disabled without an instance, but it
+            # can be masked, which is what a list entry like getty@ means.
+            for dir in /usr/lib/systemd/system /etc/systemd/system; do
+                if [ -e "$dir/$name.service" ]; then
+                    echo "$name.service"
+                    return 0
+                fi
+            done
+            ;;
+        *.*)
+            # Already a unit name, timer or socket included.
+            for dir in /usr/lib/systemd/system /etc/systemd/system; do
+                if [ -e "$dir/$name" ]; then
+                    echo "$name"
+                    return 0
+                fi
+            done
+            ;;
+        *)
+            for suffix in service socket path timer; do
+                for dir in /usr/lib/systemd/system /etc/systemd/system; do
+                    if [ -e "$dir/$name.$suffix" ]; then
+                        echo "$name.$suffix"
+                        found="yes"
+                        break
+                    fi
+                done
+            done
+            # Nothing native, but a SysV script: systemctl redirects it to
+            # systemd-sysv-install, so pass the bare name through.
+            if [ -z "$found" ] && [ -x "/etc/init.d/$name" ]; then
+                echo "$name"
+            fi
+            ;;
+    esac
+}
+
+ltsp_vendor_enabled() {
+    # stdout: the unit names that a vendor .wants symlink enables, which
+    # disable cannot reach. Shell globs rather than find, because this runs on
+    # every boot of every client.
+    local link
+
+    for link in /usr/lib/systemd/system/*.wants/* /lib/systemd/system/*.wants/*; do
+        test -e "$link" || continue
+        echo "${link##*/}"
+    done
+}
+
+# $RM_SYSTEM_SERVICES are turned off for all clients
+ltsp_disable="$(ltsp_service_filter "$RM_SYSTEM_SERVICES $DISABLE_SYSTEM_SERVICES
+alsa-restore          # Restore sound card(s') mixer state(s)
+alsa-state            # Manage sound card(s') mixer state(s)
+alsa-store            # Save sound card(s') mixer state(s)
+apt-daily             # Daily apt activities
+apt-daily.timer       # Daily apt activities
+apt-daily-upgrade     # Daily apt upgrade and clean activities
+apt-daily-upgrade.timer  # Daily apt upgrade and clean activities
+dnsmasq               # A lightweight DHCP and caching DNS server
+dphys-swapfile        # Autogenerate and use a swap file
+epoptes               # Computer lab monitoring tool
+exim4                 # exim4 Mail Transport Agent
+fwupd-refresh.timer   # Refresh firmware metadata regularly
+grub-common           # Record successful boot for GRUB
+lightdm               # Light Display Manager
+logrotate.timer       # Daily rotation of log files
+lvm2-lvmetad          # LVM2 metadata daemon
+man-db.timer          # Daily man-db regeneration
+mdadm                 # MD monitoring daemon
+ModemManager          # Modem manager
+modemmanager          # Modem manager (older versions)
+nbd-client            # Network Block Device client
+nbd-server            # Network Block Device server
+packagekit            # PackageKit daemon
+plymouth-stop         # Hide the splash screen
+rfkill-store          # Store software rfkill state
+shared-folders        # Shared folders service
+ssh                   # OpenSSH server
+unattended-upgrades   # Check if unattended upgrades are being applied
+urandom               # Save and restore random seed between restarts
+ureadahead            # Read required files in advance
+ureadahead-other      # Read required files in advance for other mountpoints
+x2goserver            # X2Go daemon responsible for post-session clean-ups
+")"
+
+# What has to be impossible to start, not merely not started at boot
+ltsp_mask="$(ltsp_service_filter "$MASK_SYSTEM_SERVICES")"
+
+# $RM_THIN_SYSTEM_SERVICES are turned off for thin clients
+if ! boolean_is_true "$LTSP_FATCLIENT"; then
+    ltsp_disable="$ltsp_disable $(ltsp_service_filter "$RM_THIN_SYSTEM_SERVICES
+accounts-daemon       # Accounts Service
+acpid                 # ACPI daemon
+apparmor              # AppArmor initialization
+apport                # Automatic crash report generation
+atd                   # Deferred execution scheduler
+binfmt-support        # Support for extra binary formats
+brltty                # Braille terminal driver
+cgmanager             # Cgroup management daemon
+cups-browsed          # CUPS browse daemon
+kerneloops            # Collects and submits kernel crash signatures
+network-manager       # Network connection manager
+NetworkManager        # Network Manager
+NetworkManager-wait-online        # Network Manager Wait Online
+NetworkManager-script-dispatcher  # Network Manager Script Dispatcher Service
+polkitd               # Authenticate and authorize users to run privileged tasks
+teamviewerd           # TeamViewer remote control daemon
+ufw                   # Uncomplicated Firewall
+virtualbox            # VirtualBox Linux kernel module
+vboxweb               # VirtualBox Web Service
+whoopsie              # crash report submission daemon
+wpa_supplicant        # WPA supplicant
+")"
+
+    # All three of these are started on demand - cups over its socket, the
+    # other two over D-Bus - so disabling them would achieve nothing.
+    ltsp_mask="$ltsp_mask $(ltsp_service_filter "
+avahi-daemon          # mDNS/DNS-SD daemon
+bluetooth             # Bluetooth daemon
+cups                  # CUPS printing spooler and server
+")"
+
+    # For low RAM thin clients, turn off whatever is not needed for booting
+    ltsp_memtotal=$(awk '/^MemTotal:/ { print int($2/1024) }' /proc/meminfo)
+    RM_RAM_THRESHOLD=${RM_RAM_THRESHOLD:-200}
+    if [ "$ltsp_memtotal" -le "$RM_RAM_THRESHOLD" ]; then
+        ltsp_disable="$ltsp_disable $(ltsp_service_filter "$RM_LOW_RAM_SERVICES
+anacron               # anac(h)ronistic cron
+cron                  # Regular background program processing daemon
+rsyslog               # System logging daemon
+")"
+        # dbus is not on this list and must not be: systemd needs it.
+        ltsp_mask="$ltsp_mask $(ltsp_service_filter "
+getty@                # Getty on %I - every text console
+")"
+    fi
+fi
+
+# NFS services are pointless if the root did not come over NFS
+if ! grep -q nfs /etc/fstab; then
+    ltsp_disable="$ltsp_disable $(ltsp_service_filter "
+auth-rpcgss-module    # Kernel module supporting RPCSEC_GSS
+gssd                  # rpcsec_gss daemon
+idmapd                # NFSv4 id <-> name mapper
+nfs-blkmap            # pNFS block layout mapping daemon
+nfs-idmapd            # NFSv4 id <-> name mapper
+nfs-kernel-server     # Kernel NFS server support
+nfs-mountd            # NFS Mount Daemon
+nfs-server            # NFS server and services
+nfs-utils             # NFS server and client services
+portmap               # RPC portmapper replacement
+rpcbind               # RPC portmapper replacement
+rpc-gssd              # RPC security service for NFS client and server
+rpc-statd             # NSM status monitor
+rpc-statd-notify      # Notify NFS peers of a restart
+rpc-svcgssd           # RPC security service for NFS server
+statd                 # NSM status monitor
+")"
+fi
+
+# ---- do it ------------------------------------------------------------------
+ltsp_disable_units=""
+ltsp_disable_sysv=""
+for ltsp_svc in $ltsp_disable; do
+    for ltsp_unit in $(ltsp_service_units "$ltsp_svc"); do
+        case "$ltsp_unit" in
+            *.service|*.socket|*.path|*.timer)
+                ltsp_disable_units="$ltsp_disable_units $ltsp_unit" ;;
+            *)
+                ltsp_disable_sysv="$ltsp_disable_sysv $ltsp_unit" ;;
+        esac
+    done
+done
+
+# One call for all the units, not one per service: this is fifty names on a
+# boot that is meant to be short.
+if [ -n "$ltsp_disable_units" ]; then
+    systemctl disable --root=/ --no-reload --quiet $ltsp_disable_units ||
+        warn "could not disable some services"
+fi
+
+# The SysV leftovers go in a call of their own, and that is not tidiness.
+# systemctl hands a non-native name to systemd-sysv-install, which chroots and
+# runs update-rc.d; if that fails - no update-rc.d in the image, a read-only
+# /etc, anything - it takes the whole call down with it. Measured: one SysV
+# name in the batch and not a single native unit was disabled either.
+if [ -n "$ltsp_disable_sysv" ]; then
+    systemctl disable --root=/ --no-reload --quiet $ltsp_disable_sysv ||
+        warn "could not disable the SysV services:$ltsp_disable_sysv"
+fi
+
+# Anything a vendor symlink still enables cannot be disabled, only masked.
+# Named in the log, because a service that had to be masked is worth knowing
+# about - it is usually one the distribution considers part of booting.
+ltsp_vendor="$(ltsp_vendor_enabled)"
+for ltsp_unit in $ltsp_disable_units; do
+    case "
+$ltsp_vendor" in
+        *"
+$ltsp_unit"*)
+            log "ltsp: $ltsp_unit stays enabled by its vendor, masking it"
+            ltsp_mask="$ltsp_mask $ltsp_unit"
+            ;;
+    esac
+done
+
+ltsp_mask_units=""
+for ltsp_svc in $ltsp_mask; do
+    for ltsp_unit in $(ltsp_service_units "$ltsp_svc"); do
+        ltsp_mask_units="$ltsp_mask_units $ltsp_unit"
+    done
+done
+
+if [ -n "$ltsp_mask_units" ]; then
+    systemctl mask --root=/ --no-reload --quiet $ltsp_mask_units ||
+        warn "could not mask some services"
+fi
+
+unset ltsp_disable ltsp_mask ltsp_disable_units ltsp_mask_units ltsp_svc \
+      ltsp_unit ltsp_vendor ltsp_memtotal
+unset -f ltsp_service_filter ltsp_service_units ltsp_vendor_enabled 2>/dev/null || true

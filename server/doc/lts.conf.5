@@ -1096,11 +1096,33 @@ forever, which presents as a text console rather than as an error.
 Whether ldm reboots the client when it finds a newer image on the server. Off
 by default. Reasonable for an unattended fleet, startling for anyone sitting
 in front of one \(em the greeter simply disappears mid\-login.
-.IP "\fBRM_SYSTEM_SERVICES\fP" 4
-Services to remove from the running client, on top of the built\-in list. The
+.IP "\fBRM_SYSTEM_SERVICES\fP, \fBDISABLE_SYSTEM_SERVICES\fP" 4
+Services to turn off on the running client, on top of the built\-in list. The
 built\-in list covers what a diskless client has no use for \(em a mail
-transport, a DHCP server, an automatic updater. Removal happens in RAM; the
-image is untouched.
+transport, a DHCP server, an automatic updater. It happens in RAM; the image is
+untouched. The two names mean the same thing: \fBRM_\fR is this project's older
+spelling, \fBDISABLE_\fR is the one the LTSP successor uses.
+.IP "" 4
+Turning off means \fBsystemctl disable\fR, not deleting the unit file. A unit
+file carries more than the service \(em deleting one took its aliases with it,
+and that is how \fBsystemd\-logind\fR once disappeared along with its D\-Bus
+name, leaving Xorg unable to get a session and respawning forever. Disabling is
+reversible with one command and visible in \fBsystemctl is\-enabled\fR.
+.IP "" 4
+It is also weaker, and the difference matters: a disabled service still starts
+when something activates it \(em over a socket, over D\-Bus or as another
+unit's dependency. For those, see \fBMASK_SYSTEM_SERVICES\fR.
+.IP "\fBMASK_SYSTEM_SERVICES\fP" 4
+Services that must not start at all, by any route. \fBcups\fR,
+\fBavahi\-daemon\fR and \fBbluetooth\fR are masked on thin clients by default,
+because all three are started on demand and disabling them achieves nothing.
+.IP "" 4
+Masking covers every unit belonging to the name \(em \fBcups.socket\fR as well
+as \fBcups.service\fR \(em because masking the service alone leaves the socket
+to start it. A service that stays enabled by a symlink its own package ships
+cannot be disabled either; that case is masked automatically and named in the
+client's log, since it is usually something the distribution considers part of
+booting.
 .IP "\fBRM_THIN_SYSTEM_SERVICES\fP" 4
 The same, applied only to thin clients. Fat clients keep these, because they
 run a real desktop and need the machinery behind it.
@@ -1112,9 +1134,18 @@ difference between a session and a swap storm.
 The same idea one level up: autostart entries removed from the desktop
 session, and the exceptions to that.
 .IP "\fBDISABLE_GETTYS\fP" 4
-Whether to remove the text logins on terminals 2 to 6. True by default. Set it
-false to keep a console on a machine being worked on \(em and remember that a
-console on a thin client is a root prompt.
+Whether to take away the text logins on terminals 2 to 6. True by default. Set
+it false to keep a console on a machine being worked on \(em and remember that
+a console on a thin client is a root prompt, because the image has no other
+account and a getty asks for no password to reach it.
+.IP "" 4
+It is done with \fBNAutoVTs=1\fR and \fBReserveVT=0\fR in a
+\fIlogind.conf.d\fR drop\-in, which is the switch that exists: there is no
+\fItty2.service\fR on a systemd client. Gettys come from the
+\fBgetty@.service\fR template and logind starts one on demand per terminal, up
+to \fBNAutoVTs\fR. Until 6.3.23 this directive named \fItty2\fR to \fItty6\fR
+on the service removal list, where they matched no unit file, so the text
+logins stayed whatever it was set to.
 .IP "\fBDEFAULT_DISPLAY_MANAGER\fP" 4
 What goes into \fI/etc/X11/default\-display\-manager\fR, \fI/usr/sbin/ldm\fR
 unless set. An empty value leaves the file alone, which is what a fat client

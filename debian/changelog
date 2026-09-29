@@ -1,3 +1,45 @@
+ltsp (6.3.23-1) unstable; urgency=medium
+
+  * The client stops deleting unit files to turn services off. It now
+    disables them, and masks what disabling cannot reach. Deleting was
+    the wrong operation from the start: a unit file carries more than the
+    service, and removing one takes its aliases with it - which is how
+    systemd-logind once vanished together with its D-Bus name, leaving
+    Xorg unable to get a session and screen_session respawning it several
+    times a second. systemd's own answer is disable and mask, both
+    reversible, both visible in systemctl is-enabled.
+  * It happens before systemd starts - init-ltsp ends with exec
+    /sbin/init - so systemctl is used offline: --root=/ --no-reload.
+    Measured on trixie, and the measurements shaped the code: disable
+    removes enablement symlinks under /etc but leaves the ones a package
+    ships in /usr/lib, so those are masked instead and named in the log;
+    mask covers only the unit named, so cups.socket is masked alongside
+    cups.service; disabling a unit that does not exist prints six lines of
+    explanation and returns 0, so the list is filtered first.
+  * SysV services are disabled in a call of their own. systemctl hands a
+    non-native name to systemd-sysv-install, which chroots and runs
+    update-rc.d; when that fails it takes the whole call with it, and one
+    SysV name in the batch left every native unit enabled. The old hook's
+    own removal of /etc/rc?.d entries is gone: update-rc.d is the
+    supported way and it turns S01 into K01 properly.
+  * DISABLE_SYSTEM_SERVICES and MASK_SYSTEM_SERVICES join the older RM_
+    spellings, which keep working - a site's lts.conf is not rewritten
+    because a hook was. cups, avahi-daemon and bluetooth are masked on
+    thin clients by default, because all three start on demand and
+    disabling them achieves nothing.
+  * DISABLE_GETTYS finally does something. It named tty2 to tty6 on the
+    removal list, and there is no tty2.service on a systemd system -
+    gettys come from the getty@.service template, started on demand by
+    logind up to NAutoVTs. The five entries matched no file, so every
+    client kept its text logins while the configuration said otherwise.
+    Now it writes NAutoVTs=1 and ReserveVT=0 into a logind drop-in. On a
+    thin client a console is a root prompt, so this is not cosmetic.
+  * 50-disable-inittab-entries is gone with it: it edited /etc/inittab,
+    which Debian has not had since sysvinit, and checked for the file
+    first - so it did nothing at all, every boot, for years.
+
+ -- Marc-Andre Butz <ma@butz.online>  Tue, 29 Sep 2026 08:42:28 +0200
+
 ltsp (6.3.22-1) unstable; urgency=medium
 
   * ltsp-shadow lets support watch a client's screen and use its

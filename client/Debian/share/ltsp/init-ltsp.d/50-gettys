@@ -1,0 +1,50 @@
+# Text logins on the other virtual terminals: how many, if any.
+#
+# This replaces two things that did nothing on a systemd client.
+#
+# The first was a sed over /etc/inittab, which Debian has not had since
+# sysvinit was replaced - the hook checked for the file and then did nothing,
+# every boot, for years.
+#
+# The second was subtler and is worth writing down, because it looked like it
+# worked. The service removal list carried the names tty2, tty3, tty4, tty5
+# and tty6, and removal meant deleting /lib/systemd/system/$name.* - but there
+# is no tty2.service on a systemd system. Gettys come from the getty@.service
+# template, and logind starts one on demand when somebody switches to a
+# terminal, up to NAutoVTs. So the five entries matched no file, deleted
+# nothing, and every client kept its text logins while the configuration said
+# otherwise.
+#
+# NAutoVTs is the switch that exists. 1 leaves the getty on tty1 - where the
+# boot messages are, and where somebody debugging a client expects to look -
+# and stops logind from spawning any others. ReserveVT is set to 0 as well,
+# because it holds a terminal open for a getty independently of NAutoVTs, and
+# leaving it at the distribution's 6 would keep exactly the console this is
+# meant to remove.
+#
+# DISABLE_GETTYS=False leaves logind's own defaults in place.
+#
+# Worth remembering either way: a console on a thin client is a root prompt.
+# The image has no other account, and no password is asked for a getty that
+# logs in as root - which is why this defaults to on.
+
+if boolean_is_true "${DISABLE_GETTYS:-True}"; then
+    # For a client whose init is not systemd at all.
+    if [ -f /etc/inittab ]; then
+        sed -i '/getty.*tty[2-6]/d' /etc/inittab
+    fi
+
+    if [ -d /etc/systemd ]; then
+        mkdir -p /etc/systemd/logind.conf.d
+        if ! cat > /etc/systemd/logind.conf.d/10-ltsp-gettys.conf <<'EOF'
+# Written by ltsp at boot. Set DISABLE_GETTYS=False in lts.conf to keep the
+# distribution's defaults instead.
+[Login]
+NAutoVTs=1
+ReserveVT=0
+EOF
+        then
+            warn "could not write the logind drop-in for DISABLE_GETTYS"
+        fi
+    fi
+fi

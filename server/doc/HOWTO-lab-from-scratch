@@ -1381,8 +1381,8 @@ Sorted by how much time each cost, worst first.
   in /etc/network/interfaces if you want it to cover the very first
   address, not just later traffic.
 
-  Xorg respawning forever on the thin client. LTSP's
-  50-rm-system-services used to delete systemd-logind from the image.
+  Xorg respawning forever on the thin client. LTSP's service hook used
+  to delete systemd-logind's unit file from the running image.
   Xorg 21 needs a logind session to get its DRM and input file
   descriptors. Also check the colour depth: 16bpp is right for old
   hardware and rejected by modern KMS drivers ("failed to add fb -22"),
