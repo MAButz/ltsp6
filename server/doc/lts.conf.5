@@ -571,10 +571,42 @@ The server side reads \fB/etc/ltsp/ltsp\-server.conf\fR rather than this file:
 \fB\%SUPPORT_KEY\fR is the ssh key to log in with,
 \fB/root/.ssh/ltsp\-clients\fR by default, whose public half belongs in
 \fBSSH_AUTHORIZED_KEY_\fP\fIn\fP here; \fB\%SUPPORT_PORT\fR is the local port
-for the forward; \fB\%SUPPORT_RDP_CLIENT\fR is what to watch with, the first of
-\fBxfreerdp3\fR, \fBxfreerdp\fR, \fBwlfreerdp\fR or \fBremmina\fR that is
-installed; and \fB\%SUPPORT_LEASES\fR is the lease file the client list is read
-from, \fB/var/lib/misc/dnsmasq.leases\fR by default.
+for the forward; and \fB\%SUPPORT_RDP_CLIENT\fR is what to watch with, the
+first of \fBxfreerdp3\fR, \fBxfreerdp\fR, \fBwlfreerdp\fR or \fBremmina\fR that
+is installed.
+.PP
+\fB\%SUPPORT_LEASES\fR is where the list of clients comes from,
+\fB/var/lib/misc/dnsmasq.leases\fR by default. It takes more than one source,
+space separated, and a source may be on another machine, written as
+\fB[\fP\fIuser\fP\fB@]\fP\fIhost\fP\fB:\fP\fI/path\fR and read over ssh with
+\fB\%SUPPORT_LEASES_KEY\fR (the support key unless set):
+.IP "" 4
+.nf
+SUPPORT_LEASES="ltsp\-root:/var/lib/misc/dnsmasq.leases"
+.fi
+.IP "" 4
+That is not a nicety. The list comes from whoever answers DHCP, so as soon as
+a site puts a load balancer in front of several session servers and support is
+run somewhere other than the boot server, the file is simply not on this
+machine. Two sources cover a pair of boot servers that fail over to each
+other; a client that appears in both is listed once, by address. A source that
+cannot be read is named in the window with ssh's own words, and the other
+sources are still shown \(em "no clients" and "the boot server did not answer"
+send whoever reads it to different places.
+.PP
+\fBltsp\-support\fR also takes a \fIuser name\fR where it takes a client. It
+then asks the clients that have booted, in parallel, which of them has that
+user signed in, and offers it. Nothing is stored: the answer is read at the
+moment it is needed and is gone when the session ends.
+.IP "" 4
+It asks the clients and not the session servers on purpose. Behind a load
+balancer every session arrives from the balancer's address, so a session
+server knows which balancer a user came through, which is no help in finding a
+desk. The client knows, because \fBldm\fR starts the session there as
+\fBxfreerdp3 \fP\fI\&... \fP\fB/u:\fP\fIuser\fP\fB \fP\fI\&...\fR, and that
+command line is in its own process list. A name typed in that field is treated
+as a machine when the list or the resolver knows it, and as a person
+otherwise.
 .SH "SSH HOST KEYS"
 .PP
 .IP "\fBSSH_HOST_KEYS\fP" 4

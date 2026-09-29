@@ -1,3 +1,32 @@
+ltsp (6.3.25-1) unstable; urgency=medium
+
+  * ltsp-support reads its list of clients from more than one place, and
+    from other machines: SUPPORT_LEASES takes several sources, each either
+    a path or [user@]host:/path read over ssh. The list comes from
+    whoever answers DHCP, so the moment a site puts a load balancer in
+    front of several session servers and support is run somewhere other
+    than the boot server, the file is not on this machine at all and the
+    window was empty. Two sources also cover a pair of boot servers
+    failing over; a client in both is listed once, by address.
+  * A source that cannot be read is named with ssh's own words while the
+    others are still shown, and the reading happens off the main loop - an
+    ssh connection that has to time out would otherwise freeze the window
+    for a quarter of a minute with no way to type a client name.
+  * The same field now takes a user name. It asks the clients that have
+    booted, in parallel, which of them has that user signed in, and offers
+    it - nothing is stored, and the answer is gone when the session ends.
+    A name is treated as a machine when the client list or the resolver
+    knows it, and as a person otherwise.
+  * It asks the clients rather than the session servers deliberately.
+    Behind a load balancer every session arrives from the balancer's
+    address, so a session server knows which balancer somebody came
+    through, which does not find a desk. The client knows: ldm starts the
+    session there as xfreerdp3 ... /u:<user>, and that command line is in
+    its own process list. A domain spelling of the name, DOMAIN\\user or
+    user@domain, matches on the bare name.
+
+ -- Marc-Andre Butz <ma@butz.online>  Tue, 29 Sep 2026 22:06:15 +0200
+
 ltsp (6.3.24-1) unstable; urgency=medium
 
   * The xorg.conf the client assembles is now one X.Org will use. It wrote

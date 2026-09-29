@@ -5,6 +5,7 @@
 #     ltsp-support                 pick a client from the list
 #     ltsp-support ltsp29          straight to that one
 #     ltsp-support ltsp29 :8       and a particular display on it
+#     ltsp-support jsmith          the client that user is signed in at
 #
 # What it does, in order: open an ssh connection to the client with a port
 # forward, run ltsp-shadow(8) there, wait for the user to agree, and then open
@@ -24,16 +25,28 @@
 #     SUPPORT_PORT=3390                      local port for the forward
 #     SUPPORT_RDP_CLIENT=xfreerdp3           what to watch it with
 #     SUPPORT_LEASES=/var/lib/misc/dnsmasq.leases   where to find clients
+#     SUPPORT_LEASES_KEY=<path>              the key to read a remote one with
+#
+# SUPPORT_LEASES takes more than one source, space separated, and each may be
+# on another machine, written as [user@]host:/path. That is not a nicety: the
+# list of clients comes from whoever answers DHCP, and as soon as a site puts
+# a load balancer in front of several session servers, support is run
+# somewhere other than the boot server - and a lease file that is not on this
+# machine is simply not there. Two sources cover a pair of boot servers
+# failing over to each other; duplicates are dropped by address.
 #
 # The waiting is the part worth naming: the forwarded port only opens once
 # ltsp-shadow has been allowed to start the shadow server, so waiting for the
 # port is waiting for a person, not for a service.
 
+import concurrent.futures
 import os
 import re
 import shlex
+import socket
 import subprocess
 import sys
+import threading
 
 try:
     import gi
@@ -100,26 +113,169 @@ def setting(name, default, from_file):
     return from_file.get(name) or default
 
 
-def leases(path):
-    """Clients that have actually booted, from dnsmasq's lease file.
+def parse_leases(text):
+    """Clients that have actually booted, from a dnsmasq lease file.
 
     Columns: expiry, mac, address, name, client-id. A name of "*" means
     dnsmasq never learned one, and the address is then all there is.
     """
     found = []
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) < 4:
+            continue
+        mac, address, name = parts[1], parts[2], parts[3]
+        if name == "*":
+            name = ""
+        found.append((name, address, mac))
+    return found
+
+
+def read_lease_source(source, key):
+    """One source: a local path, or [user@]host:/path read over ssh.
+
+    Returns (rows, problem). A source that cannot be read is a problem worth
+    naming rather than an empty list: "no clients" and "the boot server did
+    not answer" send whoever reads it to different places.
+    """
+    if not source.startswith("/") and ":" in source:
+        target, _, path = source.partition(":")
+        if "@" not in target:
+            target = "root@" + target
+        command = [
+            "ssh", "-i", key,
+            # As in the forward below: a lookup that answers with an IPv6
+            # address on a network that does not carry it fails in a way that
+            # reads like the host is down.
+            "-o", "AddressFamily=inet",
+            "-o", "BatchMode=yes",
+            "-o", "ConnectTimeout=8",
+            target, "cat " + shlex.quote(path),
+        ]
+        # Host key checking stays at the system default here, unlike the
+        # connection to a client: a boot server is a fixed machine with a
+        # fingerprint worth knowing, not one that regenerates its keys every
+        # time it boots.
+        try:
+            done = subprocess.run(command, stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE, timeout=25,
+                                  universal_newlines=True)
+        except subprocess.TimeoutExpired:
+            return [], "%s: no answer" % target
+        except OSError as err:
+            return [], "%s: %s" % (target, err)
+        if done.returncode != 0:
+            first = (done.stderr or "").strip().splitlines()
+            return [], "%s: %s" % (target, first[0] if first else "ssh failed")
+        return parse_leases(done.stdout), None
+
     try:
-        with open(path, encoding="utf-8", errors="replace") as fh:
-            for line in fh:
-                parts = line.split()
-                if len(parts) < 4:
-                    continue
-                mac, address, name = parts[1], parts[2], parts[3]
-                if name == "*":
-                    name = ""
-                found.append((name, address, mac))
+        with open(source, encoding="utf-8", errors="replace") as fh:
+            return parse_leases(fh.read()), None
+    except OSError as err:
+        return [], "%s: %s" % (source, err.strerror or err)
+
+
+def leases(sources, key):
+    """Every source, merged. Returns (rows, problems).
+
+    Duplicates go by address: a client that renewed its lease on the second
+    boot server of a failover pair is one client, not two.
+    """
+    rows = []
+    problems = []
+    seen = set()
+
+    for source in sources:
+        got, problem = read_lease_source(source, key)
+        if problem:
+            problems.append(problem)
+        for row in got:
+            if row[1] in seen:
+                continue
+            seen.add(row[1])
+            rows.append(row)
+
+    rows.sort(key=lambda row: (row[0] == "", row[0], row[1]))
+    return rows, problems
+
+
+def looks_like_a_host(text):
+    """Is this a machine, or a person?
+
+    An address, or a name the resolver knows, is a machine. Anything else is
+    taken as a user name and looked for - and if that finds nothing, it is
+    tried as a machine anyway, because a client that booted before the lease
+    file was last written is still a client.
+    """
+    if re.match(r"^[0-9]{1,3}(\.[0-9]{1,3}){3}$", text):
+        return True
+    try:
+        socket.gethostbyname(text)
     except OSError:
-        return []
-    found.sort(key=lambda row: (row[0] == "", row[0], row[1]))
+        return False
+    return True
+
+
+def user_on_client(client, user, key):
+    """Is that user signed in at this client? Returns the client, or None.
+
+    Asked of the client itself, over the same ssh access remote support uses.
+    Not of the session servers: with a load balancer in front of them every
+    session arrives from the balancer's address, so what they know is which
+    balancer a user came through - which is no help in finding a desk. The
+    client knows, because ldm starts the session there as
+    "xfreerdp3 ... /u:<user> ... /v:<server>", and that command line is in its
+    own process list.
+    """
+    command = [
+        "ssh", "-i", key,
+        "-o", "AddressFamily=inet",
+        "-o", "StrictHostKeyChecking=no",
+        "-o", "UserKnownHostsFile=/dev/null",
+        "-o", "LogLevel=ERROR",
+        "-o", "BatchMode=yes",
+        "-o", "ConnectTimeout=4",
+        "root@%s" % client, "ps -eo args=",
+    ]
+    try:
+        # Eight seconds is the ceiling for a client that answers and then
+        # hangs; one that is simply switched off is done in four, by
+        # ConnectTimeout. The search waits for the slowest of them, and the
+        # person who called is on the telephone while it does.
+        done = subprocess.run(command, stdout=subprocess.PIPE,
+                              stderr=subprocess.DEVNULL, timeout=8,
+                              universal_newlines=True)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if done.returncode != 0:
+        return None
+
+    for found in re.findall(r"/u:(\S+)", done.stdout or ""):
+        # A domain may come along as DOMAIN\\user or user@domain; the name is
+        # what a support call says out loud.
+        bare = found.split("\\")[-1].split("@")[0]
+        if bare.lower() == user.lower():
+            return client
+    return None
+
+
+def find_user(user, clients, key, workers=16):
+    """Which of these clients has that user signed in.
+
+    In parallel, because a room is thirty clients and half of them may be
+    switched off - one after another, that is a minute of waiting for an
+    answer somebody is on the telephone for.
+    """
+    found = []
+    if not clients:
+        return found
+
+    with concurrent.futures.ThreadPoolExecutor(
+            max_workers=min(workers, len(clients))) as pool:
+        for answer in pool.map(lambda c: user_on_client(c, user, key), clients):
+            if answer:
+                found.append(answer)
     return found
 
 
@@ -157,8 +313,12 @@ class Support(Gtk.Window):
         values = conf_values(CONF)
         self.key = setting("SUPPORT_KEY", "/root/.ssh/ltsp-clients", values)
         self.port = int(setting("SUPPORT_PORT", "3390", values))
-        self.leases_path = setting("SUPPORT_LEASES",
-                                   "/var/lib/misc/dnsmasq.leases", values)
+        self.leases_sources = setting(
+            "SUPPORT_LEASES", "/var/lib/misc/dnsmasq.leases", values).split()
+        self.leases_key = setting("SUPPORT_LEASES_KEY", self.key, values)
+        self.reading = False
+        self.searching = False
+        self.message = None
         self.viewer = setting("SUPPORT_RDP_CLIENT", "", values)
         if not self.viewer:
             for candidate in VIEWERS:
@@ -212,8 +372,10 @@ class Support(Gtk.Window):
         heading.get_style_context().add_class("ltsp-support-heading")
         box.pack_start(heading, False, False, 0)
 
-        sub = Gtk.Label(xalign=0, label="The user there is asked first, and a "
-                        "marker stays on their screen while you watch.")
+        sub = Gtk.Label(xalign=0, label="Pick a client, or type a user name and "
+                        "let it find the one they are signed in at. The user "
+                        "there is asked first, and a marker stays on their "
+                        "screen while you watch.")
         sub.get_style_context().add_class("ltsp-support-dim")
         sub.set_line_wrap(True)
         box.pack_start(sub, False, False, 0)
@@ -244,7 +406,7 @@ class Support(Gtk.Window):
 
         entries = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         self.manual = Gtk.Entry()
-        self.manual.set_placeholder_text("or a name or address")
+        self.manual.set_placeholder_text("client, address, or user name")
         self.manual.connect("activate", self.on_connect)
         entries.pack_start(self.manual, True, True, 0)
 
@@ -295,21 +457,49 @@ class Support(Gtk.Window):
 
         self.busy_button = Gtk.Button(label="Cancel")
         self.busy_button.set_halign(Gtk.Align.CENTER)
-        self.busy_button.connect("clicked", lambda _b: self.stop("Cancelled."))
+        self.busy_button.connect("clicked", lambda _b: self.cancel())
         box.pack_start(self.busy_button, False, False, 0)
         return box
 
     def refresh(self, _button):
+        """Read the sources, off the main loop.
+
+        A source on another machine is an ssh connection, and one that has to
+        time out takes a quarter of a minute. Done here it would take the
+        window with it - frozen, undrawn, with no way to type a client name
+        while it waits.
+        """
+        if self.reading:
+            return
+        self.reading = True
+        if not self.message:
+            self.note.set_text("Reading the client list...")
+
+        def work():
+            rows, problems = leases(self.leases_sources, self.leases_key)
+            GLib.idle_add(self.refreshed, rows, problems)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def refreshed(self, rows, problems):
+        self.reading = False
         self.store.clear()
-        rows = leases(self.leases_path)
         for name, address, mac in rows:
             self.store.append([name or "(no name)", address, mac])
-        if not rows:
+
+        if self.message:
+            # Why the last session ended outranks anything about the list.
+            self.note.set_text(self.message)
+        elif problems:
+            self.note.set_text("\n".join(problems)
+                               + "\n\nName a client below instead.")
+        elif not rows:
             self.note.set_text(
                 "No clients in %s - name one below instead."
-                % self.leases_path)
+                % " ".join(self.leases_sources))
         else:
             self.note.set_text("")
+        return False
 
     def complain(self, text):
         self.note.set_text(text)
@@ -326,16 +516,93 @@ class Support(Gtk.Window):
         # resolver may well not.
         return address or name
 
+    def known_client(self, text):
+        """Is this one of the clients in the list, by name or by address?"""
+        lowered = text.lower()
+        for row in self.store:
+            if lowered in (row[0].lower(), row[1].lower()):
+                return row[1] or row[0]
+        return None
+
     def on_connect(self, _widget):
-        client = self.chosen_client()
-        if not client:
-            self.complain("Pick a client from the list, or type a name.")
-            return
+        typed = self.manual.get_text().strip()
         display = self.display_entry.get_text().strip()
         if display and not valid_display(display):
             self.complain("'%s' is not a display; use :7." % display)
             return
-        self.start(client, display)
+
+        if not typed:
+            client = self.chosen_client()
+            if not client:
+                self.complain("Pick a client from the list, or type a name.")
+                return
+            self.start(client, display)
+            return
+
+        # Typed: a machine if the list or the resolver knows it, otherwise a
+        # person to look for.
+        known = self.known_client(typed)
+        if known:
+            self.start(known, display)
+            return
+        if looks_like_a_host(typed):
+            self.start(typed, display)
+            return
+
+        self.search(typed, display)
+
+    def search(self, user, display):
+        """Ask the booted clients which one has that user signed in."""
+        clients = [row[1] or row[0] for row in self.store]
+        if not clients:
+            # Nothing to ask. Treat it as a machine name, which is what it
+            # would have been before this could search at all.
+            self.start(user, display)
+            return
+
+        self.searching = True
+        self.busy_heading.set_text("Looking for %s" % user)
+        self.busy_text.set_text(
+            "Asking the %d clients that have booted.\n"
+            "The session servers cannot answer this: behind a load balancer "
+            "every session arrives from the balancer's address." % len(clients))
+        self.busy_button.set_label("Cancel")
+        self.spinner.start()
+        self.stack.set_visible_child_name("busy")
+
+        def work():
+            found = find_user(user, clients, self.key)
+            GLib.idle_add(self.searched, user, display, found)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def searched(self, user, display, found):
+        if not self.searching:
+            return False
+        self.searching = False
+        self.spinner.stop()
+
+        if len(found) == 1:
+            self.stack.set_visible_child_name("pick")
+            self.message = None
+            self.note.set_text("%s is signed in at %s." % (user, found[0]))
+            self.start(found[0], display)
+            return False
+
+        self.stack.set_visible_child_name("pick")
+        if len(found) > 1:
+            self.message = ("%s is signed in at %s. Pick the one you want."
+                            % (user, ", ".join(found)))
+            self.note.set_text(self.message)
+            return False
+
+        # Nobody by that name. It may still have been a machine whose lease
+        # has gone - that is how this field worked before, so let it.
+        self.message = ("No client found where %s is signed in - trying it as "
+                        "a machine name." % user)
+        self.note.set_text(self.message)
+        self.start(user, display)
+        return False
 
     def start(self, client, display):
         if not os.access(self.key, os.R_OK) or not self.viewer:
@@ -350,6 +617,7 @@ class Support(Gtk.Window):
         self.client = client
         self.display = display
         self.waited = 0
+        self.message = None
 
         command = [
             "ssh", "-i", self.key,
@@ -449,6 +717,17 @@ class Support(Gtk.Window):
             "ends it." % self.viewer)
         self.busy_button.set_label("End session")
 
+    def cancel(self):
+        """The one Cancel button, whichever wait it is sitting under."""
+        if self.searching:
+            self.searching = False
+            self.spinner.stop()
+            self.stack.set_visible_child_name("pick")
+            self.message = "Search cancelled."
+            self.note.set_text(self.message)
+            return
+        self.stop("Cancelled.")
+
     def stop(self, message):
         if self.timer is not None:
             GLib.source_remove(self.timer)
@@ -460,11 +739,13 @@ class Support(Gtk.Window):
         self.ssh = None
         self.spinner.stop()
         self.stack.set_visible_child_name("pick")
-        # Refresh first: it writes to the same label, and the reason this
-        # session ended matters more than the state of the lease file.
-        self.refresh(None)
+        # Set first, read second: the refresh below finishes later, off the
+        # main loop, and it must not overwrite the reason this session ended
+        # when it does.
+        self.message = message
         if message:
             self.note.set_text(message)
+        self.refresh(None)
 
     def on_close(self, *_args):
         self.stop(None)
