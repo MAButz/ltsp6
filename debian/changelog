@@ -34,6 +34,13 @@ ltsp (6.3.23-1) unstable; urgency=medium
     client kept its text logins while the configuration said otherwise.
     Now it writes NAutoVTs=1 and ReserveVT=0 into a logind drop-in. On a
     thin client a console is a root prompt, so this is not cosmetic.
+  * lts.conf(5) documents RDP_PREAUTH_CHANGE_PASSWORD, which ldm 3.4.8-1
+    adds: an expired domain password can be changed at the greeter instead
+    of only being reported. A KDC still issues a ticket for kadmin/changepw
+    when the password has expired, and that is what makes it possible from
+    a thin client at all. The section also says what a KDC that does not
+    answer does - it stops the login, and says the password is not the
+    problem.
   * 50-disable-inittab-entries is gone with it: it edited /etc/inittab,
     which Debian has not had since sysvinit, and checked for the file
     first - so it did nothing at all, every boot, for years.

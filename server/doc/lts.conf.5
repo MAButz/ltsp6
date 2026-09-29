@@ -80,9 +80,44 @@ working server because a check could not run.
 It does not make the client a domain member: there is no machine account and
 no keytab, only the credentials the user has just typed, and the ticket is
 discarded as soon as it arrives.
+.IP "\fBRDP_PREAUTH_CHANGE_PASSWORD\fP" 4
+Whether an expired domain password may be changed at the greeter. On by
+default where the Kerberos check runs, because being told that a password has
+expired on a machine that offers no way to change it is the worse half of the
+message \(em and a thin client has no other way: it is not a domain member,
+and the session server would only repeat the refusal.
+.IP "" 4
+It works because a KDC still issues a ticket for \fBkadmin/changepw\fR when
+the password has expired, which is the one thing an expired password may do.
+ldm asks for the new password twice, sets it over the protocol from RFC 3244,
+and then signs in with it, so the session starts without a second login. The
+rules \(em length, complexity, history, minimum age \(em are the domain's, and
+when the controller refuses, its own wording is what the user sees.
+.IP "" 4
+The same answer covers an account that never had a password of the user's own:
+an administrator sets an initial one and marks it to be replaced at first
+sign\-in \(em \fBpwdLastSet=0\fR in Active Directory, the
+\fBREQUIRES_PWCHANGE\fR attribute on an MIT KDC. Such an account has no expiry
+date at all and the KDC still answers \fBKDC_ERR_KEY_EXPIRED\fR, so the two
+cases cannot be told apart here and the greeter says a password must be changed
+rather than that it expired. The domain clears the mark as part of the change,
+and the next sign\-in asks nothing.
+.IP "" 4
+Changing needs the controller holding the PDC emulator role, so a site with a
+second controller can still sign in when the first one is down but cannot
+change passwords. Set this to \fBFalse\fR where passwords are changed
+elsewhere on purpose.
+.IP "" 4
+A KDC that does not answer at all is a different case and stops the login \(em
+see \fBRDP_PREAUTH\fR. Nothing was checked by anyone, and starting a session
+with unchecked credentials leads straight into the xrdp dialog this whole
+check exists to avoid. The greeter says that the authentication server cannot
+be reached and that the password is not the problem, which is what the person
+at the screen can usefully report.
 .IP "\fBRDP_PREAUTH_REALM\fP" 4
 Realm for the Kerberos variant. Defaults to the system default realm from
-krb5.conf.
+krb5.conf. \fBKRB5_REALM\fR and \fBKRB5_KDC_\fP\fIn\fP write that krb5.conf in
+the first place \(em see \fBKERBEROS\fR.
 .IP "\fBRDP_PREAUTH=ssh\fP" 4
 Asks sshd on the session host whether it accepts the credentials. That tests
 more than the password: it runs the PAM stack of the machine which will host
