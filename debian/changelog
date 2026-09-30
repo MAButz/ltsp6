@@ -17,6 +17,13 @@ ltsp (6.3.25-1) unstable; urgency=medium
     it - nothing is stored, and the answer is gone when the session ends.
     A name is treated as a machine when the client list or the resolver
     knows it, and as a person otherwise.
+  * lts.conf(5), section KERBEROS, says three things it left to be worked
+    out: that an address beats a hostname there, because naming the
+    controllers is what takes DNS out of the path and a name puts it back;
+    that TIMESERVER belongs beside those settings, since a clock more than
+    five minutes out is refused and reads to the user like a wrong
+    password; and how to check what a client made of it - /etc/krb5.conf on
+    the running client, and what the log says when the realm never arrived.
   * It asks the clients rather than the session servers deliberately.
     Behind a load balancer every session arrives from the balancer's
     address, so a session server knows which balancer somebody came

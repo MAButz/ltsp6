@@ -331,9 +331,33 @@ so the domain can be named, moved or corrected without rebuilding an image.
 .IP "" 4
 .nf
 KRB5_REALM="EXAMPLE.INTERNAL"
-KRB5_KDC_0="dc1.example.internal"
-KRB5_KDC_1="dc2.example.internal"
+KRB5_KDC_0="10.0.20.10"
+KRB5_KDC_1="10.0.20.11"
+TIMESERVER="10.0.20.10"
 .fi
+.IP "" 4
+\fBAddresses rather than names\fR, deliberately. Naming the controllers
+switches the DNS lookup off \(em that is what makes a second controller
+useful when the first one is gone \(em and a hostname puts DNS back into the
+path it was just taken out of. Nothing is lost by it: the entry is only where
+to send the request, and what is checked is the realm and the principal, not
+the name of the machine that answered. Names are fine where DNS does not
+depend on the controllers, and they save editing this file when a controller
+moves.
+.IP "" 4
+\fBSet the clock too.\fR Kerberos refuses a request whose clock differs by
+more than five minutes, and the greeter can only report that as what it is
+\(em which reads, to the person typing, exactly like a wrong password. In a
+domain the controller is usually the time source as well, so \fBTIMESERVER\fR
+belongs beside these settings; see \fBTIME\fR. Without it the client takes
+whatever DHCP offered, and if that is nothing, whatever the hardware clock
+says.
+.IP "" 4
+To see what a client made of all this, look at \fI/etc/krb5.conf\fR on the
+running client: it is written at boot and says at the top where it came from.
+An empty or missing file means \fBKRB5_REALM\fR did not reach this client, and
+the client's log then carries "pre\-auth skipped: no Kerberos realm
+configured".
 .IP "\fBKRB5_REALM\fP" 4
 The realm, in capitals as Kerberos writes it. Nothing here happens without it,
 and whatever \fIkrb5.conf\fR the image carries is then left alone.
@@ -1299,6 +1323,11 @@ Where the clock comes from. An address or a name, \fBauto\fR for the boot
 server, or \fBnone\fR to do without. It configures
 \fBsystemd\-timesyncd\fP(8), and \fBntpdate\fR as well where that is
 installed.
+.IP "" 4
+It stops being cosmetic where \fBRDP_PREAUTH\fR asks a KDC: Kerberos refuses a
+request whose clock is more than five minutes out, and the user reads that as
+a password that will not work. In a domain the controller is usually the time
+source as well, so point this at it \(em see \fBKERBEROS\fR.
 .IP "" 4
 Prefer an address. A name has to be resolved, and the resolver on a client
 segment usually cannot: the glibc default is five seconds, twice, and
