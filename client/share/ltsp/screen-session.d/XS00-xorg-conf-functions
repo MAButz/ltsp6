@@ -108,10 +108,16 @@ write_layout() {
     num=${1:-0}
 
     # A ServerLayout, so the screen above is the one X.org uses rather than
-    # one it invents. Written whenever there is a screen to name; without it
-    # the automatic layout wins and everything above is decoration.
-    [ -z "$screen_hacks" ] && [ -z "$monitor_hacks" ] && [ -z "$display_hacks" ] &&
-        [ -z "$device_hacks" ] && return 0
+    # one it invents - but only where a driver was named, which is the case it
+    # was written for.
+    #
+    # Not for a configuration that only sets monitor timings. There the Screen
+    # section has no Device for X.org to match a probed card against, and
+    # naming that screen in a layout invites exactly the failure this was
+    # meant to cure, in a case that worked before it: X_HORZSYNC and
+    # X_VERTREFRESH alone go on producing what they always produced, a Screen
+    # and a Monitor that X.org folds into its own layout.
+    [ -z "$device_hacks" ] && return 0
     echo "Section \"ServerLayout\""
     echo "    Identifier \"Layout${num}\""
     echo "    Screen \"Screen${num}\""

@@ -1,3 +1,16 @@
+ltsp (6.3.27-1) unstable; urgency=medium
+
+  * The ServerLayout 6.3.24-1 added is written only where a driver was
+    named, which is the case it was written for. A configuration that only
+    sets monitor timings - X_HORZSYNC and X_VERTREFRESH, as a site does for
+    an old screen - was getting one too, and that Screen section has no
+    Device for X.org to match a probed card against. Naming it in a layout
+    invites exactly the failure the change was meant to cure, in a case
+    that worked before it. Found while reading a production lts.conf that
+    has such a section, not from a report.
+
+ -- Marc-Andre Butz <ma@butz.online>  Wed, 07 Oct 2026 10:29:39 +0200
+
 ltsp (6.3.26-1) unstable; urgency=medium
 
   * lts.conf(5) documents RDP3_OPTIONS and RDP2_OPTIONS, which ldm
