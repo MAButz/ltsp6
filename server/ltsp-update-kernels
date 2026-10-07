@@ -146,7 +146,7 @@ link_kernel_flavors() {
 
     # Those defaults should work on debian-based distros, but shouldn't hurt
     # elsewhere because they wouldn't match actual files and they'd be ignored.
-    KERNEL_NAMES=${KERNEL_NAMES:-'s/\(vmlinu[xz]-\)\([^-]*-[^-]*-\)\(.*\)/& \1 \2 \3/p'}
+    KERNEL_NAMES=${KERNEL_NAMES:-'s/\(vmlinu[xz]-\)\(.*-\)\([^-]*\)$/& \1 \2 \3/p'}
     INITRD_NAME=${INITRD_NAME:-'s/vmlinu[xz]/initrd.img/p'}
 
     last_flavor=

@@ -1,3 +1,32 @@
+ltsp (6.3.28-1) unstable; urgency=medium
+
+  * The PXE menu names the kernel by its symlink. The main entries now
+    point at vmlinuz and initrd.img - which the kernel package maintains in
+    /boot and ltsp-update-kernels copies into the TFTP tree - instead of at
+    the version they found when the menu was written. A new kernel then
+    needs no new menu. A pinned version did: the menu kept naming a kernel
+    that cleanup_kernels removed once its modules left the image, and a
+    client got a TFTP error, or booted a kernel the image has no modules
+    for. Where /boot has no such symlinks the version is still written, as
+    before.
+  * Kernels are recognised by their current Debian names. The filter
+    expected vmlinuz-<version>-<abi>-<flavour>, the form Debian used until
+    it moved the ABI into the version: 7.2.6+deb13-amd64 and
+    6.12.9+bpo-amd64 have one dash where the filter wanted two, so no
+    trixie kernel was recognised at all. The per-version submenu stayed
+    empty, the vmlinuz-<flavour> links were never renewed and pointed at
+    deleted files, and 50-vmlinuz could not create the /boot links it
+    exists to create. The last dash now separates the flavour, which also
+    covers the old form and Proxmox kernels.
+  * ltsp-client-core recommends pxelinux and syslinux-common. Without
+    them in the chroot update-kernels writes no menu at all and says so in
+    one line nobody reads during a build, and the TFTP tree keeps whatever
+    menu an older image left behind - with the kernel names of that older
+    image. Found on a production clone, where a trixie image went out with
+    a menu from June 2025.
+
+ -- Marc-Andre Butz <ma@butz.online>  Wed, 07 Oct 2026 13:38:06 +0200
+
 ltsp (6.3.27-1) unstable; urgency=medium
 
   * The ServerLayout 6.3.24-1 added is written only where a driver was

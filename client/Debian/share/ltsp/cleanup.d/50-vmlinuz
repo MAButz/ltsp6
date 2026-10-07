@@ -9,7 +9,7 @@ fi
 if [ -f /etc/ltsp/update-kernels.conf ]; then
     . /etc/ltsp/update-kernels.conf
 fi
-KERNEL_NAMES=${KERNEL_NAMES:-'s/\(vmlinu[xz]-\)\([^-]*-[^-]*-\)\(.*\)/& \1 \2 \3/p'}
+KERNEL_NAMES=${KERNEL_NAMES:-'s/\(vmlinu[xz]-\)\(.*-\)\([^-]*\)$/& \1 \2 \3/p'}
 INITRD_NAME=${INITRD_NAME:-'s/vmlinu[xz]/initrd.img/p'}
 
 read file name version flavor <<EOF
