@@ -41,6 +41,58 @@ Passed through to xfreerdp verbatim. \fB/dynamic\-resolution\fR follows the
 client window size, \fB/sound\fR and \fB/clipboard\fR redirect those channels,
 \fB/cert:ignore\fR accepts the server certificate unconditionally \(em
 acceptable on a closed segment, a decision worth revisiting elsewhere.
+.IP "\fBRDP3_OPTIONS\fP, \fBRDP2_OPTIONS\fP" 4
+The same thing, read only by a client that is about to run that major version
+of FreeRDP. For a fleet halfway through a migration, where some clients still
+have FreeRDP 2 and others already have 3.
+.IP "" 4
+It is needed because the two do not take the same spellings, and FreeRDP 3
+rejects what it does not know by printing its entire help and exiting
+\fIbefore\fR it connects. On a client that looks like the session ending the
+instant the greeter disappears, with nothing said anywhere the user can see.
+Measured against FreeRDP 3.15.0, these are refused:
+.IP "" 4
+.nf
+/cert\-ignore          now  /cert:ignore
+/kbd:0x00000407       now  /kbd:layout:0x407
+/kbd:German, /kbd:de  now  /kbd:layout:0x407
+\-sec\-nla              now  /sec:nla:off  (or /sec:rdp)
+/gfx\-h264:avc420      now  /gfx:avc420
+/tls\-seclevel:0       now  /tls:seclevel:0
++async\-input          gone, drop it
++glyph\-cache          gone, drop it
+.fi
+.IP "" 4
+Everything else a client of that generation is likely to carry still works:
+\fB+clipboard\fR, \fB/sound\fR and its \fBsys:\fR forms, \fB/microphone\fR,
+\fB/drive:\fR, \fB+home\-drive\fR, \fB/printer\fR, \fB/f\fR, \fB/multimon\fR,
+\fB/span\fR, \fB/size:\fR, \fB/scale:\fR, \fB/bpp:\fR, \fB/gdi:\fR,
+\fB/dynamic\-resolution\fR, \fB/rfx\fR, \fB/nsc\fR, \fB/network:\fR,
+\fB/sec:\fR, \fB+compression\fR, \fB+auto\-reconnect\fR, \fB/timeout:\fR,
+\fB+aero\fR, \fB+fonts\fR, \fB+themes\fR, \fB+wallpaper\fR,
+\fB+window\-drag\fR, \fB+menu\-anims\fR \(em and, for what it is worth,
+\fB+async\-update\fR and \fB+async\-channels\fR, which survived while
+\fB+async\-input\fR did not.
+.IP "" 4
+The lookup order, for screen 07 on a client that found FreeRDP 3:
+.IP "" 4
+.nf
+RDP3_OPTIONS_07     that version, that screen
+RDP3_OPTIONS        that version
+RDP_OPTIONS_07      that screen, whatever the version
+RDP_OPTIONS         everybody
+.fi
+.IP "" 4
+The first one that exists wins outright \(em it replaces the line rather than
+adding to it, because a line that still carried \fB/cert\-ignore\fR would
+defeat the purpose. A client decides for itself from the binary it found, so
+which machines are which does not have to be known in advance, and the
+\fBRDP_OPTIONS\fR line the old fleet depends on is never touched. Which
+variable was used is written to the client's log, because the first question
+when a session dies at once is which line it started with.
+.IP "" 4
+Needs ldm 3.4.10\-1. An older ldm ignores these and reads \fBRDP_OPTIONS\fR,
+which is the behaviour this replaces, not a failure.
 .IP "\fBRDP_PREAUTH\fP" 4
 Check the credentials \fIbefore\fR starting the RDP client. Off by default;
 \fBFalse\fR or unset means no check at all, as before this existed.

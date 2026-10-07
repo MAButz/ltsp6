@@ -1,3 +1,16 @@
+ltsp (6.3.26-1) unstable; urgency=medium
+
+  * lts.conf(5) documents RDP3_OPTIONS and RDP2_OPTIONS, which ldm
+    3.4.10-1 adds: options read only by a client about to run that major
+    version of FreeRDP, for a fleet halfway through a migration. With the
+    spellings FreeRDP 3 refuses, measured against 3.15.0 rather than
+    remembered - /cert-ignore, /kbd:0x00000407, -sec-nla, /gfx-h264:,
+    /tls-seclevel:, +async-input, +glyph-cache - and their replacements,
+    plus the long list of options that did survive, so the common case is
+    one line nobody has to touch.
+
+ -- Marc-Andre Butz <ma@butz.online>  Wed, 07 Oct 2026 09:27:17 +0200
+
 ltsp (6.3.25-1) unstable; urgency=medium
 
   * ltsp-support reads its list of clients from more than one place, and
