@@ -5,35 +5,35 @@ Origin: ltsp6
 Label: ltsp6 Github
 Suite: stable
 Codename: trixie
-Date: Wed, 30 Sep 2026 14:46:08 UTC
+Date: Wed, 07 Oct 2026 07:43:16 UTC
 Architectures: amd64
 Components: main
 Description: Debian 13 (trixie) ltsp6 repository
 MD5Sum:
- 06cf92feecace98660606956f500d8f5 5669 main/binary-amd64/Packages
- 537e5d9dc4b5e8fe577e90968369668a 2714 main/binary-amd64/Packages.gz
+ b6943b982d119da17970247ffa8bde63 5671 main/binary-amd64/Packages
+ bb5689e3bc1c8ac8160c9906048e6429 2717 main/binary-amd64/Packages.gz
  400a893451d681e4ca2b02c65163487b 135 main/binary-amd64/Release
 SHA1:
- 407e0d2c5bb16692091ab76cd2990684bf9c4a2d 5669 main/binary-amd64/Packages
- 0060fd7aa968dfc6824ce1c200dc43e231c3d47b 2714 main/binary-amd64/Packages.gz
+ 23033c1a407b499e063930e27b7bcebbf87c2789 5671 main/binary-amd64/Packages
+ 55017aa4a49da43a3765823b48a7d2746aa3f9c0 2717 main/binary-amd64/Packages.gz
  b20840de0f3e68ef35d996380b80f40d9958fefc 135 main/binary-amd64/Release
 SHA256:
- d1184524011c21db8159f5370d920a709fdc6e4610c3b36869d9b6f408f57522 5669 main/binary-amd64/Packages
- 583b1c804c759d5a2d79fe3c46db062cc7e9b5f99335d019612c038b0138ade0 2714 main/binary-amd64/Packages.gz
+ d6150e0719c9884f6a0b2c122ceb8385a1707e2e1911d5b5ab9b753a5b939909 5671 main/binary-amd64/Packages
+ de3640a8076887c2a9bc387f5d119c555d8c44d86a47e730666401640fa91f37 2717 main/binary-amd64/Packages.gz
  43d63f08e8ad502997a7ee8f683fd1926f6f872093538ee93a96c4c00ca5684e 135 main/binary-amd64/Release
 -----BEGIN PGP SIGNATURE-----
 
-iQIzBAEBCgAdFiEET/G5DE/MBWAVAAUTB2byPyDuP8QFAmq9ILAACgkQB2byPyDu
-P8QorBAAgWmlzH+zdKlEo7F4M1qfIHbzCnDqEJcCEY/JV9/M8ZUZfCzOKSylVBH+
-JT9Zshnys3gWHNS63wGO39/pUcp0v2VmBEERSZnUlO/Hfob4pAkAJbhveLEap2yc
-QWCcUbgvycFhiujaRvgJiW2mWKCe07Q4drOEdO25be831AZlds/wBtI1rpIEWbjg
-O2iIeGvT5T2547CRUG1rTUF5hHjP9LRBQEZhAOMVatof6fh+qfT6Ww4pumk61o2c
-hL6ZwlZomfYZv8Ofwa31G6gqrrygo8Z+82OXemc2tVgpKGj/22GxwyhPjBuENgDP
-F+UHaX3LGY+xbTEbMeFzaYjvQLGfnS/pSNy9J5yaIL5XTigCmBROSvOW1EnQga7X
-9vHazHnqIshI0q7beewOGCFzvMo5vR5LX8lvLNt0S8m+GP/fzHpK3Lm+eKr/ZuKu
-6jDRylIJlHE49qffAULop82cdwlRGFWuewI9nxtshQTuQkrRRCYMv6V24RF035CP
-3Nm5mVovJdp2rSqhc3wNoIWKQ0MCELyxl/3nIv3THMOX9IOUCCdiI5/45wgMQ3wX
-lwCSAC+r7qLJzYRKQACuPdnkwxL2G+OZF6LytkNzRv3QubLdfXPuCjfrxrGs8HaG
-2rmrta3QEAcOfQQb6lzSfDT8QuIbr9H1XwWHo3oFpPO1AJRdvmI=
-=Ap2p
+iQIzBAEBCgAdFiEET/G5DE/MBWAVAAUTB2byPyDuP8QFAmrF+BQACgkQB2byPyDu
+P8TaQg//VKz+1qxckDnlBvA339dgkN8zrSTWhl9l3FTK6FyvlwKJOphf7T6q4Coj
+yexVWSjfCtB+GnUUNkHIchlFb20HJPVctoZkIOE1b8Qkh5BL1TmBtg87j1W8vLHR
+mOKKYJpxm1Eo/X4kj+J6WnXu/rMXBEyzgowxuhdDkzZab7DtSxbY9ya5klSqbopX
+UzC6CtD8KLCHt7s1qbpDvf7jefmQhWb6qvShLjCJp19TS/0OKDiWOuOu4MU0bRsd
+KMsBp146iBvTczbwaaFAQHgylvn1LzjyDacaGyVQy73Mq1bQ/M/G0Nl09T1wjlCO
+WMT5jBN0G7q9lePJR3OGPE6eNDpDbkehoXgMCm3SBxiAKZO3vj1dDlJxA4juqm1b
+zAfShGTgyUe1BrrkZCgVmpz9XCKgc6xchpD2EEOcKsQu6HCoMLM6yfK8WyxmaBzU
+tkGbCxnEvVv8f8ujxtEjcdA0dq3RbLYcO/SYvkBXTSouXByIqB7HkaSl3BxKmlM+
+l0mq8RfZIV+Ausaknukf2PPo/5lafOBm5WFkf5HtZyFuFgb7sCuo8t84gtuFPRZv
+EguQVTix1xeXxiGKcF6MPVHYN0u11C1ap7bENNLcUIA+rX3fV6CMu3oALTRlF0ar
+dsz/cqjbocZccP7cevKIoN4fp/tkQ6lGyr2SCzldIHIkMvZgn1g=
+=RnbG
 -----END PGP SIGNATURE-----
