@@ -5,35 +5,35 @@ Origin: ltsp6
 Label: ltsp6 Github
 Suite: stable
 Codename: trixie
-Date: Wed, 07 Oct 2026 11:42:21 UTC
+Date: Wed, 07 Oct 2026 20:09:26 UTC
 Architectures: amd64
 Components: main
 Description: Debian 13 (trixie) ltsp6 repository
 MD5Sum:
- 4e7a2c8776ef10a6ec98c13a7666572a 5709 main/binary-amd64/Packages
- bcc27850b843e7f789cecf0c5bbd9d8c 2729 main/binary-amd64/Packages.gz
+ e96e0f0d6674d4dc18a4cdb4f623c827 5709 main/binary-amd64/Packages
+ 5aa980d372a0b3e6de56c156a370cfdc 2728 main/binary-amd64/Packages.gz
  400a893451d681e4ca2b02c65163487b 135 main/binary-amd64/Release
 SHA1:
- 85257b6fcb0d0363b9ceb7af99d359e773ececae 5709 main/binary-amd64/Packages
- 1494a53822eb85b3cca1cd52f233a762e527d1e0 2729 main/binary-amd64/Packages.gz
+ 995e01ded6cb37f63a3071af0f17248961b7612a 5709 main/binary-amd64/Packages
+ ebe177dcfe5db4d2a59e4b4cab8bd8d2063c51e3 2728 main/binary-amd64/Packages.gz
  b20840de0f3e68ef35d996380b80f40d9958fefc 135 main/binary-amd64/Release
 SHA256:
- 62c21ee4855ca9c4714d3daa8ee1b365133aa1f0af5f3a8f74d3269c350ec77c 5709 main/binary-amd64/Packages
- 6c3a1803b60cf4ba625dc07078c9e10f49dd664fb9394ce9cc9822652000f843 2729 main/binary-amd64/Packages.gz
+ 05c5da87fd750a7db3babf1fdcfd4c410f4d2b3709288173442fa0f76de9a7c7 5709 main/binary-amd64/Packages
+ b36823f1fda24d8c425b91beda6543eee25b58fc633b1c68bc25cfd13646ee4d 2728 main/binary-amd64/Packages.gz
  43d63f08e8ad502997a7ee8f683fd1926f6f872093538ee93a96c4c00ca5684e 135 main/binary-amd64/Release
 -----BEGIN PGP SIGNATURE-----
 
-iQIzBAEBCgAdFiEET/G5DE/MBWAVAAUTB2byPyDuP8QFAmrGMB0ACgkQB2byPyDu
-P8RrphAAi6tcFG+tHlPKZnz3U/xAoK4IvI8/rnJuECjr8BloRRTfbEzepAvH/CJ5
-O52XnvN7NJL8gzRK4KwPbazn1LKXguWIFHqYZf8VjPpmNQgcvqkZwCEqwneDHopX
-YzfiT8ipWdvFlI3WL1N819mbFHhZt4vSS5gky2/7tnFR8KwBls3k/9/DCkHmYLQu
-5xD+hk72absyK9oaK7mAIgrfsRLO4hvf/7C4MwUzIJJpnZ5jA3snvdZhYIvxUE/b
-IjkUH74NLWsMj+EyHGr3ZDJP164NsBv5m5Ij6m8KDt6v+tqbhOyd7jwa/VYdcuhs
-zeodSSOBgPGvR8D43YgeuIoXkn4QroP6x0X4tz8JBAg/lZuBEnGn75am7LWbj1yL
-DQ8+icK9HNEGa5wWn+ejHhXyFs5Uwr+t2MEjylUJy6kzR75CGEjSpMTTeLAE3Tqc
-/1j9Zoy4053ZhfSuCyrGtf6+q5BSlGyzw6lSchmIJcawCdvxJ9bqT/qYJLvKaGmQ
-4lGI6xnFun18djYxqHb1C05kMb0DKXIKqNzpXYbd0/PItSXrP8oDRORm0HECfrLD
-OFXpw4bk2O7TjC4KwNB3DcdGvXq52jOZf/Jd0FUHM77x/CXhbixqsMFS7SPDbMDJ
-539uTSlmmKaxhDSptwAEM4QMpvj1krIgFgD/0UuL1TTOl5IrhTQ=
-=LKSN
+iQIzBAEBCgAdFiEET/G5DE/MBWAVAAUTB2byPyDuP8QFAmrGpvYACgkQB2byPyDu
+P8QBQhAAqSGI6sT3ZiSB5xjJ61z6C3Mf+hHfNi/Nl3vbn4FQJ+mFLCWSrcopCGjW
+VOK4DsCL8oNg0FyuRuf4JMc0/uvOdZ1mxsIPEktgIBsP1W2VM1XNhxULasYiAaNv
+8UMVn1cuoq7fFUEqRpZIJR6LD6JYQ8nCIq+uXV8D5MflJ29DTrcDYO8Wu+HEPm8R
+aDYPcxzJWQrbWTBSkM1PG4K0SgC/IIoPKG6jIRx1TiGqHQDOhx4CBRYVdRif1W47
+IjNUk8JGY6lNoXhONDwpTnHiWjXINHpfyGWhE5b7OQ9Kbq3C6WnHnWWB777iXrON
+tak1q7hoZvA0XSOb7I/ufajm20cKvqm04ZvKnlraJ6aTIg9OSwoFPkVT5puXXp57
+7DVmUPA1MQOjupwGrq4K1of/yDRjD9+xYaVLH1Lm0HeGiITAlPsgw/O3rxiN5nMV
+M7qg8SCh6pgA2mYE7tpvAHtwCb9wBPLn1pojB0fHhLKdFdMWNcXqbZQXktRa9qLg
+6rnBjEt03VwWKWUrcVUTloVQUF7eKrsPmiXV5Ss4oi9+EhHeXeu5LlSR7RMQV9Ge
+L37V5l9jp2oF7l6zNA3AwLp4JITIg17e8qz7k5APDAqYgDKcviES/4dKnrAWPn1m
+2W5AjlUfit1FuKpBIk+tj+7r6AdhI79QplSZ/ENFtkztUWgr0DU=
+=CLYk
 -----END PGP SIGNATURE-----
