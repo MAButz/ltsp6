@@ -67,7 +67,18 @@ set -e
 if [ -r /run/ltsp/ltsp_config_env ]; then
     . /run/ltsp/ltsp_config_env
 elif command -v getltscfg >/dev/null 2>&1; then
-    eval "$(getltscfg -a 2>/dev/null)" || true
+    # One line at a time, each checked first, for the reason given in
+    # ltsp_config.d/01-getltscfg: a single unmatched quote in lts.conf would
+    # otherwise end this script inside eval, before it could say anything.
+    ltsp_shadow_conf=$(getltscfg -a 2>/dev/null || true)
+    while IFS= read -r ltsp_shadow_line; do
+        if printf '%s\n' "$ltsp_shadow_line" | sh -n 2>/dev/null; then
+            eval "$ltsp_shadow_line"
+        fi
+    done <<EOF
+$ltsp_shadow_conf
+EOF
+    unset ltsp_shadow_conf ltsp_shadow_line
 fi
 
 SHADOW_BIN=$(command -v freerdp-shadow-cli3 || command -v freerdp-shadow-cli || true)

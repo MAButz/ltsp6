@@ -546,7 +546,12 @@ int main( int argc, const char **argv )
         }
     }
 
-    return(0);
+    // Everything that parsed has been printed - the client is better off
+    // with the settings before the error than with none. But the parser
+    // stops at the first syntax error and everything after it is missing,
+    // which used to happen with an exit status of 0 and the message thrown
+    // away with stderr. Callers can tell now.
+    return(fSyntaxError ? 3 : 0);
 }
 
 //------------------------------------------------------------------------------

@@ -1,6 +1,61 @@
-# Get lts.conf params
-if [ -f /etc/lts.conf ]; then
-    eval $(getltscfg -a 2>/dev/null) || true
-    eval $(getltscfg -a 2>/dev/null|grep -va ^export >> ${ltsp_config_env}) || true
-fi
+# Get lts.conf params - one assignment at a time, and only ones that parse.
+#
+# This used to be
+#
+#     eval $(getltscfg -a 2>/dev/null) || true
+#
+# and the "|| true" does not do what it looks like. A syntax error inside
+# eval is not a command that fails with a status to ignore: it ends a
+# non-interactive shell on the spot. During boot that shell is init-ltsp,
+# running as PID 1, so one forgotten closing quote in lts.conf ended in a
+# kernel panic - "Attempted to kill init" - with nothing on the screen that
+# pointed at lts.conf. Found that way, on a client.
+#
+# getltscfg prints one assignment per line, so each line is checked with
+# sh -n before it is evaluated. One that would not parse is left out and named
+# in the log; the client boots without that one setting rather than not at
+# all. Only lines that passed go into the cache, which screen_session and
+# others source later with no check of their own.
+#
+# getltscfg's own complaints - a missing quote it repaired, a syntax error
+# after which the rest of the file is missing - went to /dev/null. They go to
+# the log now, because the settings that silently vanish after a syntax error
+# are the harder fault to find: the client boots, just not as configured.
+# A whole lts.conf with Windows line endings used to be exactly that.
+#
+# Values are still evaluated as before, so $VAR and $(...) inside them keep
+# working; lts.conf is configuration the administrator wrote, read as root.
+ltsp_ltsconf_import() {
+    ltsp_lc_out=$(mktemp)
+    ltsp_lc_err=$(mktemp)
+    getltscfg -a "$@" > "$ltsp_lc_out" 2> "$ltsp_lc_err"
+    ltsp_lc_rc=$?
 
+    while IFS= read -r ltsp_lc_line; do
+        test -n "$ltsp_lc_line" || continue
+        if printf '%s\n' "$ltsp_lc_line" | sh -n 2>/dev/null; then
+            eval "$ltsp_lc_line"
+            case "$ltsp_lc_line" in
+                export\ *) ;;
+                *) printf '%s\n' "$ltsp_lc_line" >> "${ltsp_config_env}" ;;
+            esac
+        else
+            # The name only: a value can be a password.
+            log "lts.conf: ${ltsp_lc_line%%=*} ignored, its value does not parse (an unmatched quote?)"
+        fi
+    done < "$ltsp_lc_out"
+
+    while IFS= read -r ltsp_lc_line; do
+        test -n "$ltsp_lc_line" && log "lts.conf: $ltsp_lc_line"
+    done < "$ltsp_lc_err"
+    if [ "$ltsp_lc_rc" -eq 3 ]; then
+        log "lts.conf: settings after that syntax error are not applied"
+    fi
+
+    rm -f "$ltsp_lc_out" "$ltsp_lc_err"
+    unset ltsp_lc_out ltsp_lc_err ltsp_lc_rc ltsp_lc_line
+}
+
+if [ -f /etc/lts.conf ]; then
+    ltsp_ltsconf_import
+fi

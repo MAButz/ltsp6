@@ -18,19 +18,35 @@
 
 void trim(char *);
 int validateinclude(char *);
+static char *open_quote_value(const char *);
 %}
+
+	/*
+	 * Every character must be matched by a rule below. A character none of
+	 * them matches falls through to flex's default rule, which copies it to
+	 * stdout - into the middle of the output a shell is about to evaluate,
+	 * which is how a single quote ended in a kernel panic. With nodefault,
+	 * flex warns at build time that "default rule can be matched" if any
+	 * character is left uncovered, and a scanner built anyway stops with an
+	 * error on such a character instead of copying it. This one builds
+	 * without that warning.
+	 */
+%option nodefault
 
 lb		\[
 rb		\]
 
 inc		^[ \t]*include[ \t]+((\"[^\n]*\")|([^=\n\[\]"'#]*))[ \t]*
 qstring		\"[^\n]*\"
-string		[^=\n\[\]"'#]*
+sqstring	\'[^\n]*\'
+oqstring	\"[^\n"]*
+osqstring	\'[^\n']*
+string		[^=\n\r\[\]"'#]*
 
 equal		\=
 
-whitespace	[ \t]+
-comment		#.*\n
+whitespace	[ \t\r]+
+comment		#[^\n]*
 
 
 %%
@@ -77,10 +93,52 @@ comment		#.*\n
 			return(STRING);
 		}
 
-{comment}	{	lineno++;		}
+	/*
+	 * Single quotes, which a shell user writes without thinking. They were
+	 * not part of any rule, so flex did with the quote what it does with
+	 * every character no rule matches: it copied it to stdout. That stray
+	 * quote then sat at the front of getltscfg -a's output, and the eval in
+	 * ltsp_config.d/01-getltscfg died of it - during boot, as PID 1.
+	 */
+{sqstring}	{
+			int len = strlen(yytext);
+
+			yylval.string = (char *)malloc( len - 1 );
+			memcpy(yylval.string,yytext+1,len-2);
+			yylval.string[len-2] = '\0';
+			return(STRING);
+		}
+
+	/*
+	 * A quote that is never closed. Same stray quote on stdout as above, and
+	 * the same kernel panic - from one forgotten character. The value is
+	 * taken to the end of the line, which is what was meant every time, and
+	 * the line is named on stderr so it gets fixed.
+	 */
+{oqstring}	|
+{osqstring}	{
+			yylval.string = open_quote_value(yytext);
+			return(STRING);
+		}
+
+	/* The newline after a comment is counted by the rule below; a comment
+	 * on the last line needs none, and is no error without one. */
+{comment}	{	/* do nothing */	}
 \n		{	lineno++;		}
 
 %%
+
+static char *open_quote_value(const char *text)
+{
+	char *value = strdup(text + 1);
+
+	trim(value);
+	(void)fprintf(stderr,
+		"\nmissing closing quote in %s, line=%d; "
+		"the value runs to the end of the line\n\n",
+		curConfigFile, lineno);
+	return value;
+}
 
 void trim(char *str)
 {

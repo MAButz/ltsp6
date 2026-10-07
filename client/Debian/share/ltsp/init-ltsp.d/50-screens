@@ -1,0 +1,58 @@
+# Start exactly the screens lts.conf names - on the terminals it names them on.
+#
+# LTSP 5 read SCREEN_nn at boot and started every one of them, whichever
+# terminals those were. Under systemd that had come apart in two ways.
+#
+# Screen 07 was started by ldm.service, which the ldm package enables and
+# which runs screen_session 07 unconditionally - whether lts.conf named 07 or
+# not. And nothing started any other screen: ltsp-screen@.service was shipped
+# for them but had to be enabled by hand, inside the image. So an lts.conf
+# carried over from LTSP 5,
+#
+#     SCREEN_06=ldm
+#     SCREEN_07=ldm
+#
+# booted to a single greeter, and Ctrl+Alt+F6 showed an empty terminal - with
+# nothing failed and nothing in any log. Found on a production lts.conf that
+# gives each of the two screens its own RDP server and options. A client with
+# SCREEN_05 alone got a screen_session on 07 with nothing to run, and no
+# greeter on 05.
+#
+# Now every screen comes from lts.conf the same way, 07 included: one
+# ltsp-screen@ instance per SCREEN_nn, and ldm.service masked so that it
+# neither doubles 07 nor starts it where nobody asked. The instances are
+# enabled for this boot only - the root file system is a fresh overlay each
+# time - so a screen taken out of lts.conf is gone at the next start, and one
+# added is there without rebuilding the image.
+#
+# With no SCREEN_nn at all, ltsp_config.d/15default-screen has already filled
+# in SCREEN_07=ldm, so a client with an empty lts.conf still gets a greeter.
+#
+# Which screen comes to the front and which ones wait to be switched to is
+# decided by SCREEN_DEFAULT, in ltsp_config.d/16default-tty.
+
+ltsp_screens=""
+for ltsp_screen in 01 02 03 04 05 06 07 08 09 10 11 12; do
+    eval ltsp_screen_val=\"\${SCREEN_$ltsp_screen}\"
+    test -n "$ltsp_screen_val" || continue
+
+    # The instance is the tty number, without the leading zero; see the
+    # comment in ltsp-screen@.service for why.
+    ltsp_screen_tty=${ltsp_screen#0}
+    if systemctl enable --root=/ --no-reload --quiet \
+            "ltsp-screen@$ltsp_screen_tty.service"; then
+        ltsp_screens="$ltsp_screens $ltsp_screen"
+    else
+        warn "could not enable ltsp-screen@$ltsp_screen_tty for SCREEN_$ltsp_screen=$ltsp_screen_val"
+    fi
+done
+
+if [ -e /usr/lib/systemd/system/ldm.service ] ||
+        [ -e /lib/systemd/system/ldm.service ]; then
+    if ! systemctl mask --root=/ --no-reload --quiet ldm.service; then
+        warn "could not mask ldm.service; screen 07 may be started twice"
+    fi
+fi
+
+log "ltsp: screens from lts.conf:${ltsp_screens:- none}"
+unset ltsp_screen ltsp_screen_val ltsp_screen_tty ltsp_screens

@@ -23,6 +23,27 @@ look for configurations specific to the given hostname
 .TP 3n
 \-v, \-\-verbose
 increase the verbosity
+.SH "EXIT STATUS"
+.TP 3n
+0
+the file was read completely. A missing closing quote is repaired \(em the
+value runs to the end of the line \(em and reported on stderr, but is not an
+error.
+.TP 3n
+2
+the file could not be opened.
+.TP 3n
+3
+a syntax error. Everything before it is printed as usual; everything after
+it is missing. The line is named on stderr.
+.SH "NOTES"
+With \fB\-a\fR the output is one shell assignment per line, followed by the
+matching \fBexport\fR lines, meant for a shell to evaluate. Values are printed
+in double quotes as they are, so a value that itself holds an unmatched quote
+does not parse; ltsp_config.d/01-getltscfg checks each line before evaluating
+it and leaves such a line out. Do not \fBeval\fR the whole output at once in a
+script that must not die: a syntax error inside \fBeval\fR ends a
+non\-interactive shell outright, whatever follows it.
 .SH "RESOURCES"
 http://ltsp.org
 .SH "COPYING"

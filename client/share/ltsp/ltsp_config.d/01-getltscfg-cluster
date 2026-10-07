@@ -1,6 +1,5 @@
-# Get ltsp-cluster config
+# Get ltsp-cluster config, the same careful way as lts.conf itself; see
+# ltsp_ltsconf_import in 01-getltscfg.
 if [ -f /var/cache/getltscfg-cluster/lts.conf ]; then
-    eval $(getltscfg -a -c /var/cache/getltscfg-cluster/lts.conf) || true
-    eval $(getltscfg -a -c /var/cache/getltscfg-cluster/lts.conf |grep -va ^export >> ${ltsp_config_env}) || true
+    ltsp_ltsconf_import -c /var/cache/getltscfg-cluster/lts.conf
 fi
-
