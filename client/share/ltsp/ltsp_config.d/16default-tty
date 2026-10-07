@@ -1,7 +1,8 @@
 # Verify that SCREEN_DEFAULT points to an existing SCREEN_XX
 if [ -n "$SCREEN_DEFAULT" ]; then
-    # We want it to be e.g. 01, not 1
-    SCREEN_DEFAULT=$(printf "%02d" "$SCREEN_DEFAULT")
+    # We want it to be e.g. 01, not 1. The leading zero goes first: printf
+    # reads 08 and 09 as octal and refuses them.
+    SCREEN_DEFAULT=$(printf "%02d" "${SCREEN_DEFAULT#0}")
     eval "screen=\$SCREEN_$SCREEN_DEFAULT"
     if [ -z "$screen" ]; then
         echo "SCREEN_DEFAULT=$SCREEN_DEFAULT, but no SCREEN_$SCREEN_DEFAULT found" >&2
@@ -23,3 +24,39 @@ fi
 if [ -n "$SCREEN_DEFAULT" ]; then
     set_lts_var SCREEN_DEFAULT "$SCREEN_DEFAULT"
 fi
+
+# The default screen must not wait for its terminal to come to the front.
+# screen_session does that unless told otherwise,
+#
+#     while boolean_is_true "${WAIT_FGCONSOLE:-True}" &&
+#           [ $(fgconsole) -ne "$SCREEN_NUM" ]; do sleep 2; done
+#
+# and under systemd nothing switches to the default screen's terminal
+# beforehand. Xorg would - its vt${TTY} argument does - but it only starts
+# after that loop, so a client with nothing but SCREEN_07=ldm waits forever.
+# From the outside that is invisible: ltsp-screen@7 is "active (running)",
+# nothing has failed, there is no Xorg log and no ldm log, and the screen
+# shows the tty1 console. The only tell is screen_session with a `sleep 2`
+# child.
+#
+# The other screens are meant to wait, and until 6.3.29 they did not: this
+# was filled in as False for every SCREEN_nn=ldm. That was harmless while
+# nothing started a second screen, and wrong as soon as something did. Two
+# greeters that both start at once each bring their own terminal to the
+# front, and whichever X server comes up last is the one on the monitor. LTSP
+# 5 started the default screen in front and let the others wait to be
+# switched to with Ctrl+Alt+Fn; that is what this does again.
+#
+# Only filled in when the admin has not set it, so either value can still be
+# forced for a setup that switches terminals some other way.
+for i in 01 02 03 04 05 06 07 08 09 10 11 12; do
+    eval screen_val=\"\${SCREEN_${i}}\"
+    case "$screen_val" in
+        ldm|ldm\ *) ;;
+        *) continue ;;
+    esac
+    test "$i" = "$SCREEN_DEFAULT" || continue
+    eval wait_val=\"\${SCREEN_${i}_WAIT_FGCONSOLE}\"
+    test -n "$wait_val" || set_lts_var "SCREEN_${i}_WAIT_FGCONSOLE" False
+done
+unset screen_val wait_val

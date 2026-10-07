@@ -1,3 +1,63 @@
+ltsp (6.3.29-1) unstable; urgency=medium
+
+  * Exactly the screens lts.conf names are started, on the terminals it
+    names, as under LTSP 5 - a greeter on 05 alone, on 06 and 07, on five
+    terminals; 07 is no different from any other. The new
+    init-ltsp.d/50-screens enables one ltsp-screen@ instance per SCREEN_nn
+    at boot and masks ldm.service. Until now 07 came from ldm.service, which
+    ran whether lts.conf named 07 or not, and every other screen had to be
+    enabled by hand inside the image: an lts.conf carried over from LTSP 5
+    with SCREEN_06=ldm next to SCREEN_07=ldm booted to one greeter, and
+    Ctrl+Alt+F6 showed an empty terminal with nothing failed and nothing
+    logged. Found on a production lts.conf that gives the two screens their
+    own RDP servers and options. Decided on every boot from lts.conf alone,
+    so adding or removing a screen needs no new image.
+  * ltsp-screen@.service carries what ldm.service did for the greeter, now
+    on whichever terminal it runs: ordering after plymouth and logind,
+    SIGPIPE at its default, KillMode=mixed, a user-session utmp entry, and
+    the terminal deallocated when the screen stops.
+  * Only the default screen skips the wait for its terminal. 6.3.1 filled
+    in SCREEN_nn_WAIT_FGCONSOLE=False for every ldm screen, which was
+    harmless while only one was ever started; with two, both X servers
+    start at once, each brings its own terminal to the front, and whichever
+    comes up last is the one on the monitor. SCREEN_DEFAULT - or the
+    highest-numbered screen - now starts in front and the others wait to be
+    switched to, which is how LTSP 5 behaved. A value set in lts.conf is
+    left alone, so multiseat setups that name it keep working unchanged.
+  * ltsp-screen@.service can start screens 10 to 12. It handed screen_session
+    a fixed "0%i", which made tty10 into "010", and screen_session accepts
+    only two digits. The padding is printf's now.
+  * SCREEN_DEFAULT=08 and 09 are accepted. printf read the leading zero as
+    octal and refused both.
+  * A mistake in lts.conf no longer ends the boot in a kernel panic. One
+    forgotten closing quote was enough: flex has no rule for a lone quote,
+    so its default rule copied it to stdout, ltsp_config.d/01-getltscfg
+    evaluated getltscfg's output with eval - and a syntax error inside eval
+    ends a non-interactive shell outright; the "|| true" behind it never
+    runs. That shell is init-ltsp, running as PID 1. Reported from a
+    client, after a missing quote. Fixed in two places, so that either
+    alone would have prevented it:
+  * 01-getltscfg reads getltscfg's output one assignment at a time, checks
+    each with sh -n and leaves out the ones that do not parse, naming them
+    in the kernel log - by name only, a value can be a password. Only
+    checked lines go into /run/ltsp/ltsp_config_env, which other scripts
+    source without a check of their own. getltscfg's own messages, which
+    went to /dev/null, go to the log as well. ltsp-shadow's fallback for a
+    missing cache does the same.
+  * getltscfg accepts what an administrator writes without thinking: single
+    quotes, a missing closing quote (the value then runs to the end of the
+    line, with a warning naming the line), Windows line endings, and a
+    comment on the last line without a newline. Each of the last three used
+    to make it drop every setting from that point on, with exit status 0
+    and the message thrown away - a whole lts.conf saved on Windows came
+    out empty, and the client booted as if unconfigured. %option nodefault
+    keeps flex from copying any character to stdout again.
+  * getltscfg exits with status 3 after a syntax error. The parser still
+    stops there, and the settings after it are still missing, but it is
+    now said, with the line.
+
+ -- Marc-Andre Butz <ma@butz.online>  Wed, 07 Oct 2026 15:37:46 +0200
+
 ltsp (6.3.28-1) unstable; urgency=medium
 
   * The PXE menu names the kernel by its symlink. The main entries now

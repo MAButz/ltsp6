@@ -1,20 +1,31 @@
 [Unit]
-# A generic launcher for any SCREEN_nn in lts.conf, shipped but NOT enabled.
+# The launcher for every SCREEN_nn in lts.conf - 07 included, and no screen
+# treated differently from any other.
 #
-# The usual case needs nothing here: ldm.service (from the ldm package) runs
-# screen_session 07 for the SCREEN_07=ldm default. This template is for the
-# rest - a second screen on another VT, or a screen script other than ldm -
-# and is enabled by hand:  systemctl enable ltsp-screen@2
+# init-ltsp.d/50-screens enables one instance per SCREEN_nn at boot, so
+# lts.conf alone decides which screens a client has and on which terminals,
+# as it did under LTSP 5: one on 07, one on 05, three, five, any of them.
+# Nothing is enabled in the image itself.
 #
-# Do not enable an instance that collides with ldm.service's VT7.
+# ldm.service, from the ldm package, used to run screen 07 on its own. On an
+# LTSP client 50-screens masks it, so that 07 is not started twice - two
+# greeters on one terminal fight over which owns the session (6.0.0-4) - and
+# so that it is not started at all where lts.conf does not name it. What it
+# did for the greeter is done here instead, for whichever terminal it is on:
+# the ordering behind plymouth and logind, SIGPIPE left at its default,
+# KillMode=mixed, the utmp entry as a user session and the terminal released
+# when the screen stops.
 #
-# The instance is the tty number (1 -> tty1). screen_session is handed it
-# two digits as 0%i because it accepts only [0-1][0-9], while TTYPath needs
+# The instance is the tty number (1 -> tty1). screen_session is handed it as
+# two digits because it accepts only [0-1][0-9], while TTYPath needs
 # /dev/tty1 - instantiating on "01" asks for /dev/tty01, which does not
-# exist, and systemd reports 208/STDIN.
+# exist, and systemd reports 208/STDIN. The padding is printf's, not a fixed
+# 0%i: that turned tty10 into "010", which screen_session refuses, so screens
+# 10 to 12 could never start. exec keeps the tty that StandardInput= opened.
 Description=LTSP screen on tty%i
-After=systemd-user-sessions.service
 Conflicts=getty@tty%i.service
+After=systemd-user-sessions.service getty@tty%i.service plymouth-quit.service systemd-logind.service
+Wants=systemd-user-sessions.service
 ConditionPathExists=/etc/lts.conf
 
 [Service]
@@ -25,16 +36,22 @@ Type=simple
 # exits at once - screen_session then respawns it forever, which presents as
 # a text console and a service that is "active" with NRestarts=0 while
 # burning a full core.
-ExecStart=/usr/share/ltsp/screen_session 0%i
+ExecStart=/bin/sh -c 'exec /usr/share/ltsp/screen_session "$(printf %%02d %i)"'
+# screen_session restarts the screen itself after every session; this only
+# catches screen_session dying.
 Restart=always
 RestartSec=3
+IgnoreSIGPIPE=no
+KillMode=mixed
 TTYPath=/dev/tty%i
 TTYReset=yes
 TTYVHangup=yes
+TTYVTDisallocate=yes
 StandardInput=tty
 StandardOutput=journal
 StandardError=journal
 UtmpIdentifier=tty%i
+UtmpMode=user
 
 [Install]
 WantedBy=graphical.target

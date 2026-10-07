@@ -17,6 +17,37 @@ mix of case, and anything else counts as false. A directive that takes a
 numbered series \(em \fBSCREEN_\fP\fInn\fP, \fBFSTAB_\fP\fInn\fP and the rest
 \(em is read in sorted order, so the numbers decide the order of the resulting
 lines, not the order they appear in the file.
+.SH "SYNTAX AND MISTAKES"
+.PP
+One directive per line, \fBNAME=value\fR. A value may be written bare, in
+double quotes or in single quotes; quotes are needed only for a value with
+spaces, and are not part of the value. Everything from \fB#\fR to the end of
+the line is a comment. Windows line endings are accepted.
+.PP
+A mistake in this file costs the setting it is in, not the client \(em since
+6.3.29. Before that, one unmatched quote ended the boot in a kernel panic:
+the client reads this file in a shell that runs as process 1, and the shell
+gave up on the quote and took process 1 with it. What happens now:
+.IP "a closing quote is missing" 4
+The value runs to the end of the line, which is what was meant every time.
+.IP "a value still does not parse \(em an extra quote, a trailing backslash" 4
+That one setting is left out; every other one applies.
+.IP "a line the parser cannot read \(em no \fB=\fR, a space in the name, a section header without its \fB]\fR" 4
+Everything before it applies; everything after it is missing. This is the
+one to look for when a client boots normally but not as configured.
+.PP
+Each of these is reported in the kernel log, with the line number where
+there is one and the setting's name, never its value \(em a value can be a
+password. On the client:
+.PP
+.nf
+.RS
+dmesg | grep lts.conf
+.RE
+.fi
+.PP
+\fBgetltscfg \-a\fR on the client also exits with status 3 after a syntax
+error, and prints the line on stderr.
 .SH "SESSION BACKEND"
 .PP
 .IP "\fBLDM_DEFAULT_BACKEND\fP" 4
@@ -460,30 +491,50 @@ a lockout policy reacts later than it looks on paper, which is what
 What to run on virtual terminal \fInn\fP \(em \fBldm\fR for the greeter,
 \fBshell\fR for a login shell. Left unset, ltsp_config.d/15default-screen
 picks \fBSCREEN_07=ldm\fR when ldm is installed.
+.IP "" 4
+Exactly the screens named here are started, on the terminals named, as under
+LTSP 5: a greeter on 05 alone, on 06 and 07, on five terminals \(em no screen
+is treated differently from another. On a Debian client
+init\-ltsp.d/50\-screens enables one instance of \fBltsp\-screen@.service\fR
+per \fBSCREEN_\fP\fInn\fP at boot, and masks \fBldm.service\fR, which would
+otherwise start 07 a second time, or where nobody asked for it. That is
+decided afresh on every start, from this file alone \(em nothing is enabled in
+the image, so adding or removing a screen needs no rebuild.
+Before 6.3.29 screen 07 was started whether it was named or not and the
+others not at all, so a second screen carried over from an LTSP 5
+configuration showed an empty terminal with nothing logged anywhere.
+Several greeters at once is what \fBRDP_SERVER_\fP\fInn\fP and
+\fBRDP_OPTIONS_\fP\fInn\fP are for: each screen its own session server and
+its own options.
 .IP "\fBSCREEN_\fP\fInn\fP\fB_WAIT_FGCONSOLE\fP" 4
 Whether screen_session waits for that terminal to become the foreground
 console before starting anything on it. Defaults to true, which is right for
-a terminal a getty has already brought to the front, and wrong for the one
-ldm.service starts: under systemd nothing switches to tty7 beforehand, and
-Xorg \(em which does switch, with its \fBvt7\fR argument \(em only starts
-after the wait. The client then sits there forever.
+a screen someone will switch to, and wrong for the one that should be on the
+monitor at boot: under systemd nothing switches to its terminal beforehand,
+and Xorg \(em which does switch, with its \fBvt\fR\fInn\fR argument \(em only
+starts after the wait. The client then sits there forever.
 .IP "" 4
-Since 6.3.1 this is filled in as False for any \fBSCREEN_\fP\fInn\fP set to
-\fBldm\fR, whoever wrote it, so it normally needs no attention. Set it
-explicitly to keep control on a setup that really does switch terminals by
-hand.
+It is filled in as False for the default screen (see \fBSCREEN_DEFAULT\fR)
+when that runs \fBldm\fR, whoever wrote it, so it normally needs no
+attention. The other screens wait: they start when someone switches to them
+with Ctrl+Alt+F\fInn\fP, which is how LTSP 5 behaved. From 6.3.1 to 6.3.28 every
+\fBldm\fR screen was given False; that was harmless while only one was ever
+started, and with two it lets both X servers start at once, each bringing its
+own terminal to the front \(em whichever comes up last is the one on the
+monitor. Set it explicitly to keep control on a setup that switches terminals
+some other way.
 .IP "" 4
-Worth knowing for older images, because the failure is silent and looks like
-health: the client shows a console login, \fBldm.service\fR reports "active
+Worth knowing, because the failure is silent and looks like health: the
+client shows a console login, the screen's service reports "active
 (running)", nothing has failed, graphical.target is reached, and there is no
 Xorg log and no ldm log to read. The tell is \fBscreen_session\fR with a
-\fBsleep 2\fR child; \fBchvt 7\fR on the client confirms it in one command.
+\fBsleep 2\fR child; \fBchvt\fR \fInn\fR on the client confirms it in one
+command.
 .IP "" 4
-On a Debian client the greeter is started by \fBldm.service\fR, which runs
-\fBscreen_session 07\fR for that default. \fBltsp\-screen@.service\fR is
-shipped but deliberately not enabled: enable an instance only for an
-\fIadditional\fR screen, and never one that collides with the VT7 ldm uses
-\(em two greeters then fight over which terminal owns the session.
+\fBldm.service\fR from the ldm package is not used on an LTSP client from
+6.3.29 on; 50\-screens masks it at every boot. Enabling it by hand next to
+an \fBltsp\-screen@7\fR puts two greeters on one terminal, fighting over which
+one owns the session.
 .IP "\fBSCREEN_DEFAULT\fP" 4
 Which terminal is brought to the front once the client is up. Unset, the
 highest\-numbered configured screen wins. Naming a terminal with no
