@@ -1,0 +1,33 @@
+# Share the printers lts.conf names, one jetpipe per PRINTER_<n>_DEVICE.
+#
+#     PRINTER_0_DEVICE=/dev/usb/lp0
+#     PRINTER_0_PORT=9100
+#
+# LTSP 5 started them from a SysV script, ltsp-client-core's init script,
+# which called start_printers in ltsp-init-common. The rebuild for systemd
+# dropped that script and nothing took its place: from then until 6.3.30 a
+# client shared no printer at all, and nothing said so - the print server
+# simply could not connect. Found on a production lts.conf with three
+# printers configured.
+#
+# Enabled for this boot only, like the screens in 50-screens: the root file
+# system is a fresh overlay each time, so lts.conf alone decides.
+#
+# Numbered 0 to 9. LTSP 5 read 0 to 2; the extra numbers cost nothing.
+
+ltsp_printers=""
+for ltsp_printer in 0 1 2 3 4 5 6 7 8 9; do
+    eval ltsp_printer_dev=\"\${PRINTER_${ltsp_printer}_DEVICE}\"
+    test -n "$ltsp_printer_dev" || continue
+    if systemctl enable --root=/ --no-reload --quiet \
+            "ltsp-printer@$ltsp_printer.service"; then
+        ltsp_printers="$ltsp_printers $ltsp_printer:$ltsp_printer_dev"
+    else
+        warn "could not enable ltsp-printer@$ltsp_printer for $ltsp_printer_dev"
+    fi
+done
+
+if [ -n "$ltsp_printers" ]; then
+    log "ltsp: printers from lts.conf:$ltsp_printers"
+fi
+unset ltsp_printer ltsp_printer_dev ltsp_printers

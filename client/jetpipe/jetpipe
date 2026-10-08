@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
 #
-# Minimal Printserver, forwards a printer device to a tcp port (usually 9100)
-#
-# TODO:
-#   * add read for bidirectional comm ?
-#   * add writeonly opts
+# Minimal print server: forwards what arrives on a TCP port (usually 9100,
+# the "raw" or JetDirect port) to a printer device on this machine.
 #
 # Copyright 2006, Canonical Ltd.
 #
@@ -23,167 +20,163 @@
 #  Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
 #  MA 02110-1301, USA.
 #
-#Serial redirection code adapted from work by:
-#(C)2002-2003 Chris Liechti <cliechti@gmx.net>
-#redirect data from a TCP/IP connection to a serial port and vice versa
+# 2025, Anpassungen fuer Python 3.
 #
-#
-# 2025, Anpassungen für Phython3
+# 2026, printer devices only. The serial side is gone: it needed pyserial,
+# which a thin client image does not carry, and "import serial" at the top
+# made the whole program fail at start for USB printers too, which never
+# used it. It had also never worked under Python 3 - the serial options were
+# looked up in the wrong scope and silently ignored, and the port was opened
+# twice, which ended the daemon after the first job. Nobody had a serial
+# printer left to notice.
 
 """
-usage: jetpipe [options] <device> <port>
-Note: no security measures are implemeted. Anyone can remotely connect
-to this service over the network.
-Only one connection at once is supported. If the connection is terminaed
-it waits for the next connect.
+usage: jetpipe [-d] <device> <port>
+
+Forward everything sent to TCP <port> to the printer <device>, one connection
+at a time - a printer cannot interleave two jobs anyway.
+
+  -d, --debug   stay in the foreground and log to stderr (as under systemd)
+  -h, --help    show this text
+
+No security measures are implemented: anyone who can reach the port can print.
 """
 
-import os
-import sys
-import socket
-import serial
+import errno
 import getopt
+import os
+import socket
+import sys
+
+CHUNK = 65536
+# A job that stops sending for this long is abandoned, so that a client that
+# went away without closing its connection cannot hold the printer forever.
+IDLE_TIMEOUT = 600
 
 
-class Redirector:
-    def __init__(self, devicename, socket):
-        self.socket = socket
+def log(*args):
+    print("jetpipe:", *args, file=sys.stderr, flush=True)
 
-        # This should catch regular serial and USB serial
-        if devicename[:8] == '/dev/tty':
-            self.device = serial.Serial(devicename)
-            self.device.baudrate = 9600
-            self.device.bytesize = 8
-            self.device.parity = 'N'
-            # Required so that the reader thread can exit
-            self.device.stopbits = 1
-            self.device.timeout = 1
-            self.device.rtscts = False
-            self.device.xonxoff = False
-            self.devicetype = 'S'
-        else:
-            self.device = open(devicename, 'wb')
-            self.devicetype = 'P'
 
-    def shortcut(self):
-        """connect the serial port to the tcp port by copying everything
-           from one side to the other"""
-        self.writer()
+def open_printer(devicename):
+    # No O_CREAT: a printer that is not plugged in must be an error, not a
+    # new regular file under /dev that swallows every job sent to it.
+    return os.open(devicename, os.O_WRONLY | os.O_NOCTTY)
 
-    def writer(self):
-        """loop forever and copy socket->serial"""
-        print('in writer loop')
-        self.alive = True
 
-        while self.alive:
+def write_all(fd, data):
+    view = memoryview(data)
+    while view:
+        written = os.write(fd, view)
+        view = view[written:]
+
+
+def serve_one(connection, addr, devicename):
+    """Copy one job from the connection to the printer. Never raises."""
+    connection.settimeout(IDLE_TIMEOUT)
+    try:
+        fd = open_printer(devicename)
+    except OSError as e:
+        # The client sees the connection close at once and will retry, which
+        # is what CUPS does with a printer that is switched off.
+        log(f"{addr[0]}: cannot open {devicename}: {e.strerror}")
+        return
+
+    total = 0
+    try:
+        while True:
             try:
-                data = self.socket.recv(1024)
-                if not data:
-                    break
-                self.device.write(data)
-            except socket.error as msg:
-                print("error receiving from socket: ", msg)
-
+                data = connection.recv(CHUNK)
+            except socket.timeout:
+                log(f"{addr[0]}: nothing received for {IDLE_TIMEOUT}s, job abandoned")
+                break
+            except OSError as e:
+                log(f"{addr[0]}: connection error: {e.strerror}")
+                break
+            if not data:
+                break
             try:
-                if self.devicetype == 'P':
-                     # parallel device
-                    self.device.flush()
-            except:
-                pass
-        self.device.close()
-        self.alive = False
+                write_all(fd, data)
+            except OSError as e:
+                # EIO when the printer is unplugged mid-job, ENOSPC and the
+                # like for anything else. Stop here; retrying the same write
+                # in a loop is what used to spin at full load.
+                log(f"{addr[0]}: writing to {devicename} failed after {total} bytes: {e.strerror}")
+                break
+            total += len(data)
+    finally:
+        os.close(fd)
+    log(f"{addr[0]}: {total} bytes sent to {devicename}")
 
 
 def run_server(devicename, port):
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    srv.bind(('', int(port)))
+    # Without this a restart right after the previous instance stopped fails
+    # with "Address already in use" until the old connection's TIME_WAIT ends.
+    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    srv.bind(("", port))
     srv.listen(1)
+    log(f"forwarding port {port} to {devicename}")
 
     while True:
         try:
-            print("Waiting for connection....")
             connection, addr = srv.accept()
-            print('Connected by', addr)
-            #enter console->serial loop
-            redir = Redirector(devicename, connection)
-            if redir.devicetype == 'S':
-                if 'baudrate' in locals():
-                    redir.device.baudrate = baudrate
-                if 'bytesize' in locals():
-                    redir.device.bytesize = bytesize
-                if 'parity' in locals():
-                    redir.device.parity = parity
-                if 'stopbits' in locals():
-                    redir.device.stopbits = stopbits
-                if 'rtscts' in locals():
-                    redir.device.rtscts = rtscts
-                if 'xonxoff' in locals():
-                    redir.device.xonxoff = xonxoff
-                try:
-                    redir.device.open()
-                except serial.SerialException as e:
-                    print(f"Could not open serial port {devicename}: {e}")
-                    sys.exit(1)
-
-            redir.shortcut()
-            print('Disconnected')
-            connection.close()
-        except socket.error as msg:
-            print(msg)
+        except OSError as e:
+            if e.errno == errno.EINTR:
+                continue
+            log(f"accept failed: {e.strerror}")
+            continue
+        try:
+            serve_one(connection, addr, devicename)
+        finally:
+            try:
+                connection.close()
+            except OSError:
+                pass
 
 
-if __name__ == '__main__':
-
-    #parse command line options
+def main(argv):
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "dhb:p:rs:xy:", ["debug", "help", "baud=", "rtscts", "xonxoff"])
-    except getopt.GetoptError:
-        # print help information and exit:
+        opts, args = getopt.getopt(argv, "dh", ["debug", "help"])
+    except getopt.GetoptError as e:
+        print(f"jetpipe: {e}", file=sys.stderr)
         print(__doc__, file=sys.stderr)
-        sys.exit(2)
+        return 2
 
     debug = False
-
-    for o, a in opts:
-        if o in ("-h", "--help"):        # help text
-            sys.exit()
-        elif o in ("-b", "--baud"):    # specified baudrate
-            try:
-                baudrate = int(a)
-            except ValueError:
-                raise ValueError("Baudrate must be an integer number")
-        elif o in ("-y", "--bytesize"):    # specified bytesize
-            bytesize = int(a)
-        elif o in ("-p", "--parity"):    # specified parity
-            parity = a
-        elif o in ("-s", "--stopbits"):    # specified stopbits
-            stopbits = int(a)
-        elif o in ("-r", "--rtscts"):
-            rtscts = True
-        elif o in ("-x", "--xonxoff"):
-            xonxoff = True
-        elif o in ("-d", "--debug"):
+    for o, _ in opts:
+        if o in ("-h", "--help"):
+            print(__doc__)
+            return 0
+        if o in ("-d", "--debug"):
             debug = True
 
-    devicename = args[0]
-    port = args[1]
+    if len(args) != 2:
+        print(__doc__, file=sys.stderr)
+        return 2
+    devicename, port = args
+
+    if devicename.startswith("/dev/tty"):
+        print(f"jetpipe: {devicename} is a serial port; serial printers are no "
+              "longer supported", file=sys.stderr)
+        return 2
+    try:
+        port = int(port)
+    except ValueError:
+        print(f"jetpipe: port must be a number, not {port!r}", file=sys.stderr)
+        return 2
 
     if not debug:
-        # Fork in background
-        pid = os.fork()
-        if pid:
-            sys.exit(0)
-
-        # Replace stdin
-        sys.stdin.close()
-        sys.stdin = open("/dev/null", "r")
-
-        # Replace stdout
-        sys.stdout.close()
-        sys.stdout = open("/dev/null", "w")
-
-        # Replace stderr
-        sys.stderr.close()
-        sys.stderr = open("/dev/null", "w")
+        if os.fork():
+            return 0
+        os.setsid()
+        null = os.open(os.devnull, os.O_RDWR)
+        for fd in (0, 1, 2):
+            os.dup2(null, fd)
 
     run_server(devicename, port)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

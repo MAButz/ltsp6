@@ -1,0 +1,22 @@
+[Unit]
+# One printer attached to this client, shared on the network: PRINTER_<n>_DEVICE
+# forwarded to TCP port PRINTER_<n>_PORT (9100 + n unless set) by jetpipe.
+#
+# init-ltsp.d/50-printers enables one instance per PRINTER_<n>_DEVICE in
+# lts.conf at every boot; nothing is enabled in the image itself. LTSP 5 did
+# this from a SysV script that this package no longer ships, so between the
+# rebuild and 6.3.30 no printer was shared at all.
+Description=LTSP printer %i on the network (jetpipe)
+After=network.target
+ConditionPathExists=/etc/lts.conf
+
+[Service]
+Type=simple
+ExecStart=/usr/share/ltsp/ltsp-printer %i
+# jetpipe opens the device per job, so a printer plugged in after boot works
+# without a restart; this only catches jetpipe itself ending.
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

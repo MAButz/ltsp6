@@ -1,0 +1,22 @@
+#!/bin/sh
+# Start jetpipe for printer <n> as lts.conf describes it.
+#
+#     ltsp-printer <n>
+#
+# Run by ltsp-printer@<n>.service. PRINTER_<n>_DEVICE is the device,
+# PRINTER_<n>_PORT the TCP port, 9100 + n when not set - the numbering LTSP 5
+# used, so an existing lts.conf keeps its ports.
+
+n=${1:?usage: ltsp-printer <n>}
+
+. /usr/share/ltsp/ltsp_config
+
+eval device=\"\${PRINTER_${n}_DEVICE}\"
+eval port=\"\${PRINTER_${n}_PORT:-$((9100 + n))}\"
+
+if [ -z "$device" ]; then
+    echo "ltsp-printer: PRINTER_${n}_DEVICE is not set in lts.conf" >&2
+    exit 0
+fi
+
+exec /usr/sbin/jetpipe --debug "$device" "$port"

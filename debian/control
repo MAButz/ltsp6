@@ -62,7 +62,8 @@ Depends: ${shlibs:Depends},
          xinit,
          x11-xserver-utils
 Recommends: pxelinux,
-            syslinux-common
+            syslinux-common,
+            python3
 Suggests: openssh-server,
           freerdp3-shadow-x11,
           python3-gi,

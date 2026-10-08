@@ -93,6 +93,7 @@ override_dh_auto_install:
 		debian/ltsp-client-core/usr/share/ltsp/ltsp-client-common-functions
 	install -d debian/ltsp-client-core/usr/lib/systemd/system
 	install -m0644 client/Debian/systemd/ltsp-screen@.service \
+		client/Debian/systemd/ltsp-printer@.service \
 		debian/ltsp-client-core/usr/lib/systemd/system/
 	install -d debian/ltsp-client-core/usr/share/initramfs-tools/hooks
 	install -m0755 client/Debian/share/initramfs-tools/hooks/* \

@@ -1363,6 +1363,32 @@ which plays its own audio locally and needs no forwarding.
 .IP "\fBSOUND_DAEMON\fP" 4
 Which daemon does it \(em \fBpulse\fR when PulseAudio is in the image. Also
 derived, and forced off for fat clients.
+.SH "PRINTERS"
+.PP
+A printer plugged into a client can be shared on the network, so that a
+print server sends jobs to it as to any network printer with a raw
+(JetDirect) port: in CUPS, a queue with the device URI
+\fBsocket://\fIclient\fB:9100\fR.
+.IP "\fBPRINTER_\fP\fIn\fP\fB_DEVICE\fP" 4
+The printer device, \fB/dev/usb/lp0\fR for the first USB printer. \fIn\fR
+is 0 to 9. For each one set, init\-ltsp.d/50\-printers starts an instance of
+\fBltsp\-printer@\fIn\fB.service\fR, which runs \fBjetpipe\fR(8) \(em decided
+on every boot from this file, nothing is enabled in the image.
+.IP "\fBPRINTER_\fP\fIn\fP\fB_PORT\fP" 4
+The TCP port. Defaults to 9100 + \fIn\fR, the numbering LTSP 5 used.
+.PP
+The device is opened per job, not at boot, so a printer plugged in after
+the client started needs nothing else. A job sent while it is unplugged is
+refused at once \(em the print server sees the connection close and retries
+\(em rather than written into a file under \fI/dev\fR. Serial printers are no
+longer supported; \fBPRINTER_\fP\fIn\fP\fB_SPEED\fP and the other serial
+settings are ignored.
+.PP
+Before 6.3.30 nothing started the printers on a Debian client: LTSP 5 did it
+from an init script this package does not ship. A client running an older
+image can be helped with \fBINIT_COMMAND\fR; see the 6.3.30 release notes.
+.PP
+There is no access control: anyone who can reach the port can print.
 .SH "LOCAL DEVICES AND APPLICATIONS"
 .PP
 .IP "\fBLOCALDEV\fP" 4

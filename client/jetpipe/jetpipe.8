@@ -1,33 +1,50 @@
-.TH "jetpipe" "8" "20061206" "Oliver Grawert" ""
+.TH "jetpipe" "8" "20261008" "ltsp" ""
 .SH "NAME"
-jetpipe - bind a printer device to a tcp port
+jetpipe \- share a printer device on a TCP port
 .SH "SYNOPSIS"
-.PP 
-\fBjetpipe\fR <printerdevice> <portnumber>
+.PP
+\fBjetpipe\fR [\fB\-d\fR] \fIdevice\fR \fIport\fR
 .SH "DESCRIPTION"
-.PP 
-\fBjetpipe\fR will bind a printer device to a given portnumber so the printer can be 
-accessed through the JetDirect protocol from a remote client.
+.PP
+\fBjetpipe\fR copies everything sent to TCP \fIport\fR to the printer
+\fIdevice\fR, so that a print server can reach a printer attached to this
+machine as a raw (JetDirect) network printer \(em in CUPS, a queue with the
+device URI \fBsocket://\fIhost\fB:\fIport\fR.
+.PP
+One connection is served at a time; a printer cannot interleave two jobs.
+The device is opened for each job and never created: a job sent while the
+printer is unplugged is refused at once, and the print server retries. A job
+that sends nothing for ten minutes is abandoned, so that a client that went
+away without closing its connection cannot hold the printer.
+.PP
+On an LTSP client \fBjetpipe\fR is started by
+\fBltsp\-printer@\fIn\fB.service\fR for every \fBPRINTER_\fIn\fB_DEVICE\fR in
+lts.conf(5); there is normally no need to run it by hand.
+.SH "OPTIONS"
+.TP
+\fB\-d\fR, \fB\-\-debug\fR
+Stay in the foreground and log to stderr. Without it \fBjetpipe\fR detaches
+and logs nothing.
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Show a short usage text.
 .SH "EXAMPLE"
-.PP 
-/usr/sbin/jetpipe /dev/usblp0 9100
-.PP 
-The above commandline will bind the USB printer on /dev/usblp0 to port 9100 where it can be 
-acessed through the JetDirect protocol from a cups client
+.PP
+.nf
+jetpipe \-d /dev/usb/lp0 9100
+.fi
+.PP
+shares the first USB printer on port 9100.
+.SH "NOTES"
+.PP
+Serial printers (\fI/dev/tty*\fR) are no longer supported and are refused.
+.PP
+There is no access control: anyone who can reach the port can print.
 .SH "SEE ALSO"
-.PP 
-\fBcups\-deviced\fP\fB(8)\fP,  
-\fBcups\-driverd\fP\fB(8)\fP, 
-\fBcups\-lpd\fP\fB(8)\fP, 
-\fBcups\-polld\fP\fB(8)\fP, 
-cupsd.conf(5)
-cupsd(8)
-.SH "AVAILABILITY"
-.PP 
-\fBjetpipe\fR is part of \fBltsp\fP package 
-and the latest versions are available in source form from 
-\fIhttps://launchpad.net/products/ltsp (link to URL https://launchpad.net/products/ltsp) \fR. 
+.PP
+lts.conf(5), cupsd(8)
 .SH "AUTHOR"
-.PP 
-copyright 2006 Oliver Grawert <ogra@ubuntu.com>, distributed under
-the terms of the GNU General Public License version 2 or any later version.
+.PP
+Originally Oliver Grawert <ogra@ubuntu.com>, 2006; rewritten for Python 3 and
+for printer devices only. Distributed under the terms of the GNU General
+Public License version 2 or any later version.
