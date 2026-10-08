@@ -1,3 +1,11 @@
+ltsp6-session-tuning (1.0.1) trixie; urgency=medium
+
+  * Raise the locked-memory limit (memlock) to 64 MB per process for login
+    sessions. systemd's default of 8 MiB is too low for programs that keep
+    secrets out of swap; OTPClient warns "memlock value too low" below it.
+
+ -- Marc-André Beckmann-Butz <ma@butz.online>  Thu, 08 Oct 2026 17:00:00 +0200
+
 ltsp6-session-tuning (1.0.0) trixie; urgency=medium
 
   * Initial release.

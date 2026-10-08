@@ -3,8 +3,8 @@ ltsp6-session-tuning
 
 What this package changes, and - more usefully - what it refuses to change.
 
-The three settings
-------------------
+The four settings
+-----------------
 
 1. XDG_CACHE_HOME moves to /var/cache/ltsp6-sessions/<uid>
 
@@ -45,6 +45,19 @@ The three settings
    trip on the next lookup, and desktops do a great many small lookups. If
    your home directories are local, the default of 100 is fine and this line
    can go.
+
+
+4. memlock 64 MB per process
+
+   /etc/security/limits.d/30-ltsp6-session-tuning.conf. systemd's default is
+   8 MiB. Programs that keep secrets in locked memory so they never reach
+   swap need more: OTPClient (libgcrypt secure memory) shows "memlock value
+   too low" below its recommended 64 MB. xrdp's PAM stack runs pam_limits,
+   so the value reaches every new RDP session; existing sessions keep the
+   old limit until the next login.
+
+   It is a per-process ceiling, not a reservation, and locked pages still
+   count against the user's memory cgroup.
 
 
 What was deliberately left out
@@ -115,6 +128,7 @@ Checking that it took effect
     echo "$XDG_CACHE_HOME"            # -> /var/cache/ltsp6-sessions/<uid>
     xfconf-query -c xfwm4 -p /general/use_compositing   # -> false
     sysctl fs.inotify.max_user_instances vm.vfs_cache_pressure
+    ulimit -l                         # -> 65536
 
 The Xsession hook only runs for sessions started after installation. Existing
 sessions keep the old environment until the user logs out and back in.
