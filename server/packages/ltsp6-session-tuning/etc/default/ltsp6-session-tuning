@@ -1,0 +1,16 @@
+# Settings for /etc/X11/Xsession.d/40ltsp6-session-tuning.
+#
+# Screen saver policy, applied at every login to ~/.xscreensaver.
+# On a session server an animated screen saver is drawn, encoded and sent to
+# the client by every idle session - load for nothing. "blank" costs nothing.
+#   SCREENSAVER_POLICY   yes = apply the settings below at login, no = leave alone
+#   SCREENSAVER_MODE     blank or off
+#   SCREENSAVER_LOCK     True or False
+#   SCREENSAVER_TIMEOUT  h:mm:ss until the screen saver starts
+#   SCREENSAVER_START    yes = start xscreensaver even if the user hid its
+#                        autostart entry
+SCREENSAVER_POLICY=yes
+SCREENSAVER_MODE=blank
+SCREENSAVER_LOCK=True
+SCREENSAVER_TIMEOUT=0:05:00
+SCREENSAVER_START=yes

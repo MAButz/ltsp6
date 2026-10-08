@@ -1,0 +1,7 @@
+# Desktop search indexer off on a session server - see README.Debian.
+# This file shadows /etc/xdg/autostart/tracker-miner-fs-3.desktop because
+# /etc/xdg/ltsp6 comes first in XDG_CONFIG_DIRS (40ltsp6-session-tuning).
+[Desktop Entry]
+Type=Application
+Name=tracker-miner-fs-3
+Hidden=true

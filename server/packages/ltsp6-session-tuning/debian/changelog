@@ -1,3 +1,20 @@
+ltsp6-session-tuning (1.1.0) trixie; urgency=medium
+
+  * xfwm4 defaults: vblank_mode=off as well, and describe compositing for
+    sessions with a GPU (glamor) too.
+  * inotify: 1024 instances and 524288 watches per user (VS Code alone asks
+    for 524288 on a large workspace).
+  * Dirty page cache as absolute amounts (256 MB / 1 GB) instead of a
+    percentage of RAM.
+  * Browser disk caches limited to 256 MB (Firefox ESR, Thunderbird).
+  * Desktop search indexer (localsearch/tracker) off; opt back in with
+    /etc/ltsp6/enable-desktop-search.
+  * Screen saver policy from /etc/default/ltsp6-session-tuning: blank,
+    locking, 5 minutes, applied at every login.
+  * README: per-user slice limits and GPU runtime PM as local settings.
+
+ -- Marc-André Beckmann-Butz <ma@butz.online>  Thu, 08 Oct 2026 18:00:00 +0200
+
 ltsp6-session-tuning (1.0.1) trixie; urgency=medium
 
   * Raise the locked-memory limit (memlock) to 64 MB per process for login

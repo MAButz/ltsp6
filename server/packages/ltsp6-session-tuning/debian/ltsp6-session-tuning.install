@@ -1,4 +1,10 @@
 etc/X11/Xsession.d/40ltsp6-session-tuning              etc/X11/Xsession.d/
+etc/default/ltsp6-session-tuning                       etc/default/
 etc/sysctl.d/60-ltsp6-session-tuning.conf              etc/sysctl.d/
 etc/security/limits.d/30-ltsp6-session-tuning.conf     etc/security/limits.d/
 etc/xdg/ltsp6/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml etc/xdg/ltsp6/xfce4/xfconf/xfce-perchannel-xml/
+etc/xdg/ltsp6/autostart/localsearch-3.desktop           etc/xdg/ltsp6/autostart/
+etc/xdg/ltsp6/autostart/tracker-miner-fs-3.desktop      etc/xdg/ltsp6/autostart/
+etc/firefox-esr/ltsp6-session-tuning.js                 etc/firefox-esr/
+etc/thunderbird/pref/ltsp6-session-tuning.js            etc/thunderbird/pref/
+usr/lib/systemd/user/localsearch-3.service.d/50-ltsp6-session-tuning.conf usr/lib/systemd/user/localsearch-3.service.d/

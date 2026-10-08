@@ -1,15 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Compositing off by default.
+  Compositing off by default, and no waiting for vblank.
 
-  On a session server there is normally no GPU in the session: xrdp's Xorg
-  runs on llvmpipe, so every shadow, every transparent panel and every fade
-  is composited by the CPU - once per session. On a host carrying many
-  sessions that is the single largest avoidable load, and it buys nothing a
-  remote desktop user can appreciate over a compressed RDP stream.
+  Without a GPU in the session (llvmpipe), every shadow, transparent panel
+  and fade is composited by the CPU - once per session. With a GPU (glamor,
+  for example on an Intel Arc), the cost moves to the render engine, and
+  xfwm4's default vblank_mode "auto" syncs to a vertical blank that
+  xorgxrdp's virtual display does not deliver: the compositor then draws in
+  bursts or waits, which users notice as a sluggish desktop. Either way none
+  of it survives RDP compression in a way a user would appreciate.
 
-  This is a default, not a lock: a user who turns compositing back on in
-  Window Manager Tweaks gets their own copy in ~/.config and keeps it.
+  vblank_mode "off" also covers users who turn compositing back on: they get
+  their effects without the stalls.
+
+  These are defaults, not locks: a user who changes them in Window Manager
+  Tweaks gets their own copy in ~/.config and keeps it.
 
   xfwm4 itself ships no xfconf defaults file, so nothing is lost by providing
   this channel wholesale.
@@ -17,5 +22,6 @@
 <channel name="xfwm4" version="1.0">
   <property name="general" type="empty">
     <property name="use_compositing" type="bool" value="false"/>
+    <property name="vblank_mode" type="string" value="off"/>
   </property>
 </channel>

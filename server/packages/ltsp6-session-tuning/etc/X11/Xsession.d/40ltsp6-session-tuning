@@ -41,3 +41,49 @@ if [ -d /etc/xdg/ltsp6 ]; then
            export XDG_CONFIG_DIRS ;;
     esac
 fi
+
+# ---- 3. screen saver policy ----------------------------------------------
+#
+# An animated screen saver in an idle RDP session is drawn, encoded and sent
+# to the client for nobody to see - multiplied by every idle session on the
+# host. Settings live in /etc/default/ltsp6-session-tuning; they are written
+# into ~/.xscreensaver at each login, so a change a user makes lasts until
+# the next login at most. xscreensaver reads that file again when it
+# changes, and anything not set there comes from its app-defaults.
+#
+# xscreensaver is also started from here when the user has hidden its
+# autostart entry; a second instance would refuse to start, so this is
+# harmless when the autostart entry ran too.
+if [ -r /etc/default/ltsp6-session-tuning ]; then
+    _ltsp6_policy=no; _ltsp6_start=no
+    _ltsp6_mode=blank; _ltsp6_lock=True; _ltsp6_timeout=0:05:00
+    while IFS='=' read -r _ltsp6_k _ltsp6_v; do
+        case "$_ltsp6_k" in
+            SCREENSAVER_POLICY)  _ltsp6_policy=$_ltsp6_v ;;
+            SCREENSAVER_MODE)    _ltsp6_mode=$_ltsp6_v ;;
+            SCREENSAVER_LOCK)    _ltsp6_lock=$_ltsp6_v ;;
+            SCREENSAVER_TIMEOUT) _ltsp6_timeout=$_ltsp6_v ;;
+            SCREENSAVER_START)   _ltsp6_start=$_ltsp6_v ;;
+        esac
+    done < /etc/default/ltsp6-session-tuning || true
+    if [ "$_ltsp6_policy" = yes ] && [ -n "$HOME" ]; then
+        _ltsp6_xs="$HOME/.xscreensaver"
+        if [ -f "$_ltsp6_xs" ] && [ ! -L "$_ltsp6_xs" ]; then
+            sed -i -E \
+                -e "s/^(mode:[[:space:]]*).*/\1$_ltsp6_mode/" \
+                -e "s/^(lock:[[:space:]]*).*/\1$_ltsp6_lock/" \
+                -e "s/^(timeout:[[:space:]]*).*/\1$_ltsp6_timeout/" \
+                "$_ltsp6_xs" 2>/dev/null || true
+        elif [ ! -e "$_ltsp6_xs" ]; then
+            printf 'mode:\t\t%s\nlock:\t\t%s\ntimeout:\t%s\n' \
+                "$_ltsp6_mode" "$_ltsp6_lock" "$_ltsp6_timeout" \
+                > "$_ltsp6_xs" 2>/dev/null || true
+        fi
+        unset _ltsp6_xs
+    fi
+    if [ "$_ltsp6_start" = yes ] && command -v xscreensaver >/dev/null 2>&1; then
+        ( sleep 5; pgrep -u "$(id -u)" -x xscreensaver >/dev/null 2>&1 \
+              || exec xscreensaver -no-splash ) >/dev/null 2>&1 &
+    fi
+    unset _ltsp6_policy _ltsp6_start _ltsp6_mode _ltsp6_lock _ltsp6_timeout _ltsp6_k _ltsp6_v
+fi
