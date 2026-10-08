@@ -1,0 +1,58 @@
+# Write the PXE menu into the chroot's /boot, so that 035-update-kernels
+# copies it into the TFTP tree with the kernel it boots.
+#
+# Nothing did this on Debian. The Ubuntu plugins run the chroot's kernel
+# postinst hook (095-update-image); Debian had no equivalent, and
+# cleanup.d/50-update-kernels only runs for ltsp-update-image --cleanup. So
+# a build left the TFTP tree with whatever menu was there before - which
+# worked on a server that had one, and on a new server meant no
+# pxelinux.cfg at all and clients stopping at the boot: prompt. It also
+# meant that nothing in update-kernels ever took effect through a build:
+# not the kernel names it recognises, not the boot parameters.
+#
+# Boot parameters belong to the server, kernel recognition to the image. If
+# the server has an /etc/ltsp/update-kernels.conf - the place an
+# administrator puts something like ipv6.disable=1 - its settings are laid
+# over the chroot's for this run, except the ones that describe how kernels
+# are named. Those come from the image, which knows its own kernels: a
+# server's copy is easily years old, and an old KERNEL_NAMES does not
+# recognise a single trixie kernel. The chroot's file is restored
+# afterwards; it is a conffile, and a modified one would stop the next
+# package upgrade with a question nobody is there to answer.
+
+case "$MODE" in
+    finalization)
+        test -x "$ROOT/usr/share/ltsp/update-kernels" || return 0
+        if [ ! -f "$ROOT/usr/lib/PXELINUX/pxelinux.0" ]; then
+            echo "NOTE: pxelinux is not installed in the chroot, so no PXE menu is written;"
+            echo "      the TFTP tree keeps the one it has, if any."
+            return 0
+        fi
+
+        ltsp_ukc="$ROOT/etc/ltsp/update-kernels.conf"
+        ltsp_ukc_saved=""
+        if [ -f /etc/ltsp/update-kernels.conf ] && [ -f "$ltsp_ukc" ]; then
+            ltsp_ukc_saved="$ltsp_ukc.ltsp-build-client"
+            cp -a "$ltsp_ukc" "$ltsp_ukc_saved"
+            {
+                cat "$ltsp_ukc_saved"
+                echo
+                echo "# Laid over by ltsp-build-client from the server's /etc/ltsp/update-kernels.conf"
+                grep -vE '^[[:space:]]*(KERNEL_NAMES|INITRD_NAME|KERNEL_PREFIX|KERNEL_SUFFIX|LIST_KERNELS_[A-Z0-9]+)=' \
+                    /etc/ltsp/update-kernels.conf
+            } > "$ltsp_ukc"
+            echo "PXE menu: boot parameters from the server's /etc/ltsp/update-kernels.conf"
+        fi
+
+        if chroot "$ROOT" /usr/share/ltsp/update-kernels; then
+            echo "PXE menu written: $(ls "$ROOT/boot/pxelinux.cfg" | tr '\n' ' ')"
+        else
+            echo "WARNING: update-kernels failed in the chroot; the TFTP tree keeps its old menu"
+        fi
+
+        if [ -n "$ltsp_ukc_saved" ]; then
+            mv -f "$ltsp_ukc_saved" "$ltsp_ukc"
+        fi
+        unset ltsp_ukc ltsp_ukc_saved
+        ;;
+esac

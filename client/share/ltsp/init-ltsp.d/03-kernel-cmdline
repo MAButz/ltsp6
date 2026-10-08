@@ -43,15 +43,22 @@ case "$netroot" in
 		;;
 esac
 
-# netpath still has its separating "/" (stripping $netport only removes the
-# port digits), but nbd-client's -N wants a bare export name - strip it, or
-# NBD_ROOT_NAME ends up as e.g. "/ltsp-amd64" instead of "ltsp-amd64", which
-# doesn't match any real nbd-server export and breaks ldm's
-# rc.d/I01-nbd-checkupdate (its own separate NBD connection, used only to
-# detect a server-side image update, silently fails to attach and ends up
-# comparing against empty/garbage data - which never matches, so it thinks
-# the image always changed and reboots on every single boot).
-netpath=${netpath#/}
+# netpath keeps its leading "/". The export is named after the image's path,
+# "/srv/ltsp/amd64" or "/opt/ltsp/amd64" - that is the section header
+# ltsp-update-image --config-nbd writes into nbd-server's configuration, and
+# the name the initramfs connected the root file system with.
+#
+# Until 6.3.31 the slash was stripped, on the belief that exports had bare names like
+# "ltsp-amd64". They do not, and NBD_ROOT_NAME then named an export that does
+# not exist. Its one user, ldm's rc.d/I01-nbd-checkupdate, opens a second NBD
+# connection to see whether the server has a newer image; it got "Export
+# unknown", compared the running image against nothing, found them different
+# every time, and with LDM_NBD_CHECKUPDATE=True would have announced a reboot
+# at every login screen. Measured on a client: with the slash the server's
+# image and the running one match, without it nothing is read at all.
+#
+# A bare name still works the way LTSP 5 wrote it - "server:ltsp_amd64" - via
+# the non-numeric "port" case below.
 
 # If not specified in the kernel cmdline, use the value from DHCP
 netsrv=${netsrv:-$ROOTSERVER}

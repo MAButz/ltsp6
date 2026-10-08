@@ -1,3 +1,31 @@
+ltsp (6.3.31-1) unstable; urgency=medium
+
+  * A Debian build writes the PXE menu. Nothing did: the Ubuntu plugins run
+    the chroot's kernel hook, Debian had no equivalent, and
+    cleanup.d/50-update-kernels only runs for ltsp-update-image --cleanup.
+    A build left the TFTP tree with whatever menu was there before - fine
+    on a server that had one, no pxelinux.cfg at all on a new server, with
+    clients stopping at the boot: prompt. It also meant that none of
+    update-kernels' own fixes, those of 6.3.28 included, ever reached a
+    client through a build. The new Debian/035-pxe-menu runs update-kernels
+    in the chroot before 035-update-kernels copies /boot into the TFTP tree.
+  * Boot parameters come from the server, kernel recognition from the image.
+    The server's /etc/ltsp/update-kernels.conf, where an administrator puts
+    something like ipv6.disable=1, is laid over the chroot's for the run,
+    without its KERNEL_NAMES, INITRD_NAME, KERNEL_PREFIX, KERNEL_SUFFIX and
+    LIST_KERNELS_* - a server's copy is easily years old, and an old
+    KERNEL_NAMES recognises no trixie kernel. The chroot's file, a conffile,
+    is restored afterwards.
+  * NBD_ROOT_NAME keeps its leading slash. The export is named after the
+    image's path, /srv/ltsp/amd64 or /opt/ltsp/amd64, and the initramfs
+    connects with exactly that; stripping the slash named an export that
+    does not exist. ldm's update check, the only user, then compared the
+    running image against nothing, and with LDM_NBD_CHECKUPDATE=True would
+    have announced a reboot at every login screen. Bare names written the
+    LTSP 5 way, nbdroot=server:ltsp_amd64, are unaffected.
+
+ -- Marc-Andre Butz <ma@butz.online>  Thu, 08 Oct 2026 15:00:37 +0200
+
 ltsp (6.3.30-1) unstable; urgency=medium
 
   * Printers attached to a client are shared again. PRINTER_<n>_DEVICE in
