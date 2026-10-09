@@ -1,3 +1,31 @@
+ltsp (6.3.32-1) unstable; urgency=medium
+
+  * Sound for RDP sessions: PipeWire runs for root on the client. xfreerdp's
+    /sound:sys:pulse and /microphone:sys:pulse need a PulseAudio-compatible
+    server, and without one FreeRDP ends the whole connection right after
+    it is made. The images built since the move to systemd had none - LTSP
+    5 started "pulseaudio --system" from an init script this package does
+    not ship - so the RDP options a fleet brought from LTSP 5 failed, and
+    only worked once the sound options were taken out.
+  * The new init-ltsp.d/50-pipewire lets root linger when SOUND_DAEMON is
+    pipewire, so logind starts root's user manager at boot and with it
+    PipeWire, WirePlumber and the pulse socket in /run/user/0. Debian's
+    pipewire and pipewire-pulse units carry ConditionUser=!root, so the
+    script also clears that condition with drop-ins in /etc/systemd/user;
+    without them user@0 came up and skipped PipeWire silently. The new
+    screen-session.d/S20-pulse-runtime gives every screen XDG_RUNTIME_DIR
+    pointing there; without it libpulse looked nowhere. Tested on an Intel
+    NUC N4505 with ldm and /sound:sys:pulse /microphone:sys:pulse: sound
+    over HDMI, chosen by WirePlumber, and the microphone path to the server.
+  * ltsp_config.d/25sound sets SOUND_DAEMON=pipewire when pipewire-pulse is
+    in the image. It looked only for /usr/bin/pulseaudio, so with PipeWire
+    SOUND stayed unset.
+  * ltsp-client-core recommends pipewire-pulse and wireplumber, so
+    ltsp-build-client brings them in, and suggests pulseaudio-utils and
+    alsa-utils for diagnosis. lts.conf(5) explains the chain.
+
+ -- Marc-Andre Butz <ma@butz.online>  Fri, 09 Oct 2026 13:48:03 +0200
+
 ltsp (6.3.31-1) unstable; urgency=medium
 
   * A Debian build writes the PXE menu. Nothing did: the Ubuntu plugins run

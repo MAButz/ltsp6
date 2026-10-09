@@ -1,9 +1,18 @@
 # set defaults for sound support
+#
+# SOUND_DAEMON names the sound server the client runs: "pipewire" when the
+# image has PipeWire's PulseAudio server (init-ltsp.d/50-pipewire starts it
+# for root), "pulse" for a PulseAudio image. PipeWire comes first: it is
+# Debian's default, and with both installed the pulse socket would be
+# PipeWire's anyway. Before 6.3.32 only /usr/bin/pulseaudio was looked for,
+# so an image with PipeWire got SOUND unset and no sound server at all.
 if boolean_is_true "$LTSP_FATCLIENT"; then
     # For fat clients we want to set the sound volume but not start any daemon
     set_lts_var SOUND_DAEMON False
 elif [ -z "$SOUND_DAEMON" ]; then
-    if [ -x /usr/bin/pulseaudio ]; then
+    if [ -x /usr/bin/pipewire-pulse ]; then
+        set_lts_var SOUND_DAEMON pipewire
+    elif [ -x /usr/bin/pulseaudio ]; then
         set_lts_var SOUND_DAEMON pulse
     fi
     if [ -z "$SOUND" ] && [ -n "$SOUND_DAEMON" ]; then

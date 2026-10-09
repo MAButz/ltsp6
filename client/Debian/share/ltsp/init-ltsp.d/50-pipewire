@@ -1,0 +1,45 @@
+# Run the sound server for root, where the greeter and the RDP client run.
+#
+# xfreerdp's /sound:sys:pulse and /microphone:sys:pulse need a
+# PulseAudio-compatible server, and FreeRDP does not degrade without one: it
+# ends the whole connection right after the MCS exchange. An image without a
+# sound server therefore lost every session that asked for sound - which is
+# what the RDP options of a fleet coming from LTSP 5 do. LTSP 5 started
+# "pulseaudio --system" from an init script this package no longer ships.
+#
+# PipeWire is Debian's sound server now, and it runs per user, under
+# systemd --user. The greeter runs as root without a login session, so
+# nothing would start a user manager for root. Lingering does: logind starts
+# user@0.service at boot for every name in /var/lib/systemd/linger, and the
+# packages enable pipewire, pipewire-pulse and wireplumber for every user.
+# The pulse socket then appears in /run/user/0/pulse/native, and
+# screen-session.d/S20-pulse-runtime points the screens at it.
+#
+# Debian keeps root out on purpose: pipewire and pipewire-pulse, socket and
+# service alike, carry ConditionUser=!root, and user@0 skips them without a
+# word. An empty ConditionUser= in a drop-in clears that list. The drop-ins
+# live in /etc/systemd/user, so they reach root's manager only, nobody's
+# session changes, and an image without this script stays as Debian ships it.
+#
+# Tested on an Intel NUC N4505: WirePlumber 0.5 brings up the onboard card
+# and HDMI for root without a seat session - its logind binding only gates
+# Bluetooth - and picks the HDMI output of a monitor with speakers by itself.
+#
+# Only with SOUND=True (the default when a sound server is installed, see
+# ltsp_config.d/25sound) and only with PipeWire in the image.
+
+if boolean_is_true "$SOUND" && [ "$SOUND_DAEMON" = pipewire ]; then
+    for unit in pipewire.socket pipewire.service pipewire-pulse.socket pipewire-pulse.service; do
+        mkdir -p "/etc/systemd/user/$unit.d" &&
+        cat > "/etc/systemd/user/$unit.d/50-ltsp-root.conf" <<EOF ||
+[Unit]
+ConditionUser=
+EOF
+        warn "could not let $unit run for root"
+    done
+    if mkdir -p /var/lib/systemd/linger && : > /var/lib/systemd/linger/root; then
+        log "ltsp: sound server PipeWire for root (user@0 lingers)"
+    else
+        warn "could not enable lingering for root; no sound server will run"
+    fi
+fi

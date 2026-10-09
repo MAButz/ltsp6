@@ -1361,8 +1361,35 @@ Whether sound is available in the session. Derived rather than configured:
 true on a thin client when a sound daemon is present, false on a fat client,
 which plays its own audio locally and needs no forwarding.
 .IP "\fBSOUND_DAEMON\fP" 4
-Which daemon does it \(em \fBpulse\fR when PulseAudio is in the image. Also
-derived, and forced off for fat clients.
+Which daemon does it \(em \fBpipewire\fR when PipeWire's PulseAudio server
+(\fBpipewire\-pulse\fR) is in the image, else \fBpulse\fR when PulseAudio is.
+Also derived, and forced off for fat clients. Set it to \fBFalse\fR to keep a
+sound server in the image from being started.
+.PP
+\fBHow sound reaches an RDP session.\fR xfreerdp's \fB/sound:sys:pulse\fR and
+\fB/microphone:sys:pulse\fR talk to a PulseAudio\-compatible server on the
+client. With \fBSOUND_DAEMON=pipewire\fR, init\-ltsp.d/50\-pipewire lets root
+linger, so logind starts root's user manager at boot and with it PipeWire,
+WirePlumber and the pulse socket in \fI/run/user/0\fR. Debian keeps PipeWire
+away from root with \fBConditionUser=!root\fR; the script clears that for
+root's manager with drop\-ins named \fI50\-ltsp\-root.conf\fR in
+\fI/etc/systemd/user\fR. Every screen gets
+\fBXDG_RUNTIME_DIR\fR pointing there from screen\-session.d/S20\-pulse\-runtime.
+ltsp\-client\-core recommends \fBpipewire\-pulse\fR and \fBwireplumber\fR, so a
+build with ltsp\-build\-client brings them in. WirePlumber chooses the output
+itself: the HDMI output of a monitor with speakers, the headphone jack when
+something is plugged in, a USB headset when one appears.
+.PP
+FreeRDP does not degrade without a sound server: with either option and no
+server it ends the whole connection right after it is made. ldm from 3.4.12
+checks first and, finding none, starts the session without \fB/sound\fR and
+\fB/microphone\fR, and says so in the log. Older images and older ldm simply
+lose the session \(em the cause behind RDP options that "only work without
+the sound options".
+.PP
+For diagnosis on a client: \fBXDG_RUNTIME_DIR=/run/user/0 pactl info\fR
+shows the server and its default output (package \fBpulseaudio\-utils\fR),
+\fBXDG_RUNTIME_DIR=/run/user/0 wpctl status\fR the devices WirePlumber sees.
 .SH "PRINTERS"
 .PP
 A printer plugged into a client can be shared on the network, so that a

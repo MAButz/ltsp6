@@ -1,0 +1,17 @@
+# Point the screen at the sound server running for its user.
+#
+# A per-user PulseAudio-compatible server - PipeWire's pipewire-pulse under
+# user@<uid>, see init-ltsp.d/50-pipewire - puts its socket in
+# /run/user/<uid>/pulse/native, and libpulse finds it there only through
+# XDG_RUNTIME_DIR. A login session sets that; a screen started by systemd
+# has none, so xfreerdp looked nowhere, found no server, and ended the
+# connection the moment /sound or /microphone was in its options.
+#
+# Set when the user lingers rather than when the directory exists: the
+# screen can start a moment before logind has brought up user@0, and the
+# directory is there by the time anyone has typed a password. Left alone if
+# something already set it.
+
+if [ -z "$XDG_RUNTIME_DIR" ] && [ -e "/var/lib/systemd/linger/$(id -un)" ]; then
+    export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+fi
