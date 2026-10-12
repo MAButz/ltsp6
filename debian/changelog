@@ -1,3 +1,17 @@
+ltsp (6.3.34-1) unstable; urgency=medium
+
+  * A reboot shuts the devices down again before the machine restarts.
+    Since 6.3.2 the client restarted through sysrq b, which is
+    emergency_restart() and skips device_shutdown(): the network card was
+    left running, and on some older clients the PXE firmware then got no
+    IPv4 address out of it and fell through to IPv6 PXE, where it stayed.
+    Switching off was not affected, sysrq o shuts the devices down.
+  * The reboot is now a real reboot(2), made by busybox from a copy in RAM,
+    since the root file system is gone once nbd is disconnected. sysrq b
+    remains as the fallback. ltsp-client-core depends on busybox for it.
+
+ -- Marc-Andre Butz <ma@butz.online>  Mon, 12 Oct 2026 15:24:38 +0200
+
 ltsp (6.3.33-1) unstable; urgency=medium
 
   * SHUTDOWN_TIME switches the client off again. It was a line in

@@ -27,6 +27,16 @@ cat > /lib/systemd/systemd-shutdown <<EOF
 #
 # It stays as a fallback for a kernel built without CONFIG_MAGIC_SYSRQ, after
 # a wait spun out of builtins so that even the waiting costs no disk access.
+#
+# A reboot cannot take the same shortcut. sysrq b is emergency_restart(),
+# which skips device_shutdown(): the network card is left running, and the
+# PXE firmware of some older clients then gets no IPv4 address out of it and
+# falls through to the next boot entry, IPv6 PXE, where it stays. sysrq o
+# goes through kernel_power_off(), which does shut the devices down, so only
+# the reboot needs more. For that, busybox and its libraries are copied into
+# RAM before the disconnect, onto a tmpfs of their own because /run may be
+# mounted noexec, and "busybox reboot -f" makes a real reboot(2) from there.
+# sysrq b remains as the fallback if that copy cannot be made or run.
 
 exec 2>/dev/console
 
@@ -44,13 +54,32 @@ pkill --inverse --uid 0
 swapoff -a
 # Cache the command before disconnecting nbd, in case the fallback is needed
 \$command --help >/dev/null 2>&1
+# Put a reboot that shuts the devices down into RAM (see above)
+helper=
+dir=/run/ltsp-reboot
+if [ "\$1" = reboot ] && [ -x /bin/busybox ] && mkdir -p "\$dir" &&
+    mount -t tmpfs -o mode=0700 ltsp-reboot "\$dir" &&
+    cp -L /bin/busybox "\$dir/"; then
+    copied=1
+    for lib in \$(ldd /bin/busybox | awk '/\// { print (\$2 == "=>") ? \$3 : \$1 }'); do
+        cp -L "\$lib" "\$dir/" || copied=
+    done
+    for loader in "\$dir"/ld-*.so*; do break; done
+    if [ -n "\$copied" ] && [ -x "\$loader" ] &&
+        "\$loader" --library-path "\$dir" "\$dir/busybox" true; then
+        helper="\$loader --library-path \$dir \$dir/busybox reboot -n -f"
+    else
+        echo "Cannot run busybox from \$dir, rebooting with sysrq b" >&2
+    fi
+fi
 # Permit the sysrq keys. Debian already allows reboot and poweroff, but a
 # machine where someone set kernel.sysrq=0 would otherwise have no way out.
 echo 1 > /proc/sys/kernel/sysrq 2>/dev/null
 for nbd in \$(awk '/nbd/ { print \$NF }' < /proc/partitions | sort -rV); do
     nbd-client -d "/dev/\$nbd"
 done
-# Point of no return: from here on, builtins and /proc only
+# Point of no return: from here on, builtins, /proc and the copy in RAM only
+test -n "\$helper" && \$helper
 echo "\$sysrq" > /proc/sysrq-trigger
 # The kernel powers off from a work queue, so give it a moment - without
 # starting sleep(1), which lives on the filesystem that just went away.

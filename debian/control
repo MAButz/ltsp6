@@ -54,6 +54,7 @@ Architecture: any
 Depends: ${shlibs:Depends},
          ${misc:Depends},
          initramfs-tools,
+         busybox,
          udev,
          nbd-client,
          iproute2,
