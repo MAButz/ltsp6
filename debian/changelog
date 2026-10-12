@@ -1,3 +1,23 @@
+ltsp (6.3.33-1) unstable; urgency=medium
+
+  * SHUTDOWN_TIME switches the client off again. It was a line in
+    /etc/cron.d, and a Debian image built by ltsp-build-client has no cron:
+    the directory did not exist, 50-cron warned and stopped, and the client
+    stayed on. Clients left on overnight then lost their root file system
+    when the server restarted at night, and had to be booted again in the
+    morning before they worked.
+  * It is a systemd timer now, ltsp-shutdown.timer, written and enabled by
+    init-ltsp.d/50-cron before systemd starts. A malformed time is reported
+    instead of producing a crontab line that never matches.
+  * It switches the client off whether or not a session is open. The old
+    rule waited for ldm_socket_* to go, which only ldm's ssh backend
+    creates, so with xfreerdp it never saw a session anyway; and at night
+    the server's restart ends the session regardless. lts.conf(5) says so.
+  * CRONTAB_nn lines are written only when the image has a cron daemon, and
+    a missing one is logged instead of passing in silence.
+
+ -- Marc-Andre Butz <ma@butz.online>  Mon, 12 Oct 2026 10:37:33 +0200
+
 ltsp (6.3.32-1) unstable; urgency=medium
 
   * Sound for RDP sessions: PipeWire runs for root on the client. xfreerdp's

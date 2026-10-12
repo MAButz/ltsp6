@@ -1571,11 +1571,17 @@ Lines appended to \fI/etc/rc.local\fR, which runs later than
 the client is still assembling itself.
 .IP "\fBCRONTAB_\fP\fInn\fP" 4
 Lines added to the client's crontab. Full crontab syntax including the user
-field.
+field. They need a cron daemon in the image, which ltsp\-build\-client does
+not install unless asked (\fB\-\-late\-packages cron\fR); without one the
+client logs a warning and the lines do not run.
 .IP "\fBSHUTDOWN_TIME\fP" 4
-A time of day, \fBHH:MM\fR, at which the client switches itself off. A client
-with a session open is not cut off mid\-work: it is marked to shut down when
-that session ends.
+A time of day, \fBHH:MM\fR, at which the client switches itself off every
+day, whether or not a session is open. An open RDP session ends on the
+client; on the server it is left disconnected, as when the network drops.
+Use it to have clients off before the server restarts at night: a client
+left on loses its root file system with nbd\-server and is unusable until it
+is rebooted. It is a systemd timer (\fIltsp\-shutdown.timer\fR) and needs no
+cron. A client switched on after that time stays on until the next day.
 .SH "THE CONFIGURATION FILE ITSELF"
 .PP
 .IP "\fBLTSCONF\fP" 4

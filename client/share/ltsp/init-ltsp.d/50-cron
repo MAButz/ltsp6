@@ -1,9 +1,68 @@
-CRON_FILE=/etc/cron.d/ltsp
-if [ ! -w "/etc/cron.d" ]; then
-    echo "Warning: /etc/cron.d is not writeable."
-    return 1
+# SHUTDOWN_TIME and CRONTAB_nn from lts.conf.
+#
+# SHUTDOWN_TIME switches the client off at a time of day, open session or
+# not. It is what keeps clients from being left on overnight while the
+# server restarts: nbd-server goes down with it, a client that stays on
+# loses its root file system, and in the morning it shows a greeter that
+# fails at the first thing it has to read. Its RDP session ends with the
+# server's restart anyway, so there is nothing to wait for.
+#
+# It used to be a line in /etc/cron.d, run only once no ldm_socket_* was
+# left, and that broke twice over. A Debian image built by ltsp-build-client
+# has no cron, so the line went into a directory that does not exist and
+# the client stayed on. And only ldm's ssh backend creates that socket, so
+# with xfreerdp the check saw no session ever. systemd is always there, so
+# it is a timer now: an image needs nothing else, and no check means no
+# wrong one.
+#
+# This runs before systemd does - init-ltsp ends with "exec /sbin/init" -
+# so the units are written to /etc and enabled offline, as 50-screens does.
+# Persistent= stays off: a client switched on after SHUTDOWN_TIME must not
+# go straight back off.
+
+if [ -n "$SHUTDOWN_TIME" ]; then
+    case "$SHUTDOWN_TIME" in
+        [0-9]:[0-5][0-9]|[01][0-9]:[0-5][0-9]|2[0-3]:[0-5][0-9])
+            cat > /etc/systemd/system/ltsp-shutdown.service <<EOF &&
+[Unit]
+Description=Switch the LTSP client off at SHUTDOWN_TIME
+
+[Service]
+Type=oneshot
+ExecStart=/bin/systemctl poweroff
+EOF
+            cat > /etc/systemd/system/ltsp-shutdown.timer <<EOF &&
+[Unit]
+Description=Switch the LTSP client off at $SHUTDOWN_TIME (SHUTDOWN_TIME)
+
+[Timer]
+OnCalendar=*-*-* $SHUTDOWN_TIME:00
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target
+EOF
+            systemctl enable --root=/ --no-reload --quiet ltsp-shutdown.timer &&
+                log "ltsp: switching off daily at $SHUTDOWN_TIME (SHUTDOWN_TIME)" ||
+                warn "could not set up SHUTDOWN_TIME=$SHUTDOWN_TIME; the client stays on"
+            ;;
+        *)
+            warn "SHUTDOWN_TIME=$SHUTDOWN_TIME is not HH:MM; the client stays on"
+            ;;
+    esac
 fi
-if [ -n "$SHUTDOWN_TIME" ] ; then
-    echo $SHUTDOWN_TIME | awk -F : '{print $2" "$1" * * * root test ! -S \"$(ls -1 /var/run/ldm_socket_* | head -1)\" && PATH=\$PATH:/sbin/ poweroff || echo HALT > /var/run/ltsp-logout-action" }' >> $CRON_FILE
+
+# CRONTAB_nn are crontab lines and need a cron daemon, which a Debian image
+# only has when the build asks for it (--late-packages cron). Without one
+# they would be written and never run, so say so instead.
+ltsp_crontab="$(env | sort -V | sed -n 's/^CRONTAB_[^=]*=//p')"
+if [ -n "$ltsp_crontab" ]; then
+    if [ -x /usr/sbin/cron ] || [ -x /usr/sbin/crond ]; then
+        mkdir -p /etc/cron.d &&
+            printf '%s\n' "$ltsp_crontab" >> /etc/cron.d/ltsp ||
+            warn "could not write the CRONTAB_ lines to /etc/cron.d/ltsp"
+    else
+        warn "CRONTAB_ lines in lts.conf, but no cron in the image; they will not run"
+    fi
 fi
-env | sort -V | sed -n 's/^CRONTAB_[^=]*=//p' >> "$CRON_FILE"
+unset ltsp_crontab
