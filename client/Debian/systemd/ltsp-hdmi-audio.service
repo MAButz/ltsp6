@@ -4,10 +4,11 @@
 # /usr/share/ltsp/ltsp-hdmi-audio.
 #
 # init-ltsp.d/50-pipewire enables it at every boot when PipeWire runs for
-# root; nothing is enabled in the image itself.
+# root; nothing is enabled in the image itself. No condition on /proc/asound:
+# the sound driver often loads after this starts, and the script waits for
+# ELD files anyway.
 Description=LTSP: reopen HDMI sound when a monitor comes back
 After=user@0.service
-ConditionPathExists=/proc/asound
 
 [Service]
 Type=simple

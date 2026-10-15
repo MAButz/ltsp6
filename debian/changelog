@@ -1,3 +1,13 @@
+ltsp (6.3.36-1) unstable; urgency=medium
+
+  * ltsp-hdmi-audio.service starts without waiting for /proc/asound. Its
+    ConditionPathExists=/proc/asound was checked before the sound driver
+    had loaded, so systemd skipped the service at boot and it never ran.
+    The script needs no card to start: it reads the ELD files every few
+    seconds and finds them once the driver is there.
+
+ -- Marc-Andre Butz <ma@butz.online>  Thu, 15 Oct 2026 16:37:30 +0200
+
 ltsp (6.3.35-1) unstable; urgency=medium
 
   * HDMI sound is reopened when a monitor wakes up. xfreerdp keeps its
