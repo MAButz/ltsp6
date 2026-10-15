@@ -2,19 +2,19 @@ Origin: ltsp6
 Label: ltsp6 Github
 Suite: stable
 Codename: trixie
-Date: Mon, 12 Oct 2026 14:22:29 UTC
+Date: Thu, 15 Oct 2026 14:35:53 UTC
 Architectures: amd64
 Components: main
 Description: Debian 13 (trixie) ltsp6 repository
 MD5Sum:
- 3c704fa4299fc711d9e2d131f46e9c05 5786 main/binary-amd64/Packages
- 3943ca857f901315954d3cea551cb319 2773 main/binary-amd64/Packages.gz
+ 26b98e470d1d0007a922ed0964b4f466 5786 main/binary-amd64/Packages
+ 4718a9d709fb79ac1b816f21a45b3275 2771 main/binary-amd64/Packages.gz
  400a893451d681e4ca2b02c65163487b 135 main/binary-amd64/Release
 SHA1:
- 09a808de17077c94728444def95edf85c1e60db0 5786 main/binary-amd64/Packages
- 3ccbb479821d2834ecdd7d40ae71e43e1b1ca6b4 2773 main/binary-amd64/Packages.gz
+ c250dcd535be14b1e48cdd362346f1a24f24e652 5786 main/binary-amd64/Packages
+ b8497e5acc65c17d08124970a453a2b759f322c7 2771 main/binary-amd64/Packages.gz
  b20840de0f3e68ef35d996380b80f40d9958fefc 135 main/binary-amd64/Release
 SHA256:
- d43333ac44d02884f764f218bcdd149d39922eb51be848aab95c8b0890e18d8e 5786 main/binary-amd64/Packages
- 6a64a3e753e1ee6f21de9c5ae6e75581ababa8b53057c51f5e21bbba57e130cd 2773 main/binary-amd64/Packages.gz
+ e03b1882c6a5b52fa76e33e5d87ee4f1472ee406a66712e95aeb3deaf6fcbe77 5786 main/binary-amd64/Packages
+ 2bde16892c30a66012275fa21d06cf5fd42348ecca285877f8b1b662cc0fd8ca 2771 main/binary-amd64/Packages.gz
  43d63f08e8ad502997a7ee8f683fd1926f6f872093538ee93a96c4c00ca5684e 135 main/binary-amd64/Release
