@@ -29,7 +29,7 @@ Description: LTSP display manager (GTK3 / xfreerdp fork)
 
 Package: ltsp-client-core
 Source: ltsp
-Version: 6.3.35-1
+Version: 6.3.36-1
 Architecture: amd64
 Maintainer: Marc-André Beckmann-Butz <ma@butz.online>
 Installed-Size: 501
@@ -39,11 +39,11 @@ Suggests: openssh-server, freerdp3-shadow-x11, python3-gi, gir1.2-gtk-3.0, alsa-
 Homepage: https://github.com/MAButz/ltsp6
 Priority: optional
 Section: admin
-Filename: pool/main/l/ltsp/ltsp-client-core_6.3.35-1_amd64.deb
-Size: 140496
-SHA256: c880c97c2eab8237791c96bbfbdd15672ee185beb34dd8b3eb17a97cb16983c3
-SHA1: f76f92248b3a5d17b1278e960597c5a7d8cbf319
-MD5sum: 02fb5f749cf7d163784aa130de42c21f
+Filename: pool/main/l/ltsp/ltsp-client-core_6.3.36-1_amd64.deb
+Size: 140600
+SHA256: 6e479b5829047283f05c2e6e71f69b0af18a451fba767dc743d9c45d23ddd195
+SHA1: 90080aec0fad3a2e50ee645672d35bbc555b5d11
+MD5sum: 60d5eed9daef50e657fb3aa2d9cfda1c
 Description: LTSP6 thin client core scripts and helpers
  Core client-side scripts, udev rules, initramfs-tools hooks and
  helper binaries (getltscfg, getltscfg-cluster, jetpipe, nbd-proxy,
@@ -54,7 +54,7 @@ Description: LTSP6 thin client core scripts and helpers
 
 Package: ltsp-server
 Source: ltsp
-Version: 6.3.35-1
+Version: 6.3.36-1
 Architecture: all
 Maintainer: Marc-André Beckmann-Butz <ma@butz.online>
 Installed-Size: 635
@@ -64,11 +64,11 @@ Suggests: python3-gi, gir1.2-gtk-3.0, freerdp3-x11 | remmina
 Homepage: https://github.com/MAButz/ltsp6
 Priority: optional
 Section: admin
-Filename: pool/main/l/ltsp/ltsp-server_6.3.35-1_all.deb
-Size: 221712
-SHA256: 2c226d82e34945e5c454d6869c44bcbfa71c90a9b12329cf5d905214b239286a
-SHA1: 5ed8515ea2bf17695779ab7a7e48975d20a52571
-MD5sum: fae26683fe82df0bf3e7f83fd9f4f2a4
+Filename: pool/main/l/ltsp/ltsp-server_6.3.36-1_all.deb
+Size: 221856
+SHA256: 1b220863f34a1660c33e9e13e446abf71ab0d7655c6ec2758f46e8b5735c0a6f
+SHA1: 0686a84c8c744ce2cc5071a782fe5afb729f2aa1
+MD5sum: a05d29bcef1537c93e14d75119e04d5c
 Description: LTSP6 thin client server tools
  ltsp-build-client, ltsp-config, ltsp-chroot, ltsp-info and related
  server-side tools for building and managing LTSP (Linux Terminal
