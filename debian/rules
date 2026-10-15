@@ -20,6 +20,11 @@ override_dh_auto_clean:
 override_dh_auto_test:
 	# no automated test suite
 
+# init-ltsp.d enables the client's units at boot, from lts.conf and what the
+# image has; installing the package into the chroot must not enable them.
+override_dh_installsystemd:
+	dh_installsystemd --no-enable --no-start
+
 override_dh_auto_install:
 	# ---- ltsp-server ----
 	install -d debian/ltsp-server/usr/sbin
@@ -94,6 +99,7 @@ override_dh_auto_install:
 	install -d debian/ltsp-client-core/usr/lib/systemd/system
 	install -m0644 client/Debian/systemd/ltsp-screen@.service \
 		client/Debian/systemd/ltsp-printer@.service \
+		client/Debian/systemd/ltsp-hdmi-audio.service \
 		debian/ltsp-client-core/usr/lib/systemd/system/
 	install -d debian/ltsp-client-core/usr/share/initramfs-tools/hooks
 	install -m0755 client/Debian/share/initramfs-tools/hooks/* \

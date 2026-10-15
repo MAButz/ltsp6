@@ -1,3 +1,19 @@
+ltsp (6.3.35-1) unstable; urgency=medium
+
+  * HDMI sound is reopened when a monitor wakes up. xfreerdp keeps its
+    sound stream open for the whole session, so the HDMI output ran on
+    while the monitor slept. On an Intel HDA client with an iiyama PL3270Q
+    the monitor then gave a steady hum after the screen had been locked,
+    which no volume control in the session reached; suspending the sink
+    and resuming it ended it.
+  * The new ltsp-hdmi-audio.service does that by itself: it watches the
+    ELD files in /proc/asound and, when a monitor that takes sound comes
+    back, suspends every HDMI sink for a moment and resumes it.
+    init-ltsp.d/50-pipewire enables it whenever PipeWire runs for root.
+  * pulseaudio-utils moves from Suggests to Recommends, for pactl.
+
+ -- Marc-Andre Butz <ma@butz.online>  Thu, 15 Oct 2026 16:30:07 +0200
+
 ltsp (6.3.34-1) unstable; urgency=medium
 
   * A reboot shuts the devices down again before the machine restarts.

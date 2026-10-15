@@ -66,12 +66,12 @@ Recommends: pxelinux,
             syslinux-common,
             python3,
             pipewire-pulse,
-            wireplumber
+            wireplumber,
+            pulseaudio-utils
 Suggests: openssh-server,
           freerdp3-shadow-x11,
           python3-gi,
           gir1.2-gtk-3.0,
-          pulseaudio-utils,
           alsa-utils
 Description: LTSP6 thin client core scripts and helpers
  Core client-side scripts, udev rules, initramfs-tools hooks and

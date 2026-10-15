@@ -1,0 +1,60 @@
+#!/bin/sh
+# Reopen the HDMI sound outputs when a monitor comes back.
+#
+# Run by ltsp-hdmi-audio.service, enabled by init-ltsp.d/50-pipewire.
+#
+# xfreerdp keeps its sound stream open for the whole session, playing
+# silence when the server sends nothing, so the HDMI output never rests.
+# When the monitor sleeps and wakes again - screen locked, DPMS, switched off
+# and on - the graphics driver sets the HDMI link up anew under a stream that
+# never stopped. Seen on an Intel HDA/i915 client with an iiyama PL3270Q:
+# afterwards the monitor gave a steady hum, the session's own volume control
+# changed nothing, and suspending the sink and resuming it ended it at once.
+# This does the same by itself.
+#
+# The kernel reports a monitor that can take sound in the ELD files under
+# /proc/asound, monitor_present 0 or 1 per HDMI/DP pin. They are read every
+# few seconds with shell builtins only; a pin going from 0 to 1 suspends
+# every HDMI sink for a moment and resumes it. Nothing happens otherwise, and
+# the session notices no more than a moment of silence.
+
+export LC_ALL=C XDG_RUNTIME_DIR=/run/user/0
+
+# The ELD files whose monitor is there and can take sound
+present() {
+    for eld in /proc/asound/card*/eld#*; do
+        test -r "$eld" || continue
+        while read -r key value; do
+            if [ "$key" = monitor_present ]; then
+                test "$value" = 1 && printf '%s ' "$eld"
+                break
+            fi
+        done < "$eld"
+    done
+}
+
+reopen() {
+    # Give WirePlumber a moment to route the output to the monitor again
+    sleep 2
+    for sink in $(pactl list short sinks 2>/dev/null | awk '$2 ~ /hdmi/ { print $2 }'); do
+        pactl suspend-sink "$sink" 1 && sleep 1 && pactl suspend-sink "$sink" 0 &&
+            echo "reopened $sink" ||
+            echo "could not reopen $sink" >&2
+    done
+}
+
+before=$(present)
+while sleep 3; do
+    now=$(present)
+    for eld in $now; do
+        case " $before " in
+            *" $eld "*) ;;
+            *) echo "monitor back on $eld"; came=1 ;;
+        esac
+    done
+    before=$now
+    if [ -n "$came" ]; then
+        came=
+        reopen
+    fi
+done

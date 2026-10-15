@@ -42,4 +42,11 @@ EOF
     else
         warn "could not enable lingering for root; no sound server will run"
     fi
+    # Reopen HDMI sound when a monitor wakes up (see ltsp-hdmi-audio)
+    if command -v pactl >/dev/null; then
+        systemctl enable --root=/ --no-reload --quiet ltsp-hdmi-audio.service ||
+            warn "could not enable ltsp-hdmi-audio; HDMI sound may hum after the monitor slept"
+    else
+        warn "no pactl (pulseaudio-utils) in the image; HDMI sound may hum after the monitor slept"
+    fi
 fi

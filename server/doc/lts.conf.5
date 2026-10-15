@@ -1380,6 +1380,15 @@ build with ltsp\-build\-client brings them in. WirePlumber chooses the output
 itself: the HDMI output of a monitor with speakers, the headphone jack when
 something is plugged in, a USB headset when one appears.
 .PP
+xfreerdp keeps its sound stream open for the whole session, so the HDMI
+output never rests, not even while the monitor sleeps. After the monitor woke
+up again, some monitors gave a steady hum that no volume control in the
+session reached. \fBltsp\-hdmi\-audio.service\fR, enabled by the same script,
+watches the ELD files in \fI/proc/asound\fR and, when a monitor that takes
+sound comes back, suspends the HDMI outputs for a moment and resumes them. It
+needs \fBpactl\fR from \fBpulseaudio\-utils\fR, which ltsp\-client\-core
+recommends; without it init\-ltsp warns and leaves the service off.
+.PP
 FreeRDP does not degrade without a sound server: with either option and no
 server it ends the whole connection right after it is made. ldm from 3.4.12
 checks first and, finding none, starts the session without \fB/sound\fR and

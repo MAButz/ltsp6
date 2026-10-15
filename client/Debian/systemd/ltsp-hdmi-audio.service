@@ -1,0 +1,19 @@
+[Unit]
+# Reopen the HDMI sound outputs when a monitor wakes up again, so a stream
+# that ran through the monitor's sleep does not end in a steady hum. See
+# /usr/share/ltsp/ltsp-hdmi-audio.
+#
+# init-ltsp.d/50-pipewire enables it at every boot when PipeWire runs for
+# root; nothing is enabled in the image itself.
+Description=LTSP: reopen HDMI sound when a monitor comes back
+After=user@0.service
+ConditionPathExists=/proc/asound
+
+[Service]
+Type=simple
+ExecStart=/usr/share/ltsp/ltsp-hdmi-audio
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
