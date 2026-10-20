@@ -1,0 +1,101 @@
+From: Marc-Andre Butz <ma@butz.online>
+Date: Tue, 20 Oct 2026 15:00:00 +0200
+Subject: Render the backdrop at the monitor's current size
+
+A desktop window can be told about a monitor geometry change before the
+backdrop manager is, and then asks for its backdrop while the manager's
+cached geometry is still the old one. The backdrop is rendered at the old
+size and cut to the new one, so a centered image ends up off-center.
+
+xrdp sessions hit this at every login: xorgxrdp starts with a single
+monitor covering the whole desktop and splits it into the client's
+monitors about two seconds later, while xfdesktop is starting up.
+
+Read the geometry from the XfwMonitor whenever it is needed, and throw
+away a cached or in-progress backdrop whose size no longer matches.
+
+Upstream fixed this in 4.21 with a larger rework (801ec7e1, #425).
+Forwarded: not-needed
+---
+diff --git a/src/xfdesktop-backdrop-manager.c b/src/xfdesktop-backdrop-manager.c
+index daf383dd..22ef2490 100644
+--- a/src/xfdesktop-backdrop-manager.c
++++ b/src/xfdesktop-backdrop-manager.c
+@@ -104,6 +104,8 @@ typedef struct {
+     gchar *property_prefix;
+     gboolean is_spanning;
+     GFile *image_file;
++    gint width;
++    gint height;
+ 
+     GList *instances; // RenderInstanceData
+ } RenderData;
+@@ -199,9 +201,23 @@ monitor_get_identifier(Monitor *monitor) {
+ static GdkRectangle *
+ monitor_get_device_geometry(Monitor *monitor) {
+     g_return_val_if_fail(monitor != NULL, NULL);
++    // A desktop can be notified of a geometry change before we are, and then
++    // asks for its backdrop while the cached geometry is still the old one.
++    xfw_monitor_get_physical_geometry(monitor->xfwmonitor, &monitor->device_geometry);
+     return &monitor->device_geometry;
+ }
+ 
++// The size a backdrop for this monitor has to be rendered at, right now.
++static GdkRectangle *
++render_geometry(XfdesktopBackdropManager *manager, Monitor *monitor, gboolean is_spanning) {
++    if (is_spanning) {
++        screen_monitors_changed(manager->xfw_screen, manager);
++        return &manager->screen_geometry;
++    } else {
++        return monitor_get_device_geometry(monitor);
++    }
++}
++
+ static Monitor *
+ monitor_get(GPtrArray *monitors, guint index) {
+     g_return_val_if_fail(monitors != NULL, NULL);
+@@ -903,12 +919,7 @@ create_backdrop(XfdesktopBackdropManager *manager,
+     GFile *image_file = image_filename != NULL ? g_file_new_for_path(image_filename) : NULL;
+     g_free(image_filename);
+ 
+-    GdkRectangle *geom;
+-    if (is_spanning) {
+-        geom = &manager->screen_geometry;
+-    } else {
+-        geom = monitor_get_device_geometry(monitor);
+-    }
++    GdkRectangle *geom = render_geometry(manager, monitor, is_spanning);
+ 
+     RenderData *rdata = g_new0(RenderData, 1);
+     rdata->manager = manager;
+@@ -917,6 +928,8 @@ create_backdrop(XfdesktopBackdropManager *manager,
+     rdata->property_prefix = property_prefix;
+     rdata->is_spanning = is_spanning;
+     rdata->image_file = image_file;
++    rdata->width = geom->width;
++    rdata->height = geom->height;
+ 
+     RenderInstanceData *ridata = g_new0(RenderInstanceData, 1);
+     ridata->cancellable = g_object_ref(cancellable);
+@@ -969,7 +982,21 @@ xfdesktop_backdrop_manager_get_image_surface(XfdesktopBackdropManager *manager,
+     gboolean is_spanning = FALSE;
+ 
+     gchar *property_prefix = build_property_prefix(manager, xfwmonitor, workspace, &monitor, &is_spanning);
++    GdkRectangle *geom = render_geometry(manager, monitor, is_spanning);
++
++    // A backdrop rendered or being rendered for a size the monitor no longer
++    // has would be cut to the new size: a centered image ends up off-center.
+     Backdrop *backdrop = g_hash_table_lookup(manager->backdrops, property_prefix);
++    if (backdrop != NULL && backdrop->surface != NULL
++        && (backdrop->width != geom->width || backdrop->height != geom->height))
++    {
++        g_clear_pointer(&backdrop->surface, cairo_surface_destroy);
++    }
++    RenderData *stale = g_hash_table_lookup(manager->in_progress_rendering, property_prefix);
++    if (stale != NULL && (stale->width != geom->width || stale->height != geom->height)) {
++        g_cancellable_cancel(stale->main_cancellable);
++    }
++
+     if (backdrop != NULL && backdrop->surface != NULL) {
+         g_free(property_prefix);
+         notify_complete(backdrop->surface,

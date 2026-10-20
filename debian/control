@@ -49,6 +49,25 @@ Description: LTSP6 thin client server tools
  in front of a pool of xrdp servers (see
  /usr/share/doc/ltsp-server/examples/).
 
+Package: ltsp-app
+Architecture: all
+Depends: ${misc:Depends},
+         x11-xserver-utils,
+         x11-utils
+Breaks: xfdesktop4 (<< 4.20.2-2~ltsp13+1)
+Description: LTSP6 pieces for the xrdp application servers
+ What the desktop sessions on an LTSP application server need beyond
+ Debian's own packages.
+ .
+ ltsp-primary-left makes the leftmost monitor of a multi-monitor RDP
+ session its primary one, so files saved to the desktop appear on the
+ monitor that carries the panel.
+ .
+ It requires the xfdesktop4 from the LTSP archive, which renders
+ backdrops at the size a monitor has once xorgxrdp has split the
+ session into the client's monitors, and moves every icon dragged to
+ another monitor rather than only the first.
+
 Package: ltsp-client-core
 Architecture: any
 Depends: ${shlibs:Depends},

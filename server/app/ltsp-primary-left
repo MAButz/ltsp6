@@ -1,0 +1,40 @@
+#!/bin/sh
+# Make the leftmost monitor of an RDP session its primary one.
+#
+# The thin client lists its first output as rdp0 and places the second one
+# left of it, so rdp0 - the session's primary monitor - is on the right. The
+# panel and the ldm login are on the left, and that is the screen people call
+# their first one. xfdesktop puts every new file on the primary monitor, so a
+# document saved to the desktop from LibreOffice showed up on the right.
+#
+# Only the primary flag moves; rdp0 and rdp1 keep their names, so wallpapers
+# and icon positions, which xfce stores per name, stay where they are. xorgxrdp
+# rebuilds the monitors when a session is taken over from another place, so
+# this waits for RandR events and sets the flag again.
+
+case "$(xrandr --listmonitors 2>/dev/null | sed -n 2p)" in
+    *rdp[0-9]*) ;;
+    *) exit 0 ;;
+esac
+
+primary_left() {
+    xrandr --listmonitors | awk '
+        NR > 1 {
+            split($3, g, "+")
+            if (n == 0 || g[2] < x || (g[2] == x && g[3] < y)) {
+                x = g[2]; y = g[3]; out = $4; star = ($2 ~ /\*/)
+            }
+            n++
+        }
+        END { if (n > 1 && !star) print out }' |
+    while read -r out; do
+        xrandr --output "$out" --primary
+    done
+}
+
+primary_left
+xev -root -event randr | while read -r line; do
+    case $line in
+        RRScreenChangeNotify*) primary_left ;;
+    esac
+done

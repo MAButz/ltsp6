@@ -238,6 +238,16 @@ xscreensaver.lockTimeout: 0:00:30
 xscreensaver.dpmsEnabled: False
 EOF
 
+# --------------------------------------------------------------- multi-monitor desktop
+echo "==> installing ltsp-app"
+# From the LTSP archive this tool itself came from. It makes the left monitor
+# of an RDP session the primary one and pulls in the patched xfdesktop4: with
+# Debian's, a centered wallpaper ends up off-center on the right monitor, and
+# of several icons dragged to the other monitor only the first arrives.
+DEBIAN_FRONTEND=noninteractive apt-get install -y ltsp-app >/dev/null 2>&1 || \
+    echo "    ltsp-app could not be installed - is the LTSP archive in the apt sources?" >&2
+dpkg-query -W -f '    ${Package} ${Version}\n' ltsp-app xfdesktop4 2>/dev/null || true
+
 # --------------------------------------------------------------- stale sessions
 echo "==> installing the orphaned-session reaper"
 # An xfce4-session that outlives the session it belonged to makes every

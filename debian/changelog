@@ -1,3 +1,20 @@
+ltsp (6.3.37-1) unstable; urgency=medium
+
+  * New package ltsp-app, for the xrdp application servers. Its
+    ltsp-primary-left makes the leftmost monitor of an RDP session the
+    primary one. The thin client lists its right monitor first, so that
+    was primary, and xfdesktop put every file saved to the desktop there
+    rather than on the left monitor with the panel. It runs at session
+    start and again whenever xorgxrdp rebuilds the monitors; wallpapers
+    and icon positions stay where they are.
+  * ltsp-app breaks xfdesktop4 before 4.20.2-2~ltsp13+1, the build of
+    packaging/xfdesktop4: it renders a centered wallpaper in the middle
+    of the right monitor rather than cut in half at its edge, and moves
+    every icon dragged to the other monitor, not only the first.
+  * setup-ltsp-app installs ltsp-app.
+
+ -- Marc-Andre Butz <ma@butz.online>  Tue, 20 Oct 2026 17:00:00 +0200
+
 ltsp (6.3.36-1) unstable; urgency=medium
 
   * ltsp-hdmi-audio.service starts without waiting for /proc/asound. Its

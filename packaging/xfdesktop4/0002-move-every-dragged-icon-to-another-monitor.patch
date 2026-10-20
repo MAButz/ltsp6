@@ -1,0 +1,75 @@
+From: Marc-Andre Butz <ma@butz.online>
+Date: Tue, 20 Oct 2026 17:00:00 +0200
+Subject: Move every dragged icon when dropping on another monitor
+
+Dragging several selected icons to another monitor moved only the first
+one. Each icon is handed to the icon manager by its GtkTreeIter in the
+source view's model; the first icon to move leaves that filter model, and
+a GtkTreeModelFilter's iters do not survive a row being deleted, so the
+remaining icons were lost.
+
+Take GtkTreeRowReferences of all dragged icons before moving any of them;
+they follow the deletions.
+
+While here, compute the column offset from the drop column, not the drop
+row, in the fallback for a source view without a cursor.
+
+Bug: https://gitlab.xfce.org/xfce/xfdesktop/-/issues/390
+Forwarded: no
+---
+diff --git a/src/xfdesktop-icon-view.c b/src/xfdesktop-icon-view.c
+index 38e07def..d2c1520f 100644
+--- a/src/xfdesktop-icon-view.c
++++ b/src/xfdesktop-icon-view.c
+@@ -2542,7 +2542,7 @@ xfdesktop_icon_view_drag_data_received(GtkWidget *widget,
+             } else {
+                 XfdesktopDraggedIcon *first = icon_list->dragged_icons->data;
+                 row_offset = icon_view->drag_drop_row - first->item->row;
+-                col_offset = icon_view->drag_drop_row - first->item->col;
++                col_offset = icon_view->drag_drop_col - first->item->col;
+             }
+             DBG("move offset: (%d, %d)", row_offset, col_offset);
+ 
+@@ -2610,14 +2610,37 @@ xfdesktop_icon_view_drag_data_received(GtkWidget *widget,
+             g_list_free(unplaceable);
+             g_free(temp_grid_layout);
+ 
++            // An icon moved to another monitor leaves the source view's model,
++            // and a filter model's iters do not survive a row being deleted:
++            // only the first of several icons dragged across arrived. Row
++            // references follow the deletions.
++            GtkTreeModel *source_model = GTK_TREE_MODEL(icon_list->source_icon_view->model);
++            GList *refs = NULL;
+             for (GList *l = icon_list->dragged_icons; l != NULL; l = l->next) {
+                 XfdesktopDraggedIcon *dragged_icon = l->data;
+-                g_signal_emit(icon_view, __signals[SIG_ICON_MOVED], 0,
+-                              icon_list->source_icon_view,
+-                              &dragged_icon->iter,
+-                              dragged_icon->dest_row,
+-                              dragged_icon->dest_col);
++                GtkTreePath *path = gtk_tree_model_get_path(source_model, &dragged_icon->iter);
++                refs = g_list_prepend(refs, path != NULL ? gtk_tree_row_reference_new(source_model, path) : NULL);
++                gtk_tree_path_free(path);
+             }
++            refs = g_list_reverse(refs);
++
++            GList *r = refs;
++            for (GList *l = icon_list->dragged_icons; l != NULL; l = l->next, r = r->next) {
++                XfdesktopDraggedIcon *dragged_icon = l->data;
++                GtkTreeRowReference *ref = r->data;
++                GtkTreePath *path = ref != NULL ? gtk_tree_row_reference_get_path(ref) : NULL;
++                GtkTreeIter iter;
++
++                if (path != NULL && gtk_tree_model_get_iter(source_model, &iter, path)) {
++                    g_signal_emit(icon_view, __signals[SIG_ICON_MOVED], 0,
++                                  icon_list->source_icon_view,
++                                  &iter,
++                                  dragged_icon->dest_row,
++                                  dragged_icon->dest_col);
++                }
++                gtk_tree_path_free(path);
++            }
++            g_list_free_full(refs, (GDestroyNotify)gtk_tree_row_reference_free);
+ 
+             icon_view->drag_dropped = FALSE;
+             gtk_drag_finish(context, TRUE, FALSE, time_);

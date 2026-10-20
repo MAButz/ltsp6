@@ -1,0 +1,53 @@
+#!/bin/sh
+# Build the xfdesktop4 that ltsp-app requires: Debian's 4.20.2-2 from
+# unstable, rebuilt for trixie with the two patches next to this script.
+#
+#   0001  render the backdrop at the monitor's current size. xorgxrdp starts
+#         every session with one monitor as wide as the whole desktop and
+#         splits it about two seconds later; xfdesktop kept rendering for the
+#         old width, so a centered wallpaper on the right monitor sat at its
+#         right edge, cut in half. Upstream fixed it in 4.21 (801ec7e1).
+#   0002  move every dragged icon to another monitor, not only the first
+#         (upstream #390, open).
+#
+# Run as root on trixie; no deb-src entry is needed. Leaves the .debs in the
+# working directory, ready for build-apt-repo.
+#
+# Usage: build-xfdesktop4 [workdir]
+
+set -e
+
+VERSION=4.20.2-2
+LOCAL=~ltsp13+1
+HERE=$(cd "$(dirname "$0")" && pwd)
+WORK=${1:-/root/xfd-pkg}
+POOL=https://deb.debian.org/debian/pool/main/x/xfdesktop4
+
+mkdir -p "$WORK"
+cd "$WORK"
+for f in xfdesktop4_$VERSION.dsc xfdesktop4_${VERSION%-*}.orig.tar.bz2 xfdesktop4_$VERSION.debian.tar.xz; do
+    [ -f "$f" ] || curl -sfO "$POOL/$f"
+done
+rm -rf "xfdesktop4-${VERSION%-*}"
+dpkg-source -x "xfdesktop4_$VERSION.dsc"
+cd "xfdesktop4-${VERSION%-*}"
+
+mkdir -p debian/patches
+for p in "$HERE"/0*.patch; do
+    cp "$p" debian/patches/
+    basename "$p" >> debian/patches/series
+done
+
+DEBIAN_FRONTEND=noninteractive apt-get install -y -q devscripts equivs >/dev/null
+mk-build-deps -i -r -t 'apt-get -y -q --no-install-recommends' debian/control >/dev/null
+
+DEBFULLNAME="Marc-Andre Butz" DEBEMAIL="ma@butz.online" \
+    dch -b -v "$VERSION$LOCAL" -D trixie --force-distribution \
+    "Rebuild of $VERSION from unstable for trixie."
+DEBFULLNAME="Marc-Andre Butz" DEBEMAIL="ma@butz.online" \
+    dch -a "Render the backdrop at the monitor's current size, so a centered image stays centered in xrdp sessions."
+DEBFULLNAME="Marc-Andre Butz" DEBEMAIL="ma@butz.online" \
+    dch -a "Move every dragged icon when several are dropped on another monitor, not only the first one."
+
+dpkg-buildpackage -us -uc -b
+ls -l "$WORK"/xfdesktop4*_"$VERSION$LOCAL"_*.deb

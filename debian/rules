@@ -77,6 +77,11 @@ override_dh_auto_install:
 		server/tools/preseed/ltsp-root.cfg server/tools/preseed/addc1.cfg \
 		debian/ltsp-server/usr/share/ltsp-server/preseed/
 
+	# ---- ltsp-app ----
+	install -d debian/ltsp-app/usr/libexec/ltsp debian/ltsp-app/etc/xdg/autostart
+	install -m0755 server/app/ltsp-primary-left debian/ltsp-app/usr/libexec/ltsp/
+	install -m0644 server/app/ltsp-primary-left.desktop debian/ltsp-app/etc/xdg/autostart/
+
 	# ---- ltsp-client-core ----
 	install -d debian/ltsp-client-core/usr/sbin
 	install -m0755 client/init-ltsp client/getltscfg-cluster/getltscfg-cluster \

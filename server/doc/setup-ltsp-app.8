@@ -70,6 +70,13 @@ with \fB\-\-enable\-glamor\fR, which Debian does not do \(em see NOTES.
 light\-locker locks by way of the logind seat, and an xrdp session has no seat
 of its own. The Xfce power manager goes too: nothing to manage on a session
 server, and one polling copy per session adds up.
+.IP "\fBltsp\-app\fP" 4
+Makes the left monitor of a multi\-monitor session the primary one, where the
+panel is: xfdesktop puts new files on the primary monitor, which the thin
+client makes the right one. It pulls in xfdesktop4 from the LTSP archive,
+which draws a centered wallpaper on the right monitor in its place and moves
+all of several icons dragged to the other monitor. Needs the LTSP archive in
+the apt sources.
 .IP "\fBThe orphaned\-session reaper\fP" 4
 See NOTES. This one made every login fail invisibly.
 .IP "\fBadcli join, not realmd\fP" 4

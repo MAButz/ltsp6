@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Primary monitor on the left
+Exec=/usr/libexec/ltsp/ltsp-primary-left
+NoDisplay=true
+OnlyShowIn=XFCE;
