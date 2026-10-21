@@ -1,18 +1,18 @@
 Package: ldm
-Version: 3.4.13-1
+Version: 3.4.14-1
 Architecture: amd64
 Maintainer: Marc-André Beckmann-Butz <ma@butz.online>
-Installed-Size: 518
+Installed-Size: 523
 Depends: libc6 (>= 2.38), libcairo2 (>= 1.2.4), libcrypt1 (>= 1:4.1.0), libgdk-pixbuf-2.0-0 (>= 2.22.0), libglib2.0-0t64 (>= 2.76.0), libgtk-3-0t64 (>= 3.21.5), libkrb5-3 (>= 1.6.dfsg.2), libx11-6, libxext6, openssh-client, xserver-xorg | xserver, gettext-base, procps, xinit
 Recommends: freerdp3-x11 | freerdp2-x11, netcat-traditional | netcat, xauth
 Homepage: https://github.com/MAButz/ldm
 Priority: optional
 Section: misc
-Filename: pool/main/l/ldm/ldm_3.4.13-1_amd64.deb
-Size: 140276
-SHA256: f73af42f5c378209de11da9652f11c7477ff01c3c486e210514bbde5b8deadbd
-SHA1: 6f01e7c67fb19bd8349132d0bd02361375c3d675
-MD5sum: 6617edb1c5817e0a2948840c820edae9
+Filename: pool/main/l/ldm/ldm_3.4.14-1_amd64.deb
+Size: 141076
+SHA256: c3f7194b7a3099c176a3430774eae6c4d11c86c26f224974c176778642824e65
+SHA1: d6717f95790bea117b45115ba1ce992a6cf2d143
+MD5sum: f341267ac027388b15bf2ded057ad2d3
 Description: LTSP display manager (GTK3 / xfreerdp fork)
  ldm is an X11 display manager similar to xdm, gdm and kdm, used by LTSP
  (Linux Terminal Server Project) thin clients. This fork replaces the
