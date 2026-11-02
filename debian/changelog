@@ -1,3 +1,18 @@
+ltsp (6.3.38-1) unstable; urgency=medium
+
+  * Clients that boot the image over NFS (nfsroot= and ltsploop=) boot
+    again with kernel 7.2. initramfs-tools' nfs-bottom/ltsploop mounted the
+    image with "-o ltsploop" instead of "-o loop", ever since it was
+    written in 2013: busybox mount sets up the loop device for a regular
+    file by itself, and squashfs ignored the bogus option - until the new
+    mount API made it refuse unknown parameters: "squashfs: Unknown
+    parameter 'ltsploop'". NBD clients never run the script.
+  * The script panics with a message when the mount fails, rather than
+    carrying on with an empty root, and the initramfs hook adds the loop
+    module explicitly instead of relying on other hooks for it.
+
+ -- Marc-Andre Butz <ma@butz.online>  Mon, 02 Nov 2026 10:00:00 +0100
+
 ltsp (6.3.37-1) unstable; urgency=medium
 
   * New package ltsp-app, for the xrdp application servers. Its

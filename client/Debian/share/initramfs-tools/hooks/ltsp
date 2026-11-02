@@ -20,6 +20,8 @@ esac
 # make sure all our modules are there
 manual_add_modules nbd
 manual_add_modules squashfs
+# for nfs-bottom/ltsploop, which mounts the image file over NFS
+manual_add_modules loop
 manual_add_modules overlay
 manual_add_modules aoe
 auto_add_modules net

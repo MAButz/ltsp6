@@ -42,8 +42,14 @@ ltsploopfs=${ltsploopfs:-"squashfs"}
 
 if [ -f "${rootmnt}/${ltsploop}" ]; then
    mkdir -p /ltsploop
-   mount -o move ${rootmnt} /ltsploop
-   mkdir -p ${rootmnt}
+   mount -o move "${rootmnt}" /ltsploop
+   mkdir -p "${rootmnt}"
    # TODO filesystem detection
-   mount -o ltsploop -t ${ltsploopfs} /ltsploop/${ltsploop} ${rootmnt}
+   # -o loop. It said "-o ltsploop" from the start: busybox mount sets up
+   # the loop device for a regular file by itself, and the bogus option went
+   # on to squashfs, which ignored it until the kernel's new mount API made
+   # it refuse unknown parameters - with 7.2 the NFS clients stopped booting
+   # with "squashfs: Unknown parameter 'ltsploop'".
+   mount -o loop -t "${ltsploopfs}" "/ltsploop/${ltsploop}" "${rootmnt}" ||
+       panic "cannot mount /ltsploop/${ltsploop} as ${ltsploopfs}"
 fi
